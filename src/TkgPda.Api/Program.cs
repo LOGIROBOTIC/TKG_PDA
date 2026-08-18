@@ -1,0 +1,124 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Json;
+using Npgsql;
+using TkgPda.Api;
+using TkgPda.Application;
+using TkgPda.Infrastructure.Postgres;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("TkgPda")
+    ?? throw new InvalidOperationException("ConnectionStrings:TkgPda is required.");
+var jwtOptions = new JwtOptions(
+    builder.Configuration["Authentication:Jwt:Issuer"] ?? "tkg-pda",
+    builder.Configuration["Authentication:Jwt:Audience"] ?? "tkg-pda-clients",
+    builder.Configuration["Authentication:Jwt:SigningKey"] ?? string.Empty,
+    builder.Configuration.GetValue("Authentication:Jwt:ExpiryMinutes", 15),
+    builder.Configuration.GetValue("Authentication:Jwt:ClockSkewSeconds", 30));
+jwtOptions.Validate();
+
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
+builder.Services.Configure<JsonOptions>(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.WriteIndented = false;
+});
+builder.Services.AddSingleton(jwtOptions);
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<Pbkdf2PasswordHasher>();
+builder.Services.AddSingleton<JwtTokenService>();
+builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+builder.Services.AddSingleton<IApiDataStore, PostgresApiDataStore>();
+builder.Services.AddSingleton<ITransportWorkflowStore>(services =>
+    new PostgresTransportWorkflowStore(services.GetRequiredService<NpgsqlDataSource>()));
+builder.Services.AddSingleton<TransportWorkflowService>();
+builder.Services.AddSingleton<MachineAccessService>();
+
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = JwtTokenService.ValidationParameters(jwtOptions);
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                await ApiErrorWriter.WriteAsync(
+                    context.HttpContext,
+                    StatusCodes.Status401Unauthorized,
+                    "AUTHENTICATION_REQUIRED",
+                    "A valid bearer access token is required.");
+            },
+            OnForbidden = context => ApiErrorWriter.WriteAsync(
+                context.HttpContext,
+                StatusCodes.Status403Forbidden,
+                "ROLE_NOT_AUTHORIZED",
+                "The authenticated user role is not allowed to perform this operation.")
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.DefaultPolicy = new AuthorizationPolicyBuilder(JwtBearerDefaults.AuthenticationScheme)
+        .RequireAuthenticatedUser()
+        .RequireRole(RoleCodes.OperatorRoles)
+        .Build();
+    options.AddPolicy(PolicyNames.Operator, policy => policy.RequireRole(RoleCodes.OperatorRoles));
+    options.AddPolicy(PolicyNames.VariantManager, policy => policy.RequireRole(RoleCodes.VariantManagerRoles));
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, _) => new ValueTask(ApiErrorWriter.WriteAsync(
+        context.HttpContext,
+        StatusCodes.Status429TooManyRequests,
+        "LOGIN_RATE_LIMITED",
+        "Too many login attempts were made for this client partition."));
+    options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.Connection.RemoteIpAddress}:{context.Request.Headers[ApiHeaders.DeviceCode]}",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
+
+var app = builder.Build();
+
+app.UseMiddleware<ApiExceptionMiddleware>();
+app.Use(async (context, next) =>
+{
+    var supplied = context.Request.Headers[ApiHeaders.CorrelationId].ToString();
+    var correlationId = Guid.TryParse(supplied, out var parsed) ? parsed : Guid.NewGuid();
+    context.Items[ApiContextKeys.CorrelationId] = correlationId;
+    context.Response.Headers[ApiHeaders.CorrelationId] = correlationId.ToString();
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    await next();
+});
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseMiddleware<DeviceContextMiddleware>();
+app.UseAuthorization();
+
+app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
+app.MapGet("/health/ready", async (IApiDataStore store, CancellationToken cancellationToken) =>
+{
+    var ready = await store.IsReadyAsync(cancellationToken);
+    return Results.Json(
+        new { status = ready ? "ready" : "not-ready" },
+        statusCode: ready ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
+app.MapTkgPdaApi();
+
+app.Run();
+
+public partial class Program;

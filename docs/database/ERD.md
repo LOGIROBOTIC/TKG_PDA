@@ -2,7 +2,7 @@
 
 Bu belge, `db/migrations/001_initial_schema.sql` ile kabul edilmiş Phase 01–02B baseline'ını gösterir. Okunabilirlik için model beş Mermaid diyagramına ayrılmıştır. Diyagramlarda teknik audit timestamp alanlarının bir bölümü gösterilmez; FK yönleri ve domain sınırları migration ile aynıdır.
 
-> Phase 03 workflow engine feature branch üzerinde `ops` tablolarını mevcut haliyle kullanır ve migration eklemez. `integration` tabloları hâlâ gelecekteki akış içindir; Phase 03 RDS görevi, HTTP çağrısı, robot koordinatı, rota veya navigation profile üretmez.
+> Phase 03 workflow engine kabul edilip `main` dalına alınmıştır. Phase 04 authenticated API mevcut `auth`, `ops` ve `audit` tablolarını migration değiştirmeden kullanır; workflow mutasyonlarını `TransportWorkflowService` üzerinden yürütür. `integration` tabloları hâlâ gelecekteki RDS akışı içindir; robot koordinatı, rota veya navigation profile üretilmez.
 
 ## 1. Şema sınırları
 

@@ -1,6 +1,6 @@
 # TKG PDA Dokümantasyon İndeksi
 
-Bu dizin, kabul edilmiş Phase 01–02B baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 03 workflow engine feature branch üzerinde uygulanmış ve review beklemektedir.
+Bu dizin, kabul edilmiş Phase 01–03 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 04 authenticated backend API feature branch üzerinde uygulanmış ve review beklemektedir.
 
 ## Başlangıç noktaları
 
@@ -14,6 +14,7 @@ Bu dizin, kabul edilmiş Phase 01–02B baseline'ının mimari kararlarını, ve
 - [PHASE_02A_NOTES.md](PHASE_02A_NOTES.md) — textual master data pipeline'ı ve tam data issue raporu
 - [PHASE_02B_NOTES.md](PHASE_02B_NOTES.md) — fiziksel layout extraction, review görüntüleri ve integration test sonucu
 - [PHASE_03_NOTES.md](PHASE_03_NOTES.md) — transport state machine, reservation/concurrency ve idempotency davranışı
+- [PHASE_04_NOTES.md](PHASE_04_NOTES.md) — JWT, RBAC, cihaz bağlama, machine permission ve HTTP sözleşmesi
 - [Seed workflow](../db/seeds/README.md) — deterministik seed üretme ve DB'ye uygulama sırası
 
 ## Referanslar

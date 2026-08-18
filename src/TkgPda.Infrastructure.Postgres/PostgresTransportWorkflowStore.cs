@@ -1,0 +1,831 @@
+using System.Data;
+using System.Text.Json;
+using Npgsql;
+using NpgsqlTypes;
+using TkgPda.Application;
+using TkgPda.Domain;
+
+namespace TkgPda.Infrastructure.Postgres;
+
+public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IAsyncDisposable
+{
+    private const string ActiveStatusesSql = "'CREATED','VALIDATING','QUEUED','SENT_TO_RDS','RUNNING'";
+    private readonly NpgsqlDataSource _dataSource;
+    private readonly bool _ownsDataSource;
+
+    public PostgresTransportWorkflowStore(string connectionString)
+        : this(NpgsqlDataSource.Create(connectionString), ownsDataSource: true)
+    {
+    }
+
+    public PostgresTransportWorkflowStore(NpgsqlDataSource dataSource, bool ownsDataSource = false)
+    {
+        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _ownsDataSource = ownsDataSource;
+    }
+
+    public async Task<CreateTransportResult> CreateAndQueueAsync(
+        CreateTransportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.ValidateShape();
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        await LockIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, cancellationToken);
+        var existing = await FindByIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, cancellationToken);
+        if (existing is not null)
+        {
+            EnsureEquivalentPayload(existing, request);
+            await transaction.CommitAsync(cancellationToken);
+            return new CreateTransportResult(existing, WasIdempotentReplay: true);
+        }
+
+        await LockAndValidateRuntimeContextAsync(connection, transaction, request, cancellationToken);
+        var taskTypeId = await ResolveAndValidateMasterDataAsync(connection, transaction, request, cancellationToken);
+
+        var suppliedSlotIds = new[] { request.SourceSlotId, request.DestinationSlotId }
+            .Where(static value => value.HasValue)
+            .Select(static value => value!.Value)
+            .Distinct()
+            .Order()
+            .ToArray();
+
+        var slots = new Dictionary<Guid, SlotSnapshot>();
+        foreach (var slotId in suppliedSlotIds)
+        {
+            var slot = await LockSlotAsync(connection, transaction, slotId, cancellationToken);
+            TransportRules.ValidateSuppliedSlot(request, slot);
+            slots.Add(slotId, slot);
+        }
+
+        await EnsureSlotsAreAvailableAsync(connection, transaction, suppliedSlotIds, cancellationToken);
+        TransportRules.ValidateReservation(request, slots[request.ReservedSlotId]);
+
+        var created = await InsertRequestAsync(connection, transaction, request, taskTypeId, cancellationToken);
+        await InsertEventAsync(
+            connection,
+            transaction,
+            created.Id,
+            request.RequestedBy,
+            "REQUEST_CREATED",
+            null,
+            TransportRequestStatus.Created,
+            "Transport request created by Phase 03 workflow engine.",
+            new { idempotency_key = request.IdempotencyKey },
+            cancellationToken);
+
+        created = await TransitionAsync(
+            connection,
+            transaction,
+            created,
+            TransportRequestStatus.Validating,
+            request.RequestedBy,
+            "VALIDATION_STARTED",
+            cancellationToken);
+
+        created = await TransitionAsync(
+            connection,
+            transaction,
+            created,
+            TransportRequestStatus.Queued,
+            request.RequestedBy,
+            "SLOT_RESERVED_AND_QUEUED",
+            cancellationToken,
+            new
+            {
+                reserved_slot_id = request.ReservedSlotId,
+                reservation_kind = request.TaskType == TransportTaskType.BringEmpty ? "DESTINATION" : "SOURCE",
+                warehouse_endpoint_unresolved = request.TaskType == TransportTaskType.BringEmpty && !request.SourceSlotId.HasValue
+            });
+
+        await transaction.CommitAsync(cancellationToken);
+        return new CreateTransportResult(created, WasIdempotentReplay: false);
+    }
+
+    public async Task<CancelTransportResult> CancelAsync(
+        Guid requestId,
+        Guid? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var request = await LockRequestAsync(connection, transaction, requestId, cancellationToken);
+
+        if (request.Status == TransportRequestStatus.Cancelled)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new CancelTransportResult(request, WasAlreadyCancelled: true);
+        }
+
+        if (!TransportStateMachine.CanCancelBeforeExecution(request.Status))
+        {
+            throw new WorkflowRuleException(
+                "CANCELLATION_AFTER_EXECUTION_DEFERRED",
+                $"Cancellation from {request.Status.ToDatabase()} is deferred to the executor integration phase.");
+        }
+
+        TransportStateMachine.EnsureTransition(request.Status, TransportRequestStatus.Cancelled);
+        var previousStatus = request.Status;
+        var slotId = ReservedSlotId(request);
+        var slot = await LockSlotAsync(connection, transaction, slotId, cancellationToken);
+        var restored = TransportRules.CancellationState(request.TaskType, slot.State);
+        await UpdateSlotStateAsync(connection, transaction, slotId, restored, actorUserId, cancellationToken);
+
+        request = await UpdateRequestStatusAsync(
+            connection,
+            transaction,
+            request,
+            TransportRequestStatus.Cancelled,
+            cancellationToken);
+        await InsertEventAsync(
+            connection,
+            transaction,
+            request.Id,
+            actorUserId,
+            "REQUEST_CANCELLED_AND_RESERVATION_RELEASED",
+            previousStatus,
+            TransportRequestStatus.Cancelled,
+            "Pre-execution cancellation restored the deterministic slot state.",
+            new
+            {
+                restored_slot_id = slotId,
+                occupancy_state = restored.Occupancy.ToDatabase(),
+                load_state = restored.Load.ToDatabase()
+            },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return new CancelTransportResult(request, WasAlreadyCancelled: false);
+    }
+
+    public async Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(
+        Guid requestId,
+        TransportRequestStatus nextStatus,
+        CancellationToken cancellationToken = default)
+    {
+        if (nextStatus is not (TransportRequestStatus.SentToRds or TransportRequestStatus.Running or TransportRequestStatus.Completed))
+        {
+            throw new WorkflowRuleException("UNSUPPORTED_EXECUTION_UPDATE", "Only dispatch, running and successful completion are implemented in Phase 03.");
+        }
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var request = await LockRequestAsync(connection, transaction, requestId, cancellationToken);
+
+        if (request.Status == nextStatus)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return request;
+        }
+
+        TransportStateMachine.EnsureTransition(request.Status, nextStatus);
+        var previousStatus = request.Status;
+
+        if (nextStatus == TransportRequestStatus.Completed)
+        {
+            var slotId = ReservedSlotId(request);
+            _ = await LockSlotAsync(connection, transaction, slotId, cancellationToken);
+            var completedState = TransportRules.CompletionState(request.TaskType, request.PartId, request.ContainerTypeId);
+            await UpdateSlotStateAsync(connection, transaction, slotId, completedState, updatedBy: null, cancellationToken);
+        }
+
+        request = await UpdateRequestStatusAsync(connection, transaction, request, nextStatus, cancellationToken);
+        await InsertEventAsync(
+            connection,
+            transaction,
+            request.Id,
+            actorUserId: null,
+            nextStatus == TransportRequestStatus.Completed ? "REQUEST_COMPLETED" : "EXECUTION_STATUS_RECORDED",
+            previousStatus,
+            nextStatus,
+            "Execution status recorded by the Phase 03 future-executor port.",
+            new { executor_http_called = false },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return request;
+    }
+
+    public async Task SwitchVariantAsync(VariantSelection selection, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        await using (var lockRuntime = new NpgsqlCommand(
+                         "SELECT machine_id FROM ops.machine_runtime_state WHERE machine_id = @machine_id FOR UPDATE",
+                         connection,
+                         transaction))
+        {
+            lockRuntime.Parameters.AddWithValue("machine_id", selection.MachineId);
+            if (await lockRuntime.ExecuteScalarAsync(cancellationToken) is null)
+            {
+                throw new WorkflowRuleException("RUNTIME_STATE_NOT_CONFIGURED", "Machine runtime state must exist before switching variants.");
+            }
+        }
+
+        await using (var active = new NpgsqlCommand(
+                         $"SELECT id FROM ops.transport_requests WHERE machine_id = @machine_id AND status IN ({ActiveStatusesSql}) LIMIT 1",
+                         connection,
+                         transaction))
+        {
+            active.Parameters.AddWithValue("machine_id", selection.MachineId);
+            if (await active.ExecuteScalarAsync(cancellationToken) is not null)
+            {
+                throw new WorkflowRuleException("ACTIVE_TRANSPORT_EXISTS", "Variant changes are blocked while a transport reservation is active.");
+            }
+        }
+
+        await ValidateVariantLayoutAssignmentAsync(
+            connection,
+            transaction,
+            selection.MachineId,
+            selection.VariantId,
+            selection.LayoutId,
+            selection.NavigationProfileId,
+            cancellationToken);
+
+        await using (var update = new NpgsqlCommand(
+                         """
+                         UPDATE ops.machine_runtime_state
+                         SET active_variant_id = @variant_id,
+                             active_layout_id = @layout_id,
+                             active_navigation_id = @navigation_id,
+                             selected_by = @selected_by,
+                             selected_at = now(),
+                             row_version = row_version + 1,
+                             updated_at = now()
+                         WHERE machine_id = @machine_id
+                         """,
+                         connection,
+                         transaction))
+        {
+            update.Parameters.AddWithValue("machine_id", selection.MachineId);
+            update.Parameters.AddWithValue("variant_id", selection.VariantId);
+            update.Parameters.AddWithValue("layout_id", selection.LayoutId);
+            AddNullableUuid(update, "navigation_id", selection.NavigationProfileId);
+            AddNullableUuid(update, "selected_by", selection.SelectedBy);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_ownsDataSource)
+        {
+            await _dataSource.DisposeAsync();
+        }
+    }
+
+    private static async Task LockIdempotencyKeyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended(@idempotency_key, 0))",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("idempotency_key", idempotencyKey);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task LockAndValidateRuntimeContextAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT active_variant_id, active_layout_id, active_navigation_id
+            FROM ops.machine_runtime_state
+            WHERE machine_id = @machine_id
+            FOR UPDATE
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("machine_id", request.MachineId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new WorkflowRuleException("RUNTIME_STATE_NOT_CONFIGURED", "The machine has no active runtime selection.");
+        }
+
+        Guid? activeVariant = reader.IsDBNull(0) ? null : reader.GetGuid(0);
+        Guid? activeLayout = reader.IsDBNull(1) ? null : reader.GetGuid(1);
+        Guid? activeNavigation = reader.IsDBNull(2) ? null : reader.GetGuid(2);
+
+        if (activeVariant != request.VariantId || activeLayout != request.LayoutId)
+        {
+            throw new WorkflowRuleException("RUNTIME_CONTEXT_MISMATCH", "Request machine, variant and layout must match the active runtime context.");
+        }
+
+        if (request.NavigationProfileId.HasValue && activeNavigation != request.NavigationProfileId)
+        {
+            throw new WorkflowRuleException("NAVIGATION_CONTEXT_MISMATCH", "A supplied navigation profile must match the active profile.");
+        }
+    }
+
+    private static async Task<Guid> ResolveAndValidateMasterDataAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        CancellationToken cancellationToken)
+    {
+        await ValidateVariantLayoutAssignmentAsync(
+            connection,
+            transaction,
+            request.MachineId,
+            request.VariantId,
+            request.LayoutId,
+            request.NavigationProfileId,
+            cancellationToken);
+
+        if (request.ProductGroupId.HasValue)
+        {
+            await EnsureExistsAsync(
+                connection,
+                transaction,
+                "SELECT 1 FROM master.product_groups WHERE id = @id AND variant_id = @scope_id",
+                request.ProductGroupId.Value,
+                request.VariantId,
+                "PRODUCT_GROUP_CONFLICT",
+                "The product group does not belong to the active variant.",
+                cancellationToken);
+        }
+
+        if (request.PartId.HasValue)
+        {
+            await EnsureExistsAsync(connection, transaction, "SELECT 1 FROM master.parts WHERE id = @id", request.PartId.Value, null, "PART_NOT_FOUND", "The supplied part does not exist.", cancellationToken);
+        }
+
+        if (request.ContainerTypeId.HasValue)
+        {
+            await EnsureExistsAsync(connection, transaction, "SELECT 1 FROM master.container_types WHERE id = @id", request.ContainerTypeId.Value, null, "CONTAINER_NOT_FOUND", "The supplied container type does not exist.", cancellationToken);
+        }
+
+        await using var taskType = new NpgsqlCommand("SELECT id FROM master.task_types WHERE code = @code AND is_active", connection, transaction);
+        taskType.Parameters.AddWithValue("code", request.TaskType.ToDatabase());
+        return await taskType.ExecuteScalarAsync(cancellationToken) is Guid id
+            ? id
+            : throw new WorkflowRuleException("TASK_TYPE_NOT_FOUND", "The requested logistics task type is not configured.");
+    }
+
+    private static async Task ValidateVariantLayoutAssignmentAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid machineId,
+        Guid variantId,
+        Guid layoutId,
+        Guid? navigationProfileId,
+        CancellationToken cancellationToken)
+    {
+        await using (var assignment = new NpgsqlCommand(
+                         """
+                         SELECT 1
+                         FROM master.variants v
+                         JOIN master.variant_layout_assignments a
+                           ON a.variant_id = v.id AND a.machine_id = v.machine_id
+                         JOIN master.layouts l
+                           ON l.id = a.layout_id AND l.machine_id = a.machine_id
+                         WHERE v.id = @variant_id
+                           AND v.machine_id = @machine_id
+                           AND l.id = @layout_id
+                           AND l.status = 'PUBLISHED'
+                         """,
+                         connection,
+                         transaction))
+        {
+            assignment.Parameters.AddWithValue("machine_id", machineId);
+            assignment.Parameters.AddWithValue("variant_id", variantId);
+            assignment.Parameters.AddWithValue("layout_id", layoutId);
+            if (await assignment.ExecuteScalarAsync(cancellationToken) is null)
+            {
+                throw new WorkflowRuleException("VARIANT_LAYOUT_CONFLICT", "The published layout is not assigned to this machine variant.");
+            }
+        }
+
+        if (!navigationProfileId.HasValue)
+        {
+            return;
+        }
+
+        await using var navigation = new NpgsqlCommand(
+            """
+            SELECT 1
+            FROM master.variant_navigation_profile_assignments a
+            JOIN master.navigation_profiles p
+              ON p.id = a.navigation_profile_id AND p.machine_id = a.machine_id
+            WHERE a.variant_id = @variant_id
+              AND a.machine_id = @machine_id
+              AND p.id = @navigation_id
+              AND p.status = 'PUBLISHED'
+            """,
+            connection,
+            transaction);
+        navigation.Parameters.AddWithValue("machine_id", machineId);
+        navigation.Parameters.AddWithValue("variant_id", variantId);
+        navigation.Parameters.AddWithValue("navigation_id", navigationProfileId.Value);
+        if (await navigation.ExecuteScalarAsync(cancellationToken) is null)
+        {
+            throw new WorkflowRuleException("NAVIGATION_PROFILE_CONFLICT", "The supplied navigation profile is not a published assignment for this variant.");
+        }
+    }
+
+    private static async Task EnsureExistsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string sql,
+        Guid id,
+        Guid? scopeId,
+        string errorCode,
+        string errorMessage,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("id", id);
+        if (scopeId.HasValue)
+        {
+            command.Parameters.AddWithValue("scope_id", scopeId.Value);
+        }
+
+        if (await command.ExecuteScalarAsync(cancellationToken) is null)
+        {
+            throw new WorkflowRuleException(errorCode, errorMessage);
+        }
+    }
+
+    private static async Task<SlotSnapshot> LockSlotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid slotId,
+        CancellationToken cancellationToken)
+    {
+        await using (var ensureState = new NpgsqlCommand(
+                         """
+                         INSERT INTO ops.slot_runtime_state (layout_slot_id)
+                         SELECT id FROM master.layout_slots WHERE id = @slot_id
+                         ON CONFLICT (layout_slot_id) DO NOTHING
+                         """,
+                         connection,
+                         transaction))
+        {
+            ensureState.Parameters.AddWithValue("slot_id", slotId);
+            await ensureState.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT s.id,
+                   l.machine_id,
+                   s.layout_id,
+                   s.slot_role,
+                   s.is_enabled,
+                   s.default_container_type_id,
+                   rs.occupancy_state,
+                   rs.load_state,
+                   rs.current_part_id,
+                   rs.current_container_type_id,
+                   COALESCE(ARRAY(
+                       SELECT p.id
+                       FROM jsonb_array_elements_text(COALESCE(s.metadata_json->'canonical_part_codes', '[]'::jsonb)) AS part_code(value)
+                       JOIN master.parts p ON p.part_code = part_code.value
+                   ), ARRAY[]::uuid[]) AS known_part_ids
+            FROM master.layout_slots s
+            JOIN master.layouts l ON l.id = s.layout_id
+            JOIN ops.slot_runtime_state rs ON rs.layout_slot_id = s.id
+            WHERE s.id = @slot_id
+            FOR UPDATE OF rs
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("slot_id", slotId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new WorkflowRuleException("SLOT_NOT_FOUND", $"Layout slot {slotId} does not exist.");
+        }
+
+        return new SlotSnapshot(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetGuid(2),
+            WorkflowCode.ParseSlotRole(reader.GetString(3)),
+            reader.GetBoolean(4),
+            reader.IsDBNull(5) ? null : reader.GetGuid(5),
+            reader.GetFieldValue<Guid[]>(10).ToHashSet(),
+            new SlotState(
+                WorkflowCode.ParseOccupancy(reader.GetString(6)),
+                WorkflowCode.ParseLoad(reader.GetString(7)),
+                reader.IsDBNull(8) ? null : reader.GetGuid(8),
+                reader.IsDBNull(9) ? null : reader.GetGuid(9)));
+    }
+
+    private static async Task EnsureSlotsAreAvailableAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid[] slotIds,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            $"""
+             SELECT id
+             FROM ops.transport_requests
+             WHERE status IN ({ActiveStatusesSql})
+               AND (source_slot_id = ANY(@slot_ids) OR destination_slot_id = ANY(@slot_ids))
+             LIMIT 1
+             """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("slot_ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid, slotIds);
+        if (await command.ExecuteScalarAsync(cancellationToken) is not null)
+        {
+            throw new WorkflowRuleException("SLOT_ALREADY_RESERVED", "A supplied slot already has an active transport reservation.");
+        }
+    }
+
+    private static async Task<TransportRequestSnapshot> InsertRequestAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        Guid taskTypeId,
+        CancellationToken cancellationToken)
+    {
+        var id = Guid.NewGuid();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO ops.transport_requests (
+                id, idempotency_key, request_origin, requested_by,
+                machine_id, variant_id, layout_id, navigation_id,
+                product_group_id, part_id, container_type_id, task_type_id,
+                source_slot_id, destination_slot_id, status, priority)
+            VALUES (
+                @id, @idempotency_key, @request_origin, @requested_by,
+                @machine_id, @variant_id, @layout_id, @navigation_id,
+                @product_group_id, @part_id, @container_type_id, @task_type_id,
+                @source_slot_id, @destination_slot_id, 'CREATED', @priority)
+            RETURNING request_no
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("idempotency_key", request.IdempotencyKey);
+        command.Parameters.AddWithValue("request_origin", request.Origin.ToDatabase());
+        AddNullableUuid(command, "requested_by", request.RequestedBy);
+        command.Parameters.AddWithValue("machine_id", request.MachineId);
+        command.Parameters.AddWithValue("variant_id", request.VariantId);
+        command.Parameters.AddWithValue("layout_id", request.LayoutId);
+        AddNullableUuid(command, "navigation_id", request.NavigationProfileId);
+        AddNullableUuid(command, "product_group_id", request.ProductGroupId);
+        AddNullableUuid(command, "part_id", request.PartId);
+        AddNullableUuid(command, "container_type_id", request.ContainerTypeId);
+        command.Parameters.AddWithValue("task_type_id", taskTypeId);
+        AddNullableUuid(command, "source_slot_id", request.SourceSlotId);
+        AddNullableUuid(command, "destination_slot_id", request.DestinationSlotId);
+        command.Parameters.AddWithValue("priority", request.Priority);
+        var requestNo = (long)(await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Request insert did not return a request number."));
+
+        return new TransportRequestSnapshot(
+            id,
+            requestNo,
+            request.IdempotencyKey,
+            TransportRequestStatus.Created,
+            request.TaskType,
+            request.Origin,
+            request.RequestedBy,
+            request.MachineId,
+            request.VariantId,
+            request.LayoutId,
+            request.NavigationProfileId,
+            request.ProductGroupId,
+            request.PartId,
+            request.ContainerTypeId,
+            request.SourceSlotId,
+            request.DestinationSlotId,
+            request.Priority);
+    }
+
+    private static async Task<TransportRequestSnapshot?> FindByIdempotencyKeyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(RequestSelectSql + " WHERE r.idempotency_key = @key FOR UPDATE OF r", connection, transaction);
+        command.Parameters.AddWithValue("key", key);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? ReadRequest(reader) : null;
+    }
+
+    private static async Task<TransportRequestSnapshot> LockRequestAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid requestId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(RequestSelectSql + " WHERE r.id = @id FOR UPDATE OF r", connection, transaction);
+        command.Parameters.AddWithValue("id", requestId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadRequest(reader)
+            : throw new WorkflowRuleException("REQUEST_NOT_FOUND", $"Transport request {requestId} does not exist.");
+    }
+
+    private static TransportRequestSnapshot ReadRequest(NpgsqlDataReader reader) => new(
+        reader.GetGuid(0),
+        reader.GetInt64(1),
+        reader.GetString(2),
+        WorkflowCode.ParseTransportStatus(reader.GetString(3)),
+        WorkflowCode.ParseTaskType(reader.GetString(4)),
+        WorkflowCode.ParseRequestOrigin(reader.GetString(5)),
+        reader.IsDBNull(6) ? null : reader.GetGuid(6),
+        reader.GetGuid(7),
+        reader.GetGuid(8),
+        reader.GetGuid(9),
+        reader.IsDBNull(10) ? null : reader.GetGuid(10),
+        reader.IsDBNull(11) ? null : reader.GetGuid(11),
+        reader.IsDBNull(12) ? null : reader.GetGuid(12),
+        reader.IsDBNull(13) ? null : reader.GetGuid(13),
+        reader.IsDBNull(14) ? null : reader.GetGuid(14),
+        reader.IsDBNull(15) ? null : reader.GetGuid(15),
+        reader.GetInt32(16));
+
+    private static void EnsureEquivalentPayload(TransportRequestSnapshot existing, CreateTransportRequest request)
+    {
+        var equivalent = existing.Origin == request.Origin
+            && existing.RequestedBy == request.RequestedBy
+            && existing.MachineId == request.MachineId
+            && existing.VariantId == request.VariantId
+            && existing.LayoutId == request.LayoutId
+            && existing.NavigationProfileId == request.NavigationProfileId
+            && existing.ProductGroupId == request.ProductGroupId
+            && existing.PartId == request.PartId
+            && existing.ContainerTypeId == request.ContainerTypeId
+            && existing.TaskType == request.TaskType
+            && existing.SourceSlotId == request.SourceSlotId
+            && existing.DestinationSlotId == request.DestinationSlotId
+            && existing.Priority == request.Priority;
+
+        if (!equivalent)
+        {
+            throw new WorkflowRuleException("IDEMPOTENCY_KEY_REUSED", "The idempotency key belongs to a different request payload.");
+        }
+    }
+
+    private static async Task<TransportRequestSnapshot> TransitionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        TransportRequestSnapshot request,
+        TransportRequestStatus nextStatus,
+        Guid? actorUserId,
+        string eventType,
+        CancellationToken cancellationToken,
+        object? data = null)
+    {
+        var previousStatus = request.Status;
+        TransportStateMachine.EnsureTransition(previousStatus, nextStatus);
+        var updated = await UpdateRequestStatusAsync(connection, transaction, request, nextStatus, cancellationToken);
+        await InsertEventAsync(
+            connection,
+            transaction,
+            request.Id,
+            actorUserId,
+            eventType,
+            previousStatus,
+            nextStatus,
+            $"Status changed from {previousStatus.ToDatabase()} to {nextStatus.ToDatabase()}.",
+            data,
+            cancellationToken);
+        return updated;
+    }
+
+    private static async Task<TransportRequestSnapshot> UpdateRequestStatusAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        TransportRequestSnapshot request,
+        TransportRequestStatus nextStatus,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE ops.transport_requests
+            SET status = @status,
+                queued_at = CASE WHEN @status = 'QUEUED' THEN COALESCE(queued_at, now()) ELSE queued_at END,
+                started_at = CASE WHEN @status = 'RUNNING' THEN COALESCE(started_at, now()) ELSE started_at END,
+                completed_at = CASE WHEN @status = 'COMPLETED' THEN COALESCE(completed_at, now()) ELSE completed_at END,
+                cancelled_at = CASE WHEN @status = 'CANCELLED' THEN COALESCE(cancelled_at, now()) ELSE cancelled_at END,
+                updated_at = now()
+            WHERE id = @id
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("id", request.Id);
+        command.Parameters.AddWithValue("status", nextStatus.ToDatabase());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        return request with { Status = nextStatus };
+    }
+
+    private static async Task UpdateSlotStateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid slotId,
+        SlotState state,
+        Guid? updatedBy,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE ops.slot_runtime_state
+            SET occupancy_state = @occupancy_state,
+                load_state = @load_state,
+                current_part_id = @part_id,
+                current_container_type_id = @container_type_id,
+                updated_by = @updated_by,
+                row_version = row_version + 1,
+                updated_at = now()
+            WHERE layout_slot_id = @slot_id
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("slot_id", slotId);
+        command.Parameters.AddWithValue("occupancy_state", state.Occupancy.ToDatabase());
+        command.Parameters.AddWithValue("load_state", state.Load.ToDatabase());
+        AddNullableUuid(command, "part_id", state.CurrentPartId);
+        AddNullableUuid(command, "container_type_id", state.CurrentContainerTypeId);
+        AddNullableUuid(command, "updated_by", updatedBy);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task InsertEventAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid requestId,
+        Guid? actorUserId,
+        string eventType,
+        TransportRequestStatus? oldStatus,
+        TransportRequestStatus? newStatus,
+        string message,
+        object? data,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO ops.transport_request_events (
+                transport_request_id, actor_user_id, event_type,
+                old_status, new_status, message, data_json)
+            VALUES (@request_id, @actor_user_id, @event_type,
+                    @old_status, @new_status, @message, @data_json)
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("request_id", requestId);
+        AddNullableUuid(command, "actor_user_id", actorUserId);
+        command.Parameters.AddWithValue("event_type", eventType);
+        AddNullableText(command, "old_status", oldStatus?.ToDatabase());
+        AddNullableText(command, "new_status", newStatus?.ToDatabase());
+        command.Parameters.AddWithValue("message", message);
+        command.Parameters.Add("data_json", NpgsqlDbType.Jsonb).Value = JsonSerializer.Serialize(data ?? new { });
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static Guid ReservedSlotId(TransportRequestSnapshot request) => request.TaskType == TransportTaskType.BringEmpty
+        ? request.DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", "BRING_EMPTY request has no destination slot.")
+        : request.SourceSlotId ?? throw new WorkflowRuleException("SOURCE_REQUIRED", "Removal request has no source slot.");
+
+    private static void AddNullableUuid(NpgsqlCommand command, string name, Guid? value) =>
+        command.Parameters.Add(name, NpgsqlDbType.Uuid).Value = value.HasValue ? value.Value : DBNull.Value;
+
+    private static void AddNullableText(NpgsqlCommand command, string name, string? value) =>
+        command.Parameters.Add(name, NpgsqlDbType.Text).Value = value is null ? DBNull.Value : value;
+
+    private const string RequestSelectSql =
+        """
+        SELECT r.id,
+               r.request_no,
+               r.idempotency_key,
+               r.status,
+               tt.code,
+               r.request_origin,
+               r.requested_by,
+               r.machine_id,
+               r.variant_id,
+               r.layout_id,
+               r.navigation_id,
+               r.product_group_id,
+               r.part_id,
+               r.container_type_id,
+               r.source_slot_id,
+               r.destination_slot_id,
+               r.priority
+        FROM ops.transport_requests r
+        JOIN master.task_types tt ON tt.id = r.task_type_id
+        """;
+}

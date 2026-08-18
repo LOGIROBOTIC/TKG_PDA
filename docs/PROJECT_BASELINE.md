@@ -2,6 +2,8 @@
 
 Bu belge, Phase 02B kabulü sonrasındaki dondurulmuş sistem temelini özetler. Yeni geliştirme henüz başlamamıştır; **Phase 03 — Business Workflow Engine bu baseline'ın parçası değildir ve başlatılmamıştır.**
 
+> Bu belge tarihsel Phase 02B snapshot'ıdır. Phase 03 feature-branch uygulamasının güncel durumu için [PHASE_03_NOTES.md](PHASE_03_NOTES.md) belgesine bakın.
+
 ## 1. Kapsam ve phase durumu
 
 | Kod | Aşama | Durum |

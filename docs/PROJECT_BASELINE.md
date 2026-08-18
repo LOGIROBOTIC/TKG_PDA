@@ -1,8 +1,8 @@
-# TKG PDA — Kabul Edilmiş Proje Baseline'ı
+# TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 02B kabulü sonrasındaki dondurulmuş sistem temelini özetler. Yeni geliştirme henüz başlamamıştır; **Phase 03 — Business Workflow Engine bu baseline'ın parçası değildir ve başlatılmamıştır.**
+Bu belge, Phase 01–04 kabulü ve Phase 05 feature uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 05 mevcut şemayı migration değiştirmeden kullanır.
 
-> Bu belge tarihsel Phase 02B snapshot'ıdır. Phase 03 feature-branch uygulamasının güncel durumu için [PHASE_03_NOTES.md](PHASE_03_NOTES.md) belgesine bakın.
+> Phase 05 henüz `main`e merge edilmemiştir. Güncel feature ayrıntıları için [PHASE_05_ADMIN_CONFIGURATION_API.md](PHASE_05_ADMIN_CONFIGURATION_API.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -12,11 +12,11 @@ Bu belge, Phase 02B kabulü sonrasındaki dondurulmuş sistem temelini özetler.
 | 01.1 | Schema Consistency | Kabul edildi |
 | 02A | Textual Master Data | Kabul edildi |
 | 02B | Physical Layout Extraction | Kabul edildi |
-| 03 | Business Workflow Engine | Başlamadı |
-| 04 | Authentication / Users / Audit | Planlandı |
-| 05 | Backend API | Planlandı |
-| 06 | Admin Panel | Planlandı |
-| 07 | PDA Application | Planlandı |
+| 03 | Business Workflow Engine | Kabul edildi |
+| 04 | Backend API + Authentication/RBAC | Kabul edildi |
+| 05 | Admin Configuration API | Review bekliyor |
+| 06 | Admin Web | Planlandı |
+| 07 | Flutter PDA Application | Planlandı |
 | 08 | RDS Task Integration | Planlandı |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
 | 10 | System Integration & Tests | Planlandı |
@@ -151,6 +151,16 @@ Kabul edilen baseline sonucunda:
 
 Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/README.md) içindedir.
 
-## 7. Sonraki aşama sınırı
+## 7. Backend ve yönetim baseline'ı
 
-Phase 03 başladığında `BRING_EMPTY`, `REMOVE_FULL` ve `REMOVE_EMPTY` için domain state machine, idempotency, geçiş kuralları ve slot-role doğrulaması tasarlanacaktır. Bu belge ve publication turu yalnızca baseline bakım/versiyonlama işlemidir; workflow uygulaması, RDS çağrısı veya navigation üretimi içermez.
+- Phase 03, üç lojistik operasyonun state machine, slot reservation, idempotency, cancellation ve variant-switch guard'larını uygular.
+- Phase 04, device-bound PDA JWT, RBAC, machine permission, operational context ve transport HTTP boundary'sini sağlar.
+- Phase 05, device-less ADMIN Web JWT ile user/device/permission ve master-configuration API'sini sağlar.
+- `WAREHOUSE_OPERATOR` yalnızca `BRING_EMPTY` oluşturabilir ve kendi `BRING_EMPTY` talebini iptal edebilir; line-side remove işlemleri otomatik yetki değildir.
+- Admin mutasyonları `ETag/If-Match` optimistic concurrency ve transaction içi audit kullanır.
+- Layoutlar draft üzerinde düzenlenir; published/archived sürümler immutable kalır ve yeni sürüm clone/publish akışından geçer.
+- Hiçbir Admin API metodu `ops` runtime state'ini veya transport status'unu doğrudan değiştirmez.
+
+## 8. Sonraki aşama sınırı
+
+Phase 06, bu API üzerinde Admin Web arayüzüdür. Phase 07 Flutter PDA uygulamasıdır. RDS/SEER, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır.

@@ -29,9 +29,12 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Pbkdf2PasswordHasher>();
+builder.Services.AddSingleton<IPasswordHashService>(services => services.GetRequiredService<Pbkdf2PasswordHasher>());
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<IApiDataStore, PostgresApiDataStore>();
+builder.Services.AddSingleton<IAdminConfigurationStore, PostgresAdminConfigurationStore>();
+builder.Services.AddSingleton<AdminConfigurationService>();
 builder.Services.AddSingleton<ITransportWorkflowStore>(services =>
     new PostgresTransportWorkflowStore(services.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddSingleton<TransportWorkflowService>();
@@ -68,8 +71,15 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireRole(RoleCodes.OperatorRoles)
         .Build();
-    options.AddPolicy(PolicyNames.Operator, policy => policy.RequireRole(RoleCodes.OperatorRoles));
-    options.AddPolicy(PolicyNames.VariantManager, policy => policy.RequireRole(RoleCodes.VariantManagerRoles));
+    options.AddPolicy(PolicyNames.Operator, policy => policy
+        .RequireRole(RoleCodes.OperatorRoles)
+        .RequireClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound));
+    options.AddPolicy(PolicyNames.VariantManager, policy => policy
+        .RequireRole(RoleCodes.VariantManagerRoles)
+        .RequireClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound));
+    options.AddPolicy(PolicyNames.Administrator, policy => policy
+        .RequireRole(RoleCodes.Admin)
+        .RequireClaim(ApiClaimNames.ClientType, ClientTypes.AdminWeb));
 });
 builder.Services.AddRateLimiter(options =>
 {
@@ -84,6 +94,15 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+    options.AddPolicy("admin-login", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"admin-web:{context.Connection.RemoteIpAddress}",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
             AutoReplenishment = true
@@ -118,6 +137,7 @@ app.MapGet("/health/ready", async (IApiDataStore store, CancellationToken cancel
         statusCode: ready ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 }).AllowAnonymous();
 app.MapTkgPdaApi();
+app.MapTkgPdaAdminApi();
 
 app.Run();
 

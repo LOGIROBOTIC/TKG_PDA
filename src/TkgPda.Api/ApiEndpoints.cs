@@ -59,9 +59,9 @@ public static class ApiEndpoints
         }
 
         var device = await dataStore.FindDeviceAsync(deviceCode, cancellationToken);
-        if (device is null || !device.IsActive)
+        if (device is null || !device.IsActive || device.Type != "PDA")
         {
-            throw new ApiException(StatusCodes.Status403Forbidden, "DEVICE_NOT_AUTHORIZED", "The client device is unknown or inactive.");
+            throw new ApiException(StatusCodes.Status403Forbidden, "DEVICE_NOT_AUTHORIZED", "The client device is unknown, inactive or not a PDA.");
         }
 
         var user = await dataStore.FindUserByUsernameAsync(username, cancellationToken);
@@ -107,15 +107,18 @@ public static class ApiEndpoints
 
     private static IResult CurrentUserAsync(HttpContext context)
     {
-        var device = Device(context);
         var principal = context.User;
+        var device = context.Items.TryGetValue(ApiContextKeys.Device, out var value) && value is DeviceRecord record
+            ? new DeviceResponse(record.Id, record.Code, record.Name, record.Type)
+            : null;
         return Results.Ok(new
         {
             id = principal.UserId(),
             username = principal.Identity?.Name,
             fullName = principal.FindFirstValue(ApiClaimNames.FullName),
             roles = principal.FindAll(ClaimTypes.Role).Select(claim => claim.Value).Order().ToArray(),
-            device = new DeviceResponse(device.Id, device.Code, device.Name, device.Type)
+            clientType = principal.FindFirstValue(ApiClaimNames.ClientType),
+            device
         });
     }
 
@@ -165,6 +168,8 @@ public static class ApiEndpoints
             throw new ApiException(StatusCodes.Status400BadRequest, "IDEMPOTENCY_KEY_REQUIRED", "Transport creation requires an Idempotency-Key header.");
         }
 
+        var operation = ParseOperation(request.Operation);
+        EnsureTransportOperationAllowed(context.User, operation);
         var command = new CreateTransportRequest(
             idempotencyKey,
             RequestOrigin.Api,
@@ -176,7 +181,7 @@ public static class ApiEndpoints
             request.ProductGroupId,
             request.PartId,
             request.ContainerTypeId,
-            ParseOperation(request.Operation),
+            operation,
             request.SourceSlotId,
             request.DestinationSlotId,
             request.Priority);
@@ -223,6 +228,7 @@ public static class ApiEndpoints
         var existing = await dataStore.FindTransportRequestAsync(requestId, cancellationToken)
             ?? throw new ApiException(StatusCodes.Status404NotFound, "REQUEST_NOT_FOUND", "The transport request does not exist.");
         _ = await access.EnsureAsync(context.User, existing.MachineId, MachineAccessKind.Operate, cancellationToken);
+        EnsureCancellationAllowed(context.User, existing);
         var result = await workflow.CancelAsync(requestId, context.User.UserId(), cancellationToken);
         await WriteAuditAsync(
             dataStore,
@@ -276,6 +282,36 @@ public static class ApiEndpoints
         "REMOVE_EMPTY" => TransportTaskType.RemoveEmpty,
         _ => throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_OPERATION", "Operation must be BRING_EMPTY, REMOVE_FULL or REMOVE_EMPTY.")
     };
+
+    private static void EnsureTransportOperationAllowed(ClaimsPrincipal principal, TransportTaskType operation)
+    {
+        var warehouseOnly = principal.IsInRole(RoleCodes.WarehouseOperator)
+            && !principal.IsInRole(RoleCodes.Admin)
+            && !principal.IsInRole(RoleCodes.Supervisor)
+            && !principal.IsInRole(RoleCodes.LineOperator);
+        if (warehouseOnly && operation != TransportTaskType.BringEmpty)
+        {
+            throw new ApiException(
+                StatusCodes.Status403Forbidden,
+                "OPERATION_NOT_ALLOWED_FOR_ROLE",
+                "WAREHOUSE_OPERATOR may create BRING_EMPTY requests but may not initiate line-side removal operations.");
+        }
+    }
+
+    private static void EnsureCancellationAllowed(ClaimsPrincipal principal, TransportRequestSnapshot request)
+    {
+        var warehouseOnly = principal.IsInRole(RoleCodes.WarehouseOperator)
+            && !principal.IsInRole(RoleCodes.Admin)
+            && !principal.IsInRole(RoleCodes.Supervisor)
+            && !principal.IsInRole(RoleCodes.LineOperator);
+        if (warehouseOnly && (request.TaskType != TransportTaskType.BringEmpty || request.RequestedBy != principal.UserId()))
+        {
+            throw new ApiException(
+                StatusCodes.Status403Forbidden,
+                "CANCELLATION_NOT_ALLOWED_FOR_ROLE",
+                "WAREHOUSE_OPERATOR may cancel only BRING_EMPTY requests created by the same user.");
+        }
+    }
 
     private static TransportHttpResponse ToResponse(TransportRequestSnapshot request, bool replay) => new(
         request.Id,

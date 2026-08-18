@@ -58,7 +58,8 @@ try {
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     Invoke-Checked 'dotnet' @(
         'test', (Join-Path $projectRoot 'tests\TkgPda.Api.Tests\TkgPda.Api.Tests.csproj'),
-        '--configuration', 'Release', '--no-restore', '--logger', 'console;verbosity=normal'
+        '--configuration', 'Release', '--no-restore', '--filter', 'FullyQualifiedName~AuthenticatedApiTests',
+        '--logger', 'console;verbosity=normal'
     )
 
     $verification = (& $psql @common -Atc @"

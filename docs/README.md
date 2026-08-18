@@ -1,6 +1,6 @@
 # TKG PDA Dokümantasyon İndeksi
 
-Bu dizin, kabul edilmiş Phase 01–03 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 04 authenticated backend API feature branch üzerinde uygulanmış ve review beklemektedir.
+Bu dizin, kabul edilmiş Phase 01–04 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 05 Admin Configuration API feature branch üzerinde uygulanmış ve review beklemektedir.
 
 ## Başlangıç noktaları
 
@@ -15,6 +15,7 @@ Bu dizin, kabul edilmiş Phase 01–03 baseline'ının mimari kararlarını, ver
 - [PHASE_02B_NOTES.md](PHASE_02B_NOTES.md) — fiziksel layout extraction, review görüntüleri ve integration test sonucu
 - [PHASE_03_NOTES.md](PHASE_03_NOTES.md) — transport state machine, reservation/concurrency ve idempotency davranışı
 - [PHASE_04_NOTES.md](PHASE_04_NOTES.md) — JWT, RBAC, cihaz bağlama, machine permission ve HTTP sözleşmesi
+- [PHASE_05_ADMIN_CONFIGURATION_API.md](PHASE_05_ADMIN_CONFIGURATION_API.md) — Admin Web auth, provisioning, configuration lifecycle, concurrency ve audit
 - [Seed workflow](../db/seeds/README.md) — deterministik seed üretme ve DB'ye uygulama sırası
 
 ## Referanslar

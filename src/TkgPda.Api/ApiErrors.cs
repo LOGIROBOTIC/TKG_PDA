@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Npgsql;
+using TkgPda.Application;
 using TkgPda.Domain;
 
 namespace TkgPda.Api;
@@ -29,6 +30,11 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             var status = WorkflowHttpStatus(error.Code);
             await ApiErrorWriter.WriteAsync(context, status, error.Code, error.Message);
         }
+        catch (AdminRuleException error)
+        {
+            var status = AdminHttpStatus(error.Code);
+            await ApiErrorWriter.WriteAsync(context, status, error.Code, error.Message);
+        }
         catch (BadHttpRequestException error)
         {
             await ApiErrorWriter.WriteAsync(context, StatusCodes.Status400BadRequest, "INVALID_HTTP_REQUEST", error.Message);
@@ -40,6 +46,15 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
             logger.LogInformation("Request {TraceIdentifier} was cancelled by the client.", context.TraceIdentifier);
+        }
+        catch (PostgresException error) when (error.SqlState is PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation or PostgresErrorCodes.CheckViolation)
+        {
+            logger.LogInformation("Configuration constraint rejected request {TraceIdentifier}: {ConstraintName}.", context.TraceIdentifier, error.ConstraintName);
+            await ApiErrorWriter.WriteAsync(
+                context,
+                StatusCodes.Status409Conflict,
+                "CONFIGURATION_CONFLICT",
+                "The requested configuration conflicts with an existing record or protected reference.");
         }
         catch (NpgsqlException error)
         {
@@ -78,6 +93,24 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             => StatusCodes.Status422UnprocessableEntity,
         _ => StatusCodes.Status422UnprocessableEntity
     };
+
+    private static int AdminHttpStatus(string code)
+    {
+        if (code.EndsWith("_NOT_FOUND", StringComparison.Ordinal))
+        {
+            return StatusCodes.Status404NotFound;
+        }
+
+        return code switch
+        {
+            "WEAK_PASSWORD" or "INVALID_FIELD" or "INVALID_ENUM_VALUE" or "INVALID_JSON_OBJECT"
+                or "ID_REQUIRED" or "ROLE_REQUIRED" or "UNKNOWN_ROLE" or "CONCURRENCY_TOKEN_REQUIRED"
+                => StatusCodes.Status400BadRequest,
+            "INVALID_SLOT_GEOMETRY" or "INVALID_CONTAINER_DIMENSIONS"
+                => StatusCodes.Status422UnprocessableEntity,
+            _ => StatusCodes.Status409Conflict
+        };
+    }
 }
 
 public static class ApiErrorWriter

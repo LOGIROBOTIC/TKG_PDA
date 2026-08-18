@@ -68,7 +68,40 @@ public sealed class JwtTokenTests
         Assert.Equal(user.Id.ToString(), jwt.Subject);
         Assert.Equal(device.Id.ToString(), jwt.Claims.Single(claim => claim.Type == ApiClaimNames.DeviceId).Value);
         Assert.Equal(device.Code, jwt.Claims.Single(claim => claim.Type == ApiClaimNames.DeviceCode).Value);
+        Assert.Equal(ClientTypes.DeviceBound, jwt.Claims.Single(claim => claim.Type == ApiClaimNames.ClientType).Value);
         Assert.Equal(user.Roles.Order(), jwt.Claims.Where(claim => claim.Type == ClaimTypes.Role).Select(claim => claim.Value).Order());
+    }
+
+    [Fact]
+    public void Admin_web_token_has_explicit_client_type_without_device_claims()
+    {
+        var token = new JwtTokenService(Options, new FixedTimeProvider(Now)).IssueAdmin(AdminUser());
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token.Token);
+
+        Assert.Equal(ClientTypes.AdminWeb, jwt.Claims.Single(claim => claim.Type == ApiClaimNames.ClientType).Value);
+        Assert.DoesNotContain(jwt.Claims, claim => claim.Type == ApiClaimNames.DeviceId);
+        Assert.DoesNotContain(jwt.Claims, claim => claim.Type == ApiClaimNames.DeviceCode);
+        Assert.Contains(jwt.Claims, claim => claim.Type == ClaimTypes.Role && claim.Value == RoleCodes.Admin);
+    }
+
+    [Fact]
+    public void Admin_web_token_validates_with_the_same_short_lived_security_parameters()
+    {
+        var token = new JwtTokenService(Options, TimeProvider.System).IssueAdmin(AdminUser());
+        var principal = new JwtSecurityTokenHandler { MapInboundClaims = false }.ValidateToken(
+            token.Token,
+            JwtTokenService.ValidationParameters(Options),
+            out _);
+
+        Assert.True(principal.IsInRole(RoleCodes.Admin));
+        Assert.Equal(ClientTypes.AdminWeb, principal.FindFirstValue(ApiClaimNames.ClientType));
+    }
+
+    [Fact]
+    public void Password_hasher_implements_the_application_hashing_port()
+    {
+        IPasswordHashService service = new Pbkdf2PasswordHasher();
+        Assert.StartsWith("$tkg-pbkdf2-sha512$", service.Hash("Correct Horse Battery Staple"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -120,6 +153,15 @@ public sealed class JwtTokenTests
         "Test PDA",
         "PDA",
         true);
+
+    private static AuthUserRecord AdminUser() => new(
+        Guid.Parse("33333333-3333-3333-3333-333333333333"),
+        "admin",
+        "unused",
+        "Test Administrator",
+        "E-ADMIN",
+        true,
+        [RoleCodes.Admin]);
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
     {

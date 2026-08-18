@@ -30,6 +30,14 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             DELETE FROM auth.user_roles;
             DELETE FROM auth.users;
             DELETE FROM audit.client_devices;
+            DELETE FROM master.layouts WHERE code LIKE 'P05-%';
+            DELETE FROM master.variants WHERE code LIKE 'P05-%';
+            DELETE FROM master.product_group_parts
+            WHERE part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P05-%');
+            DELETE FROM master.product_groups
+            WHERE main_part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P05-%');
+            DELETE FROM master.parts WHERE part_code LIKE 'P05-%';
+            DELETE FROM master.container_types WHERE code LIKE 'P05-%';
             """);
     }
 
@@ -109,6 +117,19 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             ?? throw new InvalidOperationException("Login response was empty.");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
         client.DefaultRequestHeaders.Add(ApiHeaders.DeviceCode, identity.DeviceCode);
+        return client;
+    }
+
+    public async Task<HttpClient> AdminLoginClientAsync(TestIdentity identity)
+    {
+        var client = Client();
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/admin/auth/login",
+            new LoginRequest(identity.Username, identity.Password));
+        response.EnsureSuccessStatusCode();
+        var login = await response.Content.ReadFromJsonAsync<AdminLoginResponse>()
+            ?? throw new InvalidOperationException("Admin login response was empty.");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
         return client;
     }
 

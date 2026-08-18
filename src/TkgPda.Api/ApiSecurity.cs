@@ -1,0 +1,283 @@
+using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using TkgPda.Application;
+
+namespace TkgPda.Api;
+
+public static class RoleCodes
+{
+    public const string Admin = "ADMIN";
+    public const string Supervisor = "SUPERVISOR";
+    public const string LineOperator = "LINE_OPERATOR";
+    public const string WarehouseOperator = "WAREHOUSE_OPERATOR";
+
+    public static readonly string[] OperatorRoles = [Admin, Supervisor, LineOperator, WarehouseOperator];
+    public static readonly string[] VariantManagerRoles = [Admin, Supervisor];
+}
+
+public static class PolicyNames
+{
+    public const string Operator = "operator";
+    public const string VariantManager = "variant-manager";
+}
+
+public static class ApiClaimNames
+{
+    public const string DeviceId = "device_id";
+    public const string DeviceCode = "device_code";
+    public const string FullName = "full_name";
+}
+
+public sealed record JwtOptions(
+    string Issuer,
+    string Audience,
+    string SigningKey,
+    int ExpiryMinutes,
+    int ClockSkewSeconds)
+{
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Issuer) || string.IsNullOrWhiteSpace(Audience))
+        {
+            throw new InvalidOperationException("JWT issuer and audience are required.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(SigningKey) < 32)
+        {
+            throw new InvalidOperationException("JWT signing key must contain at least 32 UTF-8 bytes.");
+        }
+
+        if (ExpiryMinutes is < 1 or > 60)
+        {
+            throw new InvalidOperationException("JWT expiry must be between 1 and 60 minutes.");
+        }
+
+        if (ClockSkewSeconds is < 0 or > 300)
+        {
+            throw new InvalidOperationException("JWT clock skew must be between 0 and 300 seconds.");
+        }
+    }
+}
+
+public sealed record AccessTokenResult(string Token, DateTimeOffset ExpiresAt);
+
+public sealed class JwtTokenService(JwtOptions options, TimeProvider timeProvider)
+{
+    public AccessTokenResult Issue(AuthUserRecord user, DeviceRecord device)
+    {
+        var issuedAt = timeProvider.GetUtcNow();
+        var expiresAt = issuedAt.AddMinutes(options.ExpiryMinutes);
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.UniqueName, user.Username),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(ApiClaimNames.FullName, user.FullName),
+            new(ApiClaimNames.DeviceId, device.Id.ToString()),
+            new(ApiClaimNames.DeviceCode, device.Code)
+        };
+        claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+        var token = new JwtSecurityToken(
+            options.Issuer,
+            options.Audience,
+            claims,
+            notBefore: issuedAt.UtcDateTime,
+            expires: expiresAt.UtcDateTime,
+            signingCredentials: new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.SigningKey)),
+                SecurityAlgorithms.HmacSha256));
+
+        return new AccessTokenResult(new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
+    }
+
+    public static TokenValidationParameters ValidationParameters(JwtOptions options) => new()
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.SigningKey)),
+        ValidateIssuer = true,
+        ValidIssuer = options.Issuer,
+        ValidateAudience = true,
+        ValidAudience = options.Audience,
+        ValidateLifetime = true,
+        RequireExpirationTime = true,
+        RequireSignedTokens = true,
+        ClockSkew = TimeSpan.FromSeconds(options.ClockSkewSeconds),
+        NameClaimType = JwtRegisteredClaimNames.UniqueName,
+        RoleClaimType = ClaimTypes.Role
+    };
+}
+
+public sealed class Pbkdf2PasswordHasher
+{
+    public const int Iterations = 210_000;
+    private const int SaltBytes = 16;
+    private const int HashBytes = 32;
+    private const string Algorithm = "tkg-pbkdf2-sha512";
+    private readonly string _dummyHash;
+
+    public Pbkdf2PasswordHasher()
+    {
+        _dummyHash = Hash("TKG-PDA-invalid-user-timing-value");
+    }
+
+    public string Hash(string password)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        var salt = RandomNumberGenerator.GetBytes(SaltBytes);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(password),
+            salt,
+            Iterations,
+            HashAlgorithmName.SHA512,
+            HashBytes);
+        return $"${Algorithm}$v=1$i={Iterations.ToString(CultureInfo.InvariantCulture)}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
+    }
+
+    public bool Verify(string password, string encodedHash)
+    {
+        if (string.IsNullOrEmpty(password) || string.IsNullOrWhiteSpace(encodedHash))
+        {
+            return false;
+        }
+
+        try
+        {
+            var parts = encodedHash.Split('$');
+            if (parts.Length != 6 || parts[0].Length != 0 || parts[1] != Algorithm || parts[2] != "v=1")
+            {
+                return false;
+            }
+
+            if (!parts[3].StartsWith("i=", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var iterations = int.Parse(parts[3].AsSpan(2), CultureInfo.InvariantCulture);
+            if (iterations is < 100_000 or > 1_000_000)
+            {
+                return false;
+            }
+
+            var salt = Convert.FromBase64String(parts[4]);
+            var expected = Convert.FromBase64String(parts[5]);
+            if (salt.Length < SaltBytes || expected.Length != HashBytes)
+            {
+                return false;
+            }
+
+            var actual = Rfc2898DeriveBytes.Pbkdf2(
+                Encoding.UTF8.GetBytes(password),
+                salt,
+                iterations,
+                HashAlgorithmName.SHA512,
+                expected.Length);
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
+
+    public bool VerifyUnknownUser(string password)
+    {
+        _ = Verify(password, _dummyHash);
+        return false;
+    }
+}
+
+public static class PrincipalExtensions
+{
+    public static Guid UserId(this ClaimsPrincipal principal) =>
+        Guid.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id)
+            ? id
+            : throw new ApiException(StatusCodes.Status401Unauthorized, "INVALID_TOKEN_SUBJECT", "The access token has no valid user subject.");
+
+    public static bool IsAdministrator(this ClaimsPrincipal principal) => principal.IsInRole(RoleCodes.Admin);
+}
+
+public sealed class MachineAccessService(IApiDataStore dataStore)
+{
+    public async Task<MachinePermissionRecord> EnsureAsync(
+        ClaimsPrincipal principal,
+        Guid machineId,
+        MachineAccessKind access,
+        CancellationToken cancellationToken)
+    {
+        if (principal.IsAdministrator())
+        {
+            return new MachinePermissionRecord(machineId, true, true, true, true);
+        }
+
+        var permission = await dataStore.FindMachinePermissionAsync(principal.UserId(), machineId, cancellationToken);
+        var allowed = permission is not null && access switch
+        {
+            MachineAccessKind.View => permission.CanView,
+            MachineAccessKind.Operate => permission.CanOperate,
+            MachineAccessKind.ChangeVariant => permission.CanChangeVariant,
+            MachineAccessKind.ManageSlots => permission.CanManageSlots,
+            _ => false
+        };
+
+        return allowed
+            ? permission!
+            : throw new ApiException(StatusCodes.Status403Forbidden, "MACHINE_ACCESS_DENIED", "The user does not have the required permission for this machine.");
+    }
+}
+
+public sealed class DeviceContextMiddleware(RequestDelegate next)
+{
+    public async Task InvokeAsync(HttpContext context, IApiDataStore dataStore)
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
+        {
+            await next(context);
+            return;
+        }
+
+        var tokenDeviceCode = context.User.FindFirstValue(ApiClaimNames.DeviceCode);
+        var headerDeviceCode = context.Request.Headers[ApiHeaders.DeviceCode].ToString().Trim();
+        if (string.IsNullOrWhiteSpace(tokenDeviceCode) || string.IsNullOrWhiteSpace(headerDeviceCode))
+        {
+            throw new ApiException(StatusCodes.Status401Unauthorized, "DEVICE_CONTEXT_REQUIRED", "An authenticated request must include its token-bound device code.");
+        }
+
+        if (!string.Equals(tokenDeviceCode, headerDeviceCode, StringComparison.Ordinal))
+        {
+            throw new ApiException(StatusCodes.Status403Forbidden, "DEVICE_CONTEXT_MISMATCH", "The request device does not match the access token.");
+        }
+
+        var device = await dataStore.FindDeviceAsync(headerDeviceCode, context.RequestAborted);
+        if (device is null || !device.IsActive)
+        {
+            throw new ApiException(StatusCodes.Status403Forbidden, "DEVICE_NOT_AUTHORIZED", "The client device is unknown or inactive.");
+        }
+
+        context.Items[ApiContextKeys.Device] = device;
+        await next(context);
+    }
+}
+
+public static class ApiHeaders
+{
+    public const string DeviceCode = "X-Device-Code";
+    public const string CorrelationId = "X-Correlation-ID";
+    public const string IdempotencyKey = "Idempotency-Key";
+    public const string IdempotencyReplayed = "Idempotency-Replayed";
+}
+
+public static class ApiContextKeys
+{
+    public const string Device = "tkg.device";
+    public const string CorrelationId = "tkg.correlation-id";
+}

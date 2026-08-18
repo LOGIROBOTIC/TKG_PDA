@@ -3,10 +3,13 @@
     <Project Path="src/TkgPda.Domain/TkgPda.Domain.csproj" />
     <Project Path="src/TkgPda.Application/TkgPda.Application.csproj" />
     <Project Path="src/TkgPda.Infrastructure.Postgres/TkgPda.Infrastructure.Postgres.csproj" />
+    <Project Path="src/TkgPda.Api/TkgPda.Api.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TkgPda.Domain.Tests/TkgPda.Domain.Tests.csproj" />
     <Project Path="tests/TkgPda.Application.Tests/TkgPda.Application.Tests.csproj" />
     <Project Path="tests/TkgPda.Infrastructure.Postgres.Tests/TkgPda.Infrastructure.Postgres.Tests.csproj" />
+    <Project Path="tests/TkgPda.Auth.Tests/TkgPda.Auth.Tests.csproj" />
+    <Project Path="tests/TkgPda.Api.Tests/TkgPda.Api.Tests.csproj" />
   </Folder>
 </Solution>

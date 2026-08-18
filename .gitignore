@@ -1,0 +1,48 @@
+# Local customer source package (proprietary, never publish)
+/2026- OPTİMAK -ROBOT AMR/
+
+# Superseded local Phase 01 working copies; canonical files live under db/ and docs/
+/001_initial_schema.sql
+/TKG_PDA_DATABASE_SPEC_v0.1.md
+/CODEX_PHASE_01_PROMPT.md
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.npmrc
+.pypirc
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node/tool caches
+node_modules/
+
+# Local PostgreSQL clusters and transient database artifacts
+/.codex-pg-*/
+/.postgres-*/
+/pgdata/
+postmaster.pid
+*.sqlite
+*.sqlite3
+
+# IDE, operating-system and temporary files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+~$*

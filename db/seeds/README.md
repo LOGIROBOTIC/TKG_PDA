@@ -1,0 +1,71 @@
+# Seed Policy
+
+Phase 01 seeds only stable baseline configuration contained in the initial migration:
+
+- four system roles,
+- three logistics task types,
+- nine customer machine labels,
+- the current machine-level variant counts.
+
+Customer part codes, container types, layout slots, product groups, planning metrics, RDS WorkSite IDs, SEER/RDS map/profile identifiers, route/stitch identifiers and task labels are intentionally not guessed.
+
+Phase 02A implements the textual customer-data portion as a deterministic, source-traceable generated-seed pipeline. Real parts with missing planning inputs are still imported; missing inputs and uncomputable derived metrics remain `NULL`.
+
+## Phase 02A generated-seed workflow
+
+Run with the configured Python environment containing `openpyxl==3.1.5`:
+
+```powershell
+python tools/phase_02a/pipeline.py --project-root .
+```
+
+The command reads the eight customer Excel files without modifying them and regenerates:
+
+- normalized JSON/CSV files under `data/generated/phase_02a/`,
+- the complete data-quality report,
+- `db/seeds/generated/002a_customer_textual_master_data.sql`.
+
+Generated files must not be edited by hand. Change extraction/normalization rules in `tools/phase_02a/pipeline.py`, rerun the pipeline, review the issue report, then run the tests.
+
+```powershell
+python -m unittest discover -s tests/phase_02a -p "test_*.py" -v
+pwsh tests/phase_02a/run_postgres_integration.ps1
+```
+
+Database application order:
+
+1. `db/migrations/001_initial_schema.sql`
+2. `db/seeds/generated/002a_customer_textual_master_data.sql`
+
+The generated seed is idempotent and resolves baseline machine/variant UUIDs through customer codes. It contains no layout geometry, RDS IDs, route/stitch identifiers or guessed task labels. The separate physical-layout workflow is documented below.
+
+## Phase 02B generated physical-layout workflow
+
+Run with the configured Python environment containing `openpyxl==3.1.5` and `Pillow==12.3.0`:
+
+```powershell
+python tools/phase_02b/pipeline.py --project-root .
+```
+
+The command reads the five physical-layout workbooks without saving or modifying them and regenerates:
+
+- normalized JSON/CSV and the complete issue report under `data/generated/phase_02b/`,
+- one deterministic visual review PNG per layout under `data/generated/phase_02b/review/`,
+- `db/seeds/generated/002b_customer_physical_layouts.sql`.
+
+Generated files must not be edited by hand. Change extraction boundaries or normalization rules in `tools/phase_02b/pipeline.py`, rerun the pipeline, visually inspect all review PNGs against the customer sheets, then run:
+
+```powershell
+python -m unittest discover -s tests/phase_02b -p "test_*.py" -v
+pwsh tests/phase_02b/run_postgres_integration.ps1
+```
+
+Complete database application order:
+
+1. `db/migrations/001_initial_schema.sql`
+2. `db/seeds/generated/002a_customer_textual_master_data.sql`
+3. `db/seeds/generated/002b_customer_physical_layouts.sql`
+
+The Phase 02B seed is idempotent and resolves machines, variants, parts, and container types through the frozen Phase 01/02A baseline. It inserts no new canonical part/container data. `ui_*` values are normalized PDA display geometry only; physical dimensions remain `NULL` unless explicitly supplied by a trusted layout source. No RDS WorkSite, robot/map coordinate, route, stitch, navigation profile, or SEER map data is generated.
+
+Of the 183 generated `master.layout_slots` rows, 172 are logistics positions and 11 are machine/cell display regions marked with `slot_role = 'MACHINE'`. These 11 rows are visual/physical references only. Future workflow generation must exclude them from transport source/destination selection; the existing `slot_role` discriminator is sufficient for this baseline, so no schema migration is required.

@@ -1,0 +1,38 @@
+[
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+    "role": "authoritative_physical_layout_geometry",
+    "sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0",
+    "size_bytes": 127039
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+    "role": "authoritative_physical_layout_geometry",
+    "sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33",
+    "size_bytes": 125253
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+    "role": "authoritative_physical_layout_geometry",
+    "sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4",
+    "size_bytes": 115022
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+    "role": "authoritative_physical_layout_geometry",
+    "sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d",
+    "size_bytes": 77856
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+    "role": "authoritative_physical_layout_geometry",
+    "sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46",
+    "size_bytes": 110702
+  },
+  {
+    "path": "data/generated/phase_02a/normalized_customer_data.json",
+    "role": "frozen_textual_master_reference",
+    "sha256": "6b88d6d2ab66d84d4eafb07d8f59d94461ba487e0e9d41dfc596cb4badb96973",
+    "size_bytes": 476181
+  }
+]

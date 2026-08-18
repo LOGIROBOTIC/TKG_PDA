@@ -1,0 +1,3183 @@
+[
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0027144f0863672ed797",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DN2:DU13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0401a5b6b6e64bff4213",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67115BN050-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B17:K28",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "affected_slot_count": 6,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "047e72284e0ef90d9e0f",
+    "layout_code": "CUSTOMER-PHYSICAL-V4",
+    "machine_code": "SH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "4. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0724526a94302fb9a26c",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GY2:HF13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0761d573ea5d0e49347a",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67115BN050-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B2:K13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0812ee77289bb0f211cf",
+    "layout_code": "CUSTOMER-PHYSICAL-V5",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "G920B0H010-10-TMCZ"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B24:M31",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "5"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "08bda6e06bc35c8363f8",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71550BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BS126:CC137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "09c74d3872a598e26187",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GC2:GJ13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0c42db92513df3c2e660",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "FL119:FY137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0ce06d6d59c3ef1cbbc2",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GC126:GJ137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "0ebf6a36323a4e60e31d",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B101:M108",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "0ed8e8ec8b58d2cd3c01",
+    "machine_code": "SH-01-B",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "66424BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BZ62:CO71",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "0f80de34253b23b5f189",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71514BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "M126:T137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 8,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "0fe06aa46d0e9368a0e5",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A78:CC164",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "1074d9dc4599ce349b38",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B79:M86",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "10d1dcd207ce7bf2d154",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "715A2BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AT126:BA137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "119628bb3e7d6a9b5a4e",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B145:M152",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "12b107e818d850cf7314",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71514BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "M126:T137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "13879f5bc213b6960271",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EU2:FH20",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "13987b4371852a7d4a1c",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B134:M141",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 7,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "13d4f8463bda66e34cdf",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "PAH-02-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A1:CC76",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "1911263df4e300abf578",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR57:CC64",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "19a95ab28a0e22e3cb43",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "715A2BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AT126:BA137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "1a4a66f1cfe1dc36b48a",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71515BN400-40",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "X2:AE13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "canonical_part_code": "67115BN050-10-HAOS",
+    "code": "PART_CODE_SOURCE_DISCREPANCY",
+    "issue_id": "1b050d74412888eba957",
+    "machine_code": "SH-01-A",
+    "message": "Layout source 67115BN050-10-HMTR is retained and normalized to canonical 67115BN050-10-HAOS.",
+    "raw_part_code": "67115BN050-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B17:K28",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "1be04103f0faa3c1fa60",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B112:M119",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "1d5b004be7b1848f99e8",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DY2:EF13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "1da344ef86e063235f38",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "412B",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR156:CC163",
+      "sheet": "2. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "1eb3232cc45d5422e1b1",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71584BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AI2:AP13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "21c589cdad01c6fcab32",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B123:M130",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "224955b21243aedcd4e0",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GY126:HF137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "246b6a63eda081e0f675",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71550BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BE126:BO137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "24d05da09fe4803cab37",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "66424GJ000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CH21:CQ36",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "251dc165d626b497aa61",
+    "message": "Merged template artifact is outside every proven machine extraction region.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "L142:U142",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "286ee6797ef3e0262030",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR35:CC42",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "affected_slot_count": 7,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "2bd0e6e89be4b321349c",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "PAH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A1:CC76",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "2c66533bd7cb6eeabaf4",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "66424BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CH41:CQ56",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "2e703064ad176a8313e3",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EU119:FH137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 10,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "2f43c7f78446d275d8bf",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "2f51beb9ccdccce82893",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121GJ050-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B60:K71",
+      "sheet": "2.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "315ceb801ae6b1780bd2",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121BN450-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "Q60:Z71",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "3781c5372a14bb8d6602",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71538BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "B126:I137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "3881ad8597849d410e54",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71560BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BS2:CC13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "39a50024d4a2d48256c5",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71560BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BE2:BO13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "3a777616f570f5ca6892",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71560BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BE2:BO13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "3c826500e718f3fbb1e6",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GN126:GU137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "3cea4360b179998358db",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121GJ000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "O60:X71",
+      "sheet": "3. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "3d17a864858ee4cdd2bf",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EJ126:EQ137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "3e0d59c15e44d53d1546",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71566BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CR2:CY13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "40017ff322a913f707c8",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67131BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AX60:BG71",
+      "sheet": "3.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "41e480a3c38ade033d46",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67133GJ000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BK60:BT71",
+      "sheet": "3. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "42e038641792b1fd90c8",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-B",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
+  },
+  {
+    "affected_slot_count": 8,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "434c580751586bfa38a7",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "412B",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A78:CC164",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "43e0d7b82e3a457a1432",
+    "layout_code": "CUSTOMER-PHYSICAL-V5",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "G920B0H010-10-TMCZ"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B2:M9",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "5"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "44cdbe880ccd9bcf7333",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DY2:EF13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "45e1b10292a28b21d3e4",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EJ2:EQ13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "47395ed7f4f17ecc2217",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71517BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CG2:CN13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "4932539080cf74906762",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "715B2BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AT2:BA13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "4b422966c6a303b36db2",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B156:M163",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "4b8ed0081518e35d0778",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DY126:EF137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "4d6a03ba6aed368f523e",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DN126:DU137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "4f5dcea7ed61dd0146f6",
+    "machine_code": "SH-01-B",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "81110BN400-40",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AZ62:BG71",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "501a68ba9a2da47519d6",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GN2:GU13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "527881ae7ad857d783a7",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71538BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "B126:I137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 8,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "527e6fdadf4c7719a690",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "412B",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A78:CC164",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "534b3b05667493e18e79",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121BN000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AL60:AU71",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "53b3697f4e292aa708c8",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "66424BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BM62:CB71",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "54a7e7c4b768c0d1a701",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B134:M141",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "55cdd48c3cb06e681ac7",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71550BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BS126:CC137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "57370cea33f387f2f736",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR13:CC20",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "57dd85a829056f01f1c0",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "66424BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BZ62:CO71",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "587c301d5a414c0b9b0a",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "3.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "5cec42c21b0447963b82",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GN2:GU13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "5eee1f26b04d18787ee8",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EJ126:EQ137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "5f029417264692a896d0",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67133GJ050-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AX60:BG71",
+      "sheet": "2.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 6,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "5f719acefbf2f777b13c",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "PAH-02-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A1:CC65",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "60ceb0e2533fb2c1bec1",
+    "machine_code": "SH-01-A",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "67131BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BT60:CC71",
+      "sheet": "4. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "4"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "630dee69ab65178182bf",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121GJ050-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "O60:X71",
+      "sheet": "2.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "6a229fb24d15b677c590",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "FI1:IG138",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "6ad867cb53547d520733",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DN2:DU13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "6e5abc9c70ac564c2f5e",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B123:M130",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "6f267982383c28171be3",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71548BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "B2:I13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "6f509b3c97c16438c729",
+    "message": "Merged template artifact is outside every proven machine extraction region.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "O74:V85",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "7263490c1c68ffcf5b5c",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B112:M119",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "7307e0c1ed026edd71a3",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71574BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AI126:AP137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "737ab43857ac6f3c8e17",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71556BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CR126:CY137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "74506744a396f8192a8b",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71560BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BS2:CC13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "7519c77b5fc911b47f2d",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B156:M163",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "7645d1fba1a7b86320f2",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DY126:EF137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "76d339811ac7fb051355",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "412B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR156:CC163",
+      "sheet": "2. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "7fbb5dfb52aeb03f31ca",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71586BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DC2:DJ13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 6,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "801bd3cfcd9b9603ae67",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "PAH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A1:CC65",
+      "sheet": "2. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "80c7d0389ab17efae0f7",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71524BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "M2:T13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "892a1ec42a601c1c345b",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71515BN400-40"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "X2:AE13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "8944e49511a94a183f85",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GY126:HF137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "8a4540c3b67dc36ac8e0",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "FL2:FY20",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "8fa32f345e4e19f93703",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B60:K71",
+      "sheet": "3.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "956cda377c09a1af4c9e",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B90:M97",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "affected_slot_count": 7,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "96b1e2844d209ccdf2d4",
+    "layout_code": "CUSTOMER-PHYSICAL-V5",
+    "machine_code": "SH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "97d83347f718492f9b15",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121BN000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "Y60:AH71",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 8,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "9936f7e2d913d3a44b0a",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A78:CC164",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "99d807322ad2380384a7",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B156:M163",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "99e4506a67926e7a8af3",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B145:M152",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "9b7ac12597f51f2ef8e3",
+    "message": "Merged template artifact is outside every proven machine extraction region.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "L144:U144",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "9d00693ff94a20bbfb31",
+    "machine_code": "SH-01-B",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "66425BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BK64:BV71",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "9d363b39377109abb2bd",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "72613-02210"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B112:M119",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "9d9f9b057ff3b4ec59ea",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR68:CC75",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "9e795395c3de69fdf3b0",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "66424BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AT62:BI71",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "9faeea375c9cc9ae82a8",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B134:M141",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "9fb204190081402932a6",
+    "message": "Merged template artifact is outside every proven machine extraction region.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "L141:U141",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "a19182e6a71910598ec4",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-B",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "a4df42143d56a4ea4552",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "57658-K0020"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B123:M130",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "acf77313d980e1bd94a4",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B145:M152",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "af4b5329c951680061aa",
+    "machine_code": "SH-01-B",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "66424BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CH41:CQ56",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b0b561193b0b8680acc6",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B145:M152",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b10b93875f2bd57a2235",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "66424GJ000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CH2:CQ17",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b335d85c5ecbd62c3e1e",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B90:M97",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b511b4fa5c0715c392c0",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B101:M108",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "b53eaafa654162363a17",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR2:CC9",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b551b5e1dac3eb3b4d91",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "O60:X71",
+      "sheet": "3.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b8229303a50e55bc666d",
+    "layout_code": "CUSTOMER-PHYSICAL-V4",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67131BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CG60:CP71",
+      "sheet": "4. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "4"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b8c5f2ea9d1152b80686",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67131BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BK60:BT71",
+      "sheet": "3.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b8e9e027573afd65dd82",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71517BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CG126:CN137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "b8fa6448808b936c6266",
+    "message": "Merged template artifact is outside every proven machine extraction region.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CW19:CY28",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "b938d9544503a90aabc2",
+    "message": "Merged template artifact is outside every proven machine extraction region.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "L143:U143",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "b9f301f61fd413073ce2",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B79:M86",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "canonical_part_code": "67115BN050-10-HAOS",
+    "code": "PART_CODE_SOURCE_DISCREPANCY",
+    "issue_id": "bb9ec4e81faac11e662a",
+    "machine_code": "SH-01-A",
+    "message": "Layout source 67115BN050-10-HMTR is retained and normalized to canonical 67115BN050-10-HAOS.",
+    "raw_part_code": "67115BN050-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B2:K13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "bf8be8103800c6d21b50",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GC126:GJ137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "c518fb8d877b8fd7674a",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71548BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "B2:I13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "c8f99c483919c7d9d7a2",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-B",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "3. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "c98105e5ca0dfffae8df",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "FL119:FY137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "cac7a9735054a28edecd",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71515BN400-40",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "X126:AE137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "cdc30ecb0862ed85b8b2",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR24:CC31",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "affected_slot_count": 15,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "cf471a01b3d38fb452e6",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CG1:FH138",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "d16be59dce1083390044",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DN126:DU137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "d1dd160336d80eddd818",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B134:M141",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "d3b9b259d48923be9cda",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71550BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "BE126:BO137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "d4a9b7b8448e099e822f",
+    "layout_code": "CUSTOMER-PHYSICAL-V5",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "G920C0H010-10-TMCZ"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B13:M20",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "5"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "da28bb391ba6595cef5d",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121GJ000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B60:K71",
+      "sheet": "3. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "dbb3fea32025f9d68d22",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GY2:HF13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "dc90f35b56d9839e452c",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-B",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67133GJ000-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AX60:BG71",
+      "sheet": "3. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    },
+    "variant_codes": [
+      "3"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "ddb0fb9b906ec89fdcd0",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67121BN450-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "AD60:AM71",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "1"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "ddb785da283623900dc5",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71576BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DC126:DJ137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "df71db0f7cd91cfddbd8",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71524BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "M2:T13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "e00714dee6042b3c198d",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-A",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "2.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "e1e1be7e472433414c5a",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A67:CC164",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "e2e8aeaea485ddce1817",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67133GJ050-10-HAOS"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BK60:BT71",
+      "sheet": "2.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "e4cd178ab4b0f4af3c39",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "B156:M163",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "e5397dbf2dbcd7c3e0d2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "71584BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AI2:AP13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "e6a27ac01336ebd7f157",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "412B",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A67:CC164",
+      "sheet": "2. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "eb585527e38307e1958b",
+    "layout_code": "CUSTOMER-PHYSICAL-V4",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "67131BN400-10-HMTR"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "BT60:CC71",
+      "sheet": "4. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "4"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "ec3f1d53c8907a155220",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GN126:GU137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
+    "issue_id": "ecc88d8d692417bf1599",
+    "message": "PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.",
+    "raw_label": null,
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "BR46:CC53",
+      "sheet": "3. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
+    "issue_id": "ed3b1e18024c04f6c31b",
+    "machine_code": "SH-01-A",
+    "message": "Part exists in master data but is not planned for this layout's assigned machine/variant context.",
+    "part_code": "67131BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "CG60:CP71",
+      "sheet": "4. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "4"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "ee5808622e2b619696f5",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71574BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AI126:AP137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "eec36424f7378552d58a",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EU2:FH20",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "f12718022ff76c86287e",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EU119:FH137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "f158fc73eb05580ffc90",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "71515BN400-40"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "X126:AE137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "f1ec55b161de368571ef",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "FL2:FY20",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "f37de521c39a62476e55",
+    "layout_code": "CUSTOMER-PHYSICAL-V5",
+    "machine_code": "SH-01-A",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "G920C0H010-10-TMCZ"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "B35:M42",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    },
+    "variant_codes": [
+      "5"
+    ]
+  },
+  {
+    "affected_slot_count": 15,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "f4bf2cb27f25bc89b663",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "B1:CC138",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "f4fb502b960a9d788526",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "GC2:GJ13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
+    "issue_id": "fb1b15b08d9ccf431d39",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
+    "resolved_part_codes": [
+      "715B2BN400-50"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "AT2:BA13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "PART_ASSOCIATION_UNRESOLVED",
+    "issue_id": "fbef3915f206cba84262",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "Slot geometry is imported, but its part association is blank, unknown or outside the proven variant context.",
+    "raw_part_codes": [],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "EJ2:EQ13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "SEALER_VARIANT_3_LAYOUT_UNPROVEN",
+    "issue_id": "fe81b07f4719c9f5af61",
+    "machine_code": "SEALER",
+    "message": "The combined physical-layout workbook proves a SEALER region with V1/V2 part evidence, but no V3 part or layout evidence; V3 remains unassigned.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CG1:FH138",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_code": "3"
+  }
+]

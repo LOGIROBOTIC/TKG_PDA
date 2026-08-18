@@ -1,0 +1,18 @@
+{
+  "customer_workbooks": 5,
+  "data_issues": 165,
+  "high_confidence_slots": 133,
+  "layout_assignments": 24,
+  "layout_slots": 183,
+  "layouts": 21,
+  "logistics_slots": 172,
+  "low_confidence_excluded_candidates": 13,
+  "low_confidence_slots": 0,
+  "machine_region_slots": 11,
+  "medium_confidence_slots": 50,
+  "unknown_logistics_slot_footprints": 172,
+  "unknown_machine_region_footprints": 11,
+  "unknown_physical_footprints": 183,
+  "unresolved_container_association_slots": 80,
+  "unresolved_part_association_slots": 28
+}

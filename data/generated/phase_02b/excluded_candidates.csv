@@ -1,0 +1,14 @@
+confidence,status,reason,source_file,source_sheet,source_range,raw_label,has_outer_border
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR13:CC20,,True
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR24:CC31,,True
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR2:CC9,,True
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR35:CC42,,True
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR46:CC53,,True
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR57:CC64,,True
+LOW,EXCLUDED,PAH-01-A has no canonical variant 3; blank template rectangles are not a layout.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx,3. Varyant,BR68:CC75,,True
+LOW,EXCLUDED,Merged template artifact is outside every proven machine extraction region.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx,5.VARYANT,O74:V85,,False
+LOW,EXCLUDED,Merged template artifact is outside every proven machine extraction region.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx,1. VARYANT,CW19:CY28,,False
+LOW,EXCLUDED,Merged template artifact is outside every proven machine extraction region.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx,1. VARYANT,L141:U141,,False
+LOW,EXCLUDED,Merged template artifact is outside every proven machine extraction region.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx,1. VARYANT,L142:U142,,False
+LOW,EXCLUDED,Merged template artifact is outside every proven machine extraction region.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx,1. VARYANT,L143:U143,,False
+LOW,EXCLUDED,Merged template artifact is outside every proven machine extraction region.,2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx,1. VARYANT,L144:U144,,False

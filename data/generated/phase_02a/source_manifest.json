@@ -1,0 +1,50 @@
+[
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AGV - BAKIM - PLC Çalışma.xlsx",
+    "role": "interaction_corroboration",
+    "sha256": "620266e75e3dc618ea6b13eebf24dc4da5478e1094e6017f731db85e7c3bfb46",
+    "size_bytes": 315898
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+    "role": "planning_corroboration",
+    "sha256": "724882dab24b27f338f72aacc078e8a6209c503851dc5cf2f47c6d01db895c89",
+    "size_bytes": 38084
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+    "role": "authoritative_textual_master_and_planning",
+    "sha256": "e2bb312dfd9c71abf949bcf452209b6eb79a2adad55b1feca242098c4a34335e",
+    "size_bytes": 1279915
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+    "role": "textual_corroboration_only_no_geometry",
+    "sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0",
+    "size_bytes": 127039
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+    "role": "textual_corroboration_only_no_geometry",
+    "sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33",
+    "size_bytes": 125253
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+    "role": "textual_corroboration_only_no_geometry",
+    "sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4",
+    "size_bytes": 115022
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+    "role": "textual_corroboration_only_no_geometry",
+    "sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d",
+    "size_bytes": 77856
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+    "role": "textual_corroboration_only_no_geometry",
+    "sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46",
+    "size_bytes": 110702
+  }
+]

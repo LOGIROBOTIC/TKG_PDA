@@ -1,0 +1,3037 @@
+[
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "0292e350f3c70828f052",
+    "machine_code": "SH-01-B",
+    "main_part_code": "67121BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67121BN000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C27",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 27,
+      "sheet": "SH-01-B"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "034bd2e291c15a6e4a25",
+    "machine_code": "GAR",
+    "main_part_code": "51904K0020-10-TES",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "57658-K0020",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "GAR"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "06bfc704aced80b3bb5e",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "66424BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D9",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 9,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/1500/1300",
+    "variant_code": "1",
+    "work_plan_value": "1600/940/1350"
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "1650.417",
+    "field": "weekly_volume",
+    "first_value": "131.875",
+    "issue_id": "07af8c1ae6deab198f40",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for weekly_volume; normalized value is NULL.",
+    "part_code": "67134GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "081913350e35272a86e7",
+    "machine_code": "SH-01-A",
+    "main_part_code": "G920B0H010-10-TMCZ",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "G920B0H010-10-TMCZ",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "5"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "0afd519fdf2ef28921d8",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "66424BN000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-01-B"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "0b1cf23f5d1d666b544d",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN000-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76151-BN000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "79220.000",
+    "field": "annual_volume",
+    "first_value": "6330.000",
+    "issue_id": "0c81fb1e652c7a9ec48c",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for annual_volume; normalized value is NULL.",
+    "part_code": "67134GJ000-20",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+P21",
+    "issue_id": "0ea9f85cbe26fa61ce55",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "lot_quantity",
+    "issue_id": "0ee2b0a41e06c2ce2817",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for lot_quantity; work-plan precedence is retained.",
+    "part_code": "81110BN400-40",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 11,
+      "sheet": "main"
+    },
+    "takt_study_value": "50.000",
+    "variant_code": "1",
+    "work_plan_value": "100.000"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P17,)",
+    "issue_id": "0f2109ebefe3c4d56607",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 17,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "115ecc4d7259ada75109",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121GJ050-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67121GJ050-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D38",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 38,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "2",
+    "work_plan_value": "1200/940/1150"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "11e17fbe3db12605dcd0",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121BN450-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67121BN450-10-HMTR",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C24",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 24,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "13db92f51eb38b90a7c2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71550BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "715A2BN400-50",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "1511b912e7bfaf92462b",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "76150GJ000-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76151GJ000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "15d9969c3280b635703c",
+    "machine_code": "SH-01-B",
+    "main_part_code": "67121GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67121GJ000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D5",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 5,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "3",
+    "work_plan_value": "1200/1200/1300"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "18c535225b5620f89809",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "main_part_code": "71550BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71550BN000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-01-P1--SH-01-P2"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "1bd3d4b5c40abeb060b1",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71550BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "71550BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D73",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 73,
+      "sheet": "main"
+    },
+    "takt_study_value": "1300/1900/1800",
+    "variant_code": "1",
+    "work_plan_value": "1530/1180/1250"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "lot_quantity",
+    "issue_id": "1d4d174758848d7ccc72",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67133GJ050-10-HAOS",
+    "message": "Work-plan and takt-study values differ for lot_quantity; work-plan precedence is retained.",
+    "part_code": "67133GJ050-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D49",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 49,
+      "sheet": "main"
+    },
+    "takt_study_value": "96.000",
+    "variant_code": "2",
+    "work_plan_value": "40.000"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "1f9c6d24d6ee1d8196c2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "main_part_code": "71560BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "81163-C7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E27",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 27,
+      "sheet": "SH-01-P1--SH-01-P2"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "20e51c8f29ef98c2fde3",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76151-BN400",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "21064f0fedae59fa6645",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76173-A7000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_CATEGORY_CONFLICT",
+    "container_code": "ORT",
+    "issue_id": "23edc9acb3ed6548bb62",
+    "message": "Container code has conflicting category hints; category OTHER is used.",
+    "observed_categories": [
+      "BOX",
+      "CONTAINER"
+    ],
+    "severity": "WARNING",
+    "sources": [
+      {
+        "cell": "D18",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 18,
+        "sheet": "412B"
+      },
+      {
+        "cell": "E19",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 19,
+        "sheet": "412B"
+      },
+      {
+        "cell": "D22",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 22,
+        "sheet": "412B"
+      },
+      {
+        "cell": "D3",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 3,
+        "sheet": "GAR"
+      },
+      {
+        "cell": "D6",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 6,
+        "sheet": "GAR"
+      },
+      {
+        "cell": "D12",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 12,
+        "sheet": "GAR"
+      },
+      {
+        "cell": "D13",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 13,
+        "sheet": "SH-01-B"
+      },
+      {
+        "cell": "D20",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 20,
+        "sheet": "SH-01-B"
+      }
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "278169945d22ad6fa8fb",
+    "machine_code": "SEALER",
+    "main_part_code": "71517BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71517BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D29",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 29,
+      "sheet": "SEALER"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_code",
+    "issue_id": "289a8894bb275a3de23e",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_code; work-plan precedence is retained.",
+    "part_code": "66425BN000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 13,
+      "sheet": "main"
+    },
+    "takt_study_value": "4111",
+    "variant_code": "2",
+    "work_plan_value": "ARABA"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "2a5162af2e5b9c968531",
+    "machine_code": "SEALER",
+    "main_part_code": "71566BN000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71566BN000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SEALER"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "2f16d1802458e3f8d450",
+    "machine_code": "SEALER",
+    "main_part_code": "71517BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71517BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D35",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 35,
+      "sheet": "SEALER"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "lot_quantity",
+    "issue_id": "2f3dadbc38c970f1f19a",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for lot_quantity; work-plan precedence is retained.",
+    "part_code": "66425GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E3",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 3,
+      "sheet": "main"
+    },
+    "takt_study_value": "9.000",
+    "variant_code": "1",
+    "work_plan_value": "300.000"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "lot_quantity",
+    "issue_id": "2f7a4d0c8562e6e84911",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for lot_quantity; work-plan precedence is retained.",
+    "part_code": "66425BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E10",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 10,
+      "sheet": "main"
+    },
+    "takt_study_value": "100.000",
+    "variant_code": "1",
+    "work_plan_value": "300.000"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "30f5dc7928be239a6886",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67131BN000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C35",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 35,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "4"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "377e12fbbd2bbf8fe7e0",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN000-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76173-A7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E25",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 25,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "3e09dd462483e4ad9d94",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424GJ000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "66424GJ000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "SH-01-B"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_code",
+    "issue_id": "3f213fd1905e53aa09f0",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_code; work-plan precedence is retained.",
+    "part_code": "81110BN400-40",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 11,
+      "sheet": "main"
+    },
+    "takt_study_value": "4322",
+    "variant_code": "1",
+    "work_plan_value": "ORT"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q5",
+    "issue_id": "415bcaa73b319f0d98f8",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S5",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 5,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q11",
+    "issue_id": "41a4dda1595b5124dff3",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "43e8a418f5fed933d483",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "66424GJ000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D2",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 2,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/1500/1300",
+    "variant_code": "1",
+    "work_plan_value": "1600/940/1350"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "440928ef35a5af098b16",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76173-A7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+P12",
+    "issue_id": "45e54bdae9269b5be9c4",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "460812238b35d7efd6e6",
+    "machine_code": "412B",
+    "main_part_code": "577040D030-10-TES",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "90174-12022",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 17,
+      "sheet": "412B"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_CATEGORY_UNRESOLVED",
+    "container_code": "285C",
+    "issue_id": "4667c66df220dd3ee142",
+    "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
+    "observed_categories": [],
+    "severity": "INFO",
+    "sources": [
+      {
+        "cell": "D4",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 4,
+        "sheet": "412B"
+      },
+      {
+        "cell": "D7",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 7,
+        "sheet": "412B"
+      }
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "46f0c620ed20abd9f0fb",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76151-BN400",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(O85,)",
+    "issue_id": "4753533c2143951369ac",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P85",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 85,
+      "sheet": "main"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "488d0b1c72c8595b058c",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "66424BN400-10-HMTR",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "SH-01-B"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "4bc622a02e8652d47990",
+    "machine_code": "GAR",
+    "main_part_code": "57154F4070-40",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "90179-14075",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "GAR"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P8,)",
+    "issue_id": "4c76a9c8c1d1d8ea0d68",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P21,)",
+    "issue_id": "4e8ce4b687482a6940c1",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "2.000",
+    "field": "agv_moves_per_day",
+    "first_value": "1.000",
+    "issue_id": "4f8c253e1a9ee01f76d5",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for agv_moves_per_day; normalized value is NULL.",
+    "part_code": "67134GJ000-20",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N8/G8",
+    "issue_id": "4fcb77aa8ef29fa1d17d",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "512c6cc7ffdb93d62306",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67121BN400-10-HMTR",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C31",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 31,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "535a9dcd51f79d5f3488",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "66425GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E3",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 3,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800",
+    "variant_code": "1",
+    "work_plan_value": "1200/800/1500"
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "79220.000",
+    "field": "annual_volume",
+    "first_value": "6330.000",
+    "issue_id": "53e087602cf48d480182",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for annual_volume; normalized value is NULL.",
+    "part_code": "67134GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "agv_moves_per_day",
+    "issue_id": "53f63998721fdf9e7a83",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for agv_moves_per_day; work-plan precedence is retained.",
+    "part_code": "66425BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E10",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 10,
+      "sheet": "main"
+    },
+    "takt_study_value": "3.000",
+    "variant_code": "1",
+    "work_plan_value": "1.000"
+  },
+  {
+    "blocking": false,
+    "canonical_part_code": "67115BN050-10-HAOS",
+    "code": "PART_CODE_SOURCE_DISCREPANCY",
+    "issue_id": "548b59d948b3166feecc",
+    "machine_code": null,
+    "message": "Source code 67115BN050-10-HMTR is retained as evidence and normalized to canonical 67115BN050-10-HAOS.",
+    "raw_part_code": "67115BN050-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "B2",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "row": 2,
+      "sheet": "1. VARYANT"
+    },
+    "variant_code": null
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q13",
+    "issue_id": "5aa9377bcbfc3510e162",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "5cbe833328d3d8fc4064",
+    "machine_code": "SH-01-B",
+    "main_part_code": "67133GJ000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67133GJ000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C24",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 24,
+      "sheet": "SH-01-B"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "5e02fca5b7760edc9515",
+    "machine_code": "GAR",
+    "main_part_code": "57153F4070-40",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "90179-14075",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E5",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 5,
+      "sheet": "GAR"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_CATEGORY_UNRESOLVED",
+    "container_code": "1285",
+    "issue_id": "5ec8c49bd13a56f5899c",
+    "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
+    "observed_categories": [],
+    "severity": "INFO",
+    "sources": [
+      {
+        "cell": "E6",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 6,
+        "sheet": "412B"
+      },
+      {
+        "cell": "E9",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 9,
+        "sheet": "412B"
+      }
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "2000.000",
+    "field": "area_need",
+    "first_value": "0.000",
+    "issue_id": "62bd65f1b9289f3ac750",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN000-10-HAOS",
+    "message": "Conflicting authoritative values for area_need; normalized value is NULL.",
+    "part_code": "67131BN000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "C45",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 45,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "4"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "654ff216f3221117e3f0",
+    "machine_code": "GAR",
+    "main_part_code": "51904K0020-10-TES",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "57658-K0020",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "GAR"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "65eec9eeaed60e42240f",
+    "machine_code": "412B",
+    "main_part_code": "577030D030-10-TES",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "90174-12022",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "412B"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "66b331f292804795147e",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121BN450-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67121BN450-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D34",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 34,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "1",
+    "work_plan_value": "1200/940/1150"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "66ede29c0c13430385db",
+    "machine_code": "412B",
+    "main_part_code": "577030D030-10-TES",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "90174-12022",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "412B"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "675127553348f34666a2",
+    "machine_code": "SH-01-B",
+    "main_part_code": "67121GJ000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67121GJ000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "SH-01-B"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+P85",
+    "issue_id": "68d39082c3b8dd2315ff",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "R85",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 85,
+      "sheet": "main"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "69a9d494a7976f9d01ee",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "main_part_code": "71550BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "81163-C7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E19",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 19,
+      "sheet": "SH-01-P1--SH-01-P2"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "6aa0d46475fdc508c9d4",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77160BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76173-A7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "6f6bb21e5e8deb167db8",
+    "machine_code": "412B",
+    "main_part_code": "577040D030-10-TES",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "90174-12022",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 17,
+      "sheet": "412B"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_CATEGORY_CONFLICT",
+    "container_code": "ARABA",
+    "issue_id": "6f7694b7f707ddda23c0",
+    "message": "Container code has conflicting category hints; category OTHER is used.",
+    "observed_categories": [
+      "BOX",
+      "CART"
+    ],
+    "severity": "WARNING",
+    "sources": [
+      {
+        "cell": "D13",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 13,
+        "sheet": "SH-01-A"
+      },
+      {
+        "cell": "D12",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 12,
+        "sheet": "SH-01-B"
+      },
+      {
+        "cell": "D19",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 19,
+        "sheet": "SH-01-B"
+      },
+      {
+        "cell": "D22",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 22,
+        "sheet": "SH-01-B"
+      }
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "728b84ede5bc95ea4709",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71560BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "715B2BN400-50",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "agv_moves_per_day",
+    "issue_id": "756fd6209f75832482ab",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for agv_moves_per_day; work-plan precedence is retained.",
+    "part_code": "66425GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E3",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 3,
+      "sheet": "main"
+    },
+    "takt_study_value": "2.000",
+    "variant_code": "1",
+    "work_plan_value": "1.000"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "75c29d50671499e9f3be",
+    "machine_code": "SEALER",
+    "main_part_code": "71527BN000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71527BN000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D23",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 23,
+      "sheet": "SEALER"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "76efa5d0dde71f5d8ca0",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71550BN400-10-HMTR",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "715A2BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_CATEGORY_UNRESOLVED",
+    "container_code": "1284",
+    "issue_id": "77371a5f089292a6bba2",
+    "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
+    "observed_categories": [],
+    "severity": "INFO",
+    "sources": [
+      {
+        "cell": "D3",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 3,
+        "sheet": "PAH-01-A"
+      },
+      {
+        "cell": "D9",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 9,
+        "sheet": "PAH-01-A"
+      },
+      {
+        "cell": "D15",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 15,
+        "sheet": "PAH-01-A"
+      },
+      {
+        "cell": "D19",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 19,
+        "sheet": "PAH-01-A"
+      },
+      {
+        "cell": "D4",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 4,
+        "sheet": "PAH-02-A"
+      },
+      {
+        "cell": "D9",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 9,
+        "sheet": "PAH-02-A"
+      },
+      {
+        "cell": "D14",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 14,
+        "sheet": "PAH-02-A"
+      },
+      {
+        "cell": "D20",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 20,
+        "sheet": "PAH-02-A"
+      }
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "77629ebdce74514a0c58",
+    "machine_code": "412B",
+    "main_part_code": "57054F4080-10-TMMT",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "90179-10234",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "412B"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "77a77182aa55f1229d4f",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67115BN050-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67115BN050-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "77e4760d4127be8c30ab",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77160BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76173-A7000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "canonical_part_code": "67115BN050-10-HAOS",
+    "code": "PART_CODE_SOURCE_DISCREPANCY",
+    "issue_id": "78cf97fa67808291bf8b",
+    "machine_code": null,
+    "message": "Source code 67115BN050-10-HMTR is retained as evidence and normalized to canonical 67115BN050-10-HAOS.",
+    "raw_part_code": "67115BN050-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "B17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "row": 17,
+      "sheet": "1. VARYANT"
+    },
+    "variant_code": null
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "7a842b8fb3d11f104530",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77150BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "77151-BN400",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E7",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 7,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "802e54d5d13828388f57",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "76160GJ000-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76151GJ000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E22",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 22,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "846fa0f4ef3805354453",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67131BN000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D55",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 55,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "4",
+    "work_plan_value": "1200/940/1150"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_code",
+    "issue_id": "85bc486eb53a9f02ade5",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_code; work-plan precedence is retained.",
+    "part_code": "66425GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E3",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 3,
+      "sheet": "main"
+    },
+    "takt_study_value": "4111",
+    "variant_code": "1",
+    "work_plan_value": "ARABA"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "86f94e9b9c40f3553c06",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71560BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "71560BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D82",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 82,
+      "sheet": "main"
+    },
+    "takt_study_value": "1300/1900/1800",
+    "variant_code": "2",
+    "work_plan_value": "1530/1180/1250"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "88eb900b4770238afb28",
+    "machine_code": "GAR",
+    "main_part_code": "57153F4070-40",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "90179-14075",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E5",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 5,
+      "sheet": "GAR"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "8c20f40553c576e30acf",
+    "machine_code": "412B",
+    "main_part_code": "57054F4080-10-TMMT",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "90179-10234",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "412B"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+M76/G76",
+    "issue_id": "8c45538cd5f86d033ab6",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "O76",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 76,
+      "sheet": "main"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "275.069",
+    "field": "daily_volume",
+    "first_value": "21.979",
+    "issue_id": "8fa2fbdab17728346a56",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for daily_volume; normalized value is NULL.",
+    "part_code": "67134GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "91b467e65d953432d418",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN000-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76173-A7000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E25",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 25,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "93a731a0b6965cb74907",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN000-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76151-BN000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E24",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 24,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "93c74efb0586f1b2153f",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76173-A7000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "947ed4052ebd73e6f92a",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71560BN400-10-HMTR",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "715B2BN400-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "96d2aa96e2d3c65e5f87",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77150BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76173-A7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "9756b82619821475e42c",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67134GJ000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D7",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 7,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "lot_quantity",
+    "issue_id": "97bcab87c126120559ee",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121GJ050-10-HAOS",
+    "message": "Work-plan and takt-study values differ for lot_quantity; work-plan precedence is retained.",
+    "part_code": "67121GJ050-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D38",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 38,
+      "sheet": "main"
+    },
+    "takt_study_value": "11.000",
+    "variant_code": "2",
+    "work_plan_value": "39.000"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "9a22ffa9acf47d59d0ad",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71560BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71560BN400-10-HMTR",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q21",
+    "issue_id": "9a8747ba99a5a25071da",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "9cf93dc15f4b70ad2f62",
+    "machine_code": "SH-01-B",
+    "main_part_code": "67121BN000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67121BN000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 18,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "2",
+    "work_plan_value": "1200/940/1150"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+M21/F21",
+    "issue_id": "9f800087e3abd59891f6",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "O21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "a228a5ab86bc7bcfc166",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67133GJ050-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67133GJ050-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D49",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 49,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "2",
+    "work_plan_value": "1200/940/840"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "a3a1033268cae1875106",
+    "machine_code": "SEALER",
+    "main_part_code": "71517BN000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71517BN000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 17,
+      "sheet": "SEALER"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "lot_quantity",
+    "issue_id": "ac288d5ae7c35e24089e",
+    "machine_code": "SH-01-B",
+    "main_part_code": "66424BN000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for lot_quantity; work-plan precedence is retained.",
+    "part_code": "66425BN000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 13,
+      "sheet": "main"
+    },
+    "takt_study_value": "10.000",
+    "variant_code": "2",
+    "work_plan_value": "300.000"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "ac66a4a9f2040878d6f6",
+    "machine_code": "SEALER",
+    "main_part_code": "71576BN000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71576BN000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "SEALER"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "acf69f4a801ded55bd9c",
+    "machine_code": "SEALER",
+    "main_part_code": "67134BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67134BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D9",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 9,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(O21,)",
+    "issue_id": "af412e378fabd1faad87",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "50.000",
+    "field": "cycle_time_seconds",
+    "first_value": "24.000",
+    "issue_id": "b09e99b9caf5fc17dbd2",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN000-10-HAOS",
+    "message": "Conflicting authoritative values for cycle_time_seconds; normalized value is NULL.",
+    "part_code": "67131BN000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "C45",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 45,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "4"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "b1eb2d9b85228c6cbdd4",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67134GJ000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "b3d170ae3ea42fa4dbc5",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77160BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "77151-BN400",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "b3ec48d9f9a4ac8b15a1",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76151-BN400",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E7",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 7,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "b425daf869aa755af892",
+    "machine_code": "SH-01-B",
+    "main_part_code": "67133GJ000-10-HAOS",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67133GJ000-10-HAOS",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D15",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 15,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "3",
+    "work_plan_value": "1200/940/1300"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "b4d9f2c76efc6688837a",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76173-A7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "b5ce1c9c88adf0fe8d8f",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67133GJ050-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67133GJ050-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C39",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 39,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "275.069",
+    "field": "daily_volume",
+    "first_value": "21.979",
+    "issue_id": "b645d2461a1e7a70fc6a",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for daily_volume; normalized value is NULL.",
+    "part_code": "67134GJ000-20",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "b69d663568ee5b6bdd77",
+    "machine_code": "SEALER",
+    "main_part_code": "71556BN000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71556BN000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D15",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 15,
+      "sheet": "SEALER"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "b6d9b7bd4dbb88116146",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "main_part_code": "71550BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71550BN400-10-HMTR",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C9",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 9,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q8",
+    "issue_id": "b8790b0c9908f501cab7",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "2.000",
+    "field": "agv_moves_per_day",
+    "first_value": "1.000",
+    "issue_id": "b980d9c032dfcd5d46db",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for agv_moves_per_day; normalized value is NULL.",
+    "part_code": "67134GJ000-50",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "bb5e11d7aff9cb7e1397",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67131BN000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C45",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 45,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "4"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "c2eb9e4a3a69ea78cafc",
+    "machine_code": "SEALER",
+    "main_part_code": "71586BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71586BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D31",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 31,
+      "sheet": "SEALER"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "c95e80e237cfa0a2029f",
+    "machine_code": "SEALER",
+    "main_part_code": "71586BN000-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71586BN000-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D19",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 19,
+      "sheet": "SEALER"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "c99e07a13a491c6a9be4",
+    "machine_code": "SEALER",
+    "main_part_code": "71556BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71556BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D27",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 27,
+      "sheet": "SEALER"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "cbedbea8771030aa0d01",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "76160GJ000-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76151GJ000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E22",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 22,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P14,)",
+    "issue_id": "cd1092e0cda7507bf3c3",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "cd24a31d1bcf33af903c",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77160BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "77151-BN400",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P11,)",
+    "issue_id": "cdb06aea5f2333359743",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "d0e1704b97e3a3132a71",
+    "machine_code": "GAR",
+    "main_part_code": "7260102230-40",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "72613-02210",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "GAR"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "d14f4e986a209ec7cd8c",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "main_part_code": "71560BN000-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71560BN000-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D20",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 20,
+      "sheet": "SH-01-P1--SH-01-P2"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "d28bb2da75eb1c50f1ca",
+    "machine_code": "GAR",
+    "main_part_code": "57154F4070-40",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "90179-14075",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "GAR"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "d2a38095ad1159b4cb78",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76160BN000-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76151-BN000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E24",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 24,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+M85/G85",
+    "issue_id": "d4ef18dc8d8616cf416c",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "O85",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 85,
+      "sheet": "main"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "d77448697528f5529b94",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN000-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76151-BN000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "d8fc3544398e6c701cfd",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67121BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D41",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 41,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "3",
+    "work_plan_value": "1200/940/1300"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+M12/F12",
+    "issue_id": "d91fa5b18551f79c1fe9",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "O12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT",
+    "conflicting_value": "1650.417",
+    "field": "weekly_volume",
+    "first_value": "131.875",
+    "issue_id": "d9d3c224eed77c48888a",
+    "machine_code": "SEALER",
+    "main_part_code": "67134GJ000-20",
+    "message": "Conflicting authoritative values for weekly_volume; normalized value is NULL.",
+    "part_code": "67134GJ000-20",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "SEALER"
+    },
+    "variant_code": "3"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N11/G11/20",
+    "issue_id": "da5574fcd7481d3dee43",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(O12,)",
+    "issue_id": "db82555a79bf04547449",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P12",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 12,
+      "sheet": "SH-02-P1 -SH-02-P2"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P13,)",
+    "issue_id": "db93460916e44c3bb5fd",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N13/G13",
+    "issue_id": "de27eb4539cf0f29daf1",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P13",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 13,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "SOURCE_VALUE_CONFLICT",
+    "field": "container_dimensions",
+    "issue_id": "de9f3760b25ca0dd708f",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN400-10-HMTR",
+    "message": "Work-plan and takt-study values differ for container_dimensions; work-plan precedence is retained.",
+    "part_code": "67131BN400-10-HMTR",
+    "severity": "WARNING",
+    "source": {
+      "cell": "D52",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 52,
+      "sheet": "main"
+    },
+    "takt_study_value": "1200/800/1150",
+    "variant_code": "3",
+    "work_plan_value": "1200/940/1150"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "df32f69bcddcbf0efa9f",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN000-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76173-A7000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E19",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 19,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "e021b658ebf0857ec66f",
+    "machine_code": "SEALER",
+    "main_part_code": "71576BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71576BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D25",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 25,
+      "sheet": "SEALER"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "e1136e5c385d6de9a68f",
+    "machine_code": "GAR",
+    "main_part_code": "7260102230-40",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "72613-02210",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E11",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 11,
+      "sheet": "GAR"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+P76",
+    "issue_id": "e2903d7ca01bf2405414",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "R76",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 76,
+      "sheet": "main"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "e2a1caf01ea88d44cdf2",
+    "machine_code": "SH-01-A",
+    "main_part_code": "G920C0H010-10-TMCZ",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "G920C0H010-10-TMCZ",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "5"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q14",
+    "issue_id": "e3f8ae268990949b3e93",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "e6b5515a4da6c904390f",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67121GJ050-10-HAOS",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67121GJ050-10-HAOS",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C28",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 28,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(P5,)",
+    "issue_id": "e6f1513f361ecf2811d2",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "Q5",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 5,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N14/G14/40",
+    "issue_id": "edbfb12d59dfca2d6c78",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P14",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 14,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N5/G5",
+    "issue_id": "eedd9685418d2d8165b9",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P5",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 5,
+      "sheet": "GAR"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "ef5fb507326bbbbd351a",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "76150GJ000-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76151GJ000",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E18",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 18,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+Q17",
+    "issue_id": "f0723f8d8e122ff50f62",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "S17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 17,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "f29d4329b4eafc7942e2",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN000-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76173-A7000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E19",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 19,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "f2fb32d759bb20ca0a28",
+    "machine_code": "SEALER",
+    "main_part_code": "71566BN400-20",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "71566BN400-20",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "D33",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 33,
+      "sheet": "SEALER"
+    },
+    "variant_code": "2"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N17/G17",
+    "issue_id": "f3855a8147d6cd5d4382",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P17",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 17,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "f3cce7ab2387f8016407",
+    "machine_code": "PAH-02-A",
+    "main_part_code": "76150BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "76151-BN400",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E7",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 7,
+      "sheet": "PAH-02-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "MISSING_PLANNING_INPUT",
+    "field": "lot_quantity",
+    "issue_id": "f43381f16cd42311df9e",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77150BN400-10-HWON",
+    "message": "Kutu Lotu is blank or invalid; dependent planning metrics remain NULL.",
+    "part_code": "76173-A7000",
+    "severity": "WARNING",
+    "source": {
+      "cell": "E8",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 8,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+ROUNDUP(O76,)",
+    "issue_id": "f7ed756d0090cb183b67",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P76",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Takt time study.xlsx",
+      "row": 76,
+      "sheet": "main"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "f919c2ab05875e3571b0",
+    "machine_code": "PAH-01-A",
+    "main_part_code": "77150BN400-10-HWON",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "77151-BN400",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "E7",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 7,
+      "sheet": "PAH-01-A"
+    },
+    "variant_code": "1"
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_CATEGORY_UNRESOLVED",
+    "container_code": "KCK",
+    "issue_id": "fa48b7af475c4028c4f6",
+    "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
+    "observed_categories": [],
+    "severity": "INFO",
+    "sources": [
+      {
+        "cell": "E14",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 14,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E16",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 16,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E20",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 20,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E22",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 22,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E26",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 26,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E28",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 28,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E32",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 32,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E34",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 34,
+        "sheet": "SEALER"
+      },
+      {
+        "cell": "E13",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 13,
+        "sheet": "SH-01-P1--SH-01-P2"
+      },
+      {
+        "cell": "E14",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 14,
+        "sheet": "SH-01-P1--SH-01-P2"
+      },
+      {
+        "cell": "E21",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 21,
+        "sheet": "SH-01-P1--SH-01-P2"
+      },
+      {
+        "cell": "E22",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 22,
+        "sheet": "SH-01-P1--SH-01-P2"
+      },
+      {
+        "cell": "D10",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 10,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      },
+      {
+        "cell": "D11",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 11,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      },
+      {
+        "cell": "D19",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 19,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      },
+      {
+        "cell": "D20",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 20,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "EXCEL_FORMULA_ERROR",
+    "excel_error": "#DIV/0!",
+    "formula": "=+N21/G21",
+    "issue_id": "fb4f888d35faaf29265d",
+    "message": "Excel cached formula result is an error; normalized metric value is NULL.",
+    "severity": "WARNING",
+    "source": {
+      "cell": "P21",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 21,
+      "sheet": "412B"
+    }
+  },
+  {
+    "blocking": false,
+    "code": "UNKNOWN_CONTAINER_MAPPING",
+    "issue_id": "fe43dd4dcf5a766466cd",
+    "machine_code": "SH-01-A",
+    "main_part_code": "67131BN400-10-HMTR",
+    "message": "Container mapping is blank in the authoritative source; no container is guessed.",
+    "part_code": "67131BN400-10-HMTR",
+    "raw_container_code": null,
+    "severity": "WARNING",
+    "source": {
+      "cell": "C42",
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+      "row": 42,
+      "sheet": "SH-01-A"
+    },
+    "variant_code": "3"
+  }
+]

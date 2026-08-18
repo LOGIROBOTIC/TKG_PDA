@@ -11,6 +11,11 @@ public sealed class WorkflowRuleException : InvalidOperationException
     public string Code { get; }
 }
 
+public static class WorkflowErrorCodes
+{
+    public const string CancellationAfterExecutionDeferred = "CANCELLATION_AFTER_EXECUTION_DEFERRED";
+}
+
 public sealed record SlotState(
     OccupancyState Occupancy,
     LoadState Load,

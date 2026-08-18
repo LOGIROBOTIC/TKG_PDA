@@ -129,6 +129,18 @@ public sealed class PostgresTransportWorkflowTests
     }
 
     [PostgresFact]
+    public async Task Layout_machine_regions_are_distinct_from_customer_machine_master_records()
+    {
+        await ResetAsync();
+
+        var machineMasterCount = await ScalarAsync<long>("SELECT count(*) FROM master.machines");
+        var machineRegionCount = await ScalarAsync<long>("SELECT count(*) FROM master.layout_slots WHERE slot_role = 'MACHINE'");
+
+        Assert.Equal(9, machineMasterCount);
+        Assert.Equal(11, machineRegionCount);
+    }
+
+    [PostgresFact]
     public async Task Slot_from_another_machine_is_rejected()
     {
         await ResetAsync();
@@ -337,7 +349,7 @@ public sealed class PostgresTransportWorkflowTests
     }
 
     [PostgresFact]
-    public async Task Cancellation_after_execution_started_is_deferred()
+    public async Task Cancellation_after_dispatch_uses_the_stable_deferred_error()
     {
         await ResetAsync();
         var context = await ConfigureAsync("SH-01-A", "1");
@@ -347,11 +359,54 @@ public sealed class PostgresTransportWorkflowTests
         var service = new TransportWorkflowService(store);
         var created = await service.CreateAsync(Command(context, TransportTaskType.BringEmpty, "late-cancel", destination: slotId));
         await service.RecordExecutionTransitionAsync(created.Request.Id, TransportRequestStatus.SentToRds);
+
+        var error = await Assert.ThrowsAsync<WorkflowRuleException>(() => service.CancelAsync(created.Request.Id, null));
+
+        Assert.Equal(WorkflowErrorCodes.CancellationAfterExecutionDeferred, error.Code);
+    }
+
+    [PostgresFact]
+    public async Task Cancellation_while_running_uses_the_stable_deferred_error()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slotId = await LogisticsSlotAsync(context.LayoutId, requireContainer: false);
+        await SetSlotAsync(slotId, OccupancyState.Vacant, LoadState.Unknown);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+        var service = new TransportWorkflowService(store);
+        var created = await service.CreateAsync(Command(context, TransportTaskType.BringEmpty, "running-cancel", destination: slotId));
+        await service.RecordExecutionTransitionAsync(created.Request.Id, TransportRequestStatus.SentToRds);
         await service.RecordExecutionTransitionAsync(created.Request.Id, TransportRequestStatus.Running);
 
         var error = await Assert.ThrowsAsync<WorkflowRuleException>(() => service.CancelAsync(created.Request.Id, null));
 
-        Assert.Equal("CANCELLATION_AFTER_EXECUTION_DEFERRED", error.Code);
+        Assert.Equal(WorkflowErrorCodes.CancellationAfterExecutionDeferred, error.Code);
+    }
+
+    [PostgresFact]
+    public async Task Concurrent_cancellation_and_dispatch_do_not_deadlock()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slotId = await LogisticsSlotAsync(context.LayoutId, requireContainer: false);
+        await SetSlotAsync(slotId, OccupancyState.Vacant, LoadState.Unknown);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+        var service = new TransportWorkflowService(store);
+        var created = await service.CreateAsync(Command(context, TransportTaskType.BringEmpty, "cancel-dispatch-race", destination: slotId));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var outcomes = await Task.WhenAll(
+            CaptureRuleAsync(async () => _ = await service.CancelAsync(created.Request.Id, null, timeout.Token)),
+            CaptureRuleAsync(async () => _ = await service.RecordExecutionTransitionAsync(
+                created.Request.Id,
+                TransportRequestStatus.SentToRds,
+                timeout.Token)));
+
+        Assert.Single(outcomes, error => error is null);
+        var conflict = Assert.Single(outcomes, error => error is not null)!;
+        Assert.Contains(
+            conflict.Code,
+            new[] { "ILLEGAL_STATUS_TRANSITION", WorkflowErrorCodes.CancellationAfterExecutionDeferred });
     }
 
     private async Task ResetAsync()
@@ -505,6 +560,19 @@ public sealed class PostgresTransportWorkflowTests
         catch (WorkflowRuleException error)
         {
             return new Attempt(null, error);
+        }
+    }
+
+    private static async Task<WorkflowRuleException?> CaptureRuleAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            return null;
+        }
+        catch (WorkflowRuleException error)
+        {
+            return error;
         }
     }
 

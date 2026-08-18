@@ -61,6 +61,7 @@ try {
     $verification = (& $psql @common -Atc @"
 SELECT json_build_object(
   'postgresql_version', current_setting('server_version'),
+  'machine_master_records', (SELECT count(*) FROM master.machines),
   'machine_regions', (SELECT count(*) FROM master.layout_slots WHERE slot_role = 'MACHINE'),
   'rds_tasks', (SELECT count(*) FROM integration.rds_tasks),
   'rds_worksites', (SELECT count(*) FROM integration.rds_worksites),

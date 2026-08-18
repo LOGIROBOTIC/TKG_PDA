@@ -112,7 +112,8 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        var request = await LockRequestAsync(connection, transaction, requestId, cancellationToken);
+        var lockedWorkflow = await LockWorkflowRequestAsync(connection, transaction, requestId, cancellationToken);
+        var request = lockedWorkflow.Request;
 
         if (request.Status == TransportRequestStatus.Cancelled)
         {
@@ -123,14 +124,14 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         if (!TransportStateMachine.CanCancelBeforeExecution(request.Status))
         {
             throw new WorkflowRuleException(
-                "CANCELLATION_AFTER_EXECUTION_DEFERRED",
+                WorkflowErrorCodes.CancellationAfterExecutionDeferred,
                 $"Cancellation from {request.Status.ToDatabase()} is deferred to the executor integration phase.");
         }
 
         TransportStateMachine.EnsureTransition(request.Status, TransportRequestStatus.Cancelled);
         var previousStatus = request.Status;
         var slotId = ReservedSlotId(request);
-        var slot = await LockSlotAsync(connection, transaction, slotId, cancellationToken);
+        var slot = lockedWorkflow.Slots[slotId];
         var restored = TransportRules.CancellationState(request.TaskType, slot.State);
         await UpdateSlotStateAsync(connection, transaction, slotId, restored, actorUserId, cancellationToken);
 
@@ -173,7 +174,8 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        var request = await LockRequestAsync(connection, transaction, requestId, cancellationToken);
+        var lockedWorkflow = await LockWorkflowRequestAsync(connection, transaction, requestId, cancellationToken);
+        var request = lockedWorkflow.Request;
 
         if (request.Status == nextStatus)
         {
@@ -187,7 +189,6 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         if (nextStatus == TransportRequestStatus.Completed)
         {
             var slotId = ReservedSlotId(request);
-            _ = await LockSlotAsync(connection, transaction, slotId, cancellationToken);
             var completedState = TransportRules.CompletionState(request.TaskType, request.PartId, request.ContainerTypeId);
             await UpdateSlotStateAsync(connection, transaction, slotId, completedState, updatedBy: null, cancellationToken);
         }
@@ -215,17 +216,7 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        await using (var lockRuntime = new NpgsqlCommand(
-                         "SELECT machine_id FROM ops.machine_runtime_state WHERE machine_id = @machine_id FOR UPDATE",
-                         connection,
-                         transaction))
-        {
-            lockRuntime.Parameters.AddWithValue("machine_id", selection.MachineId);
-            if (await lockRuntime.ExecuteScalarAsync(cancellationToken) is null)
-            {
-                throw new WorkflowRuleException("RUNTIME_STATE_NOT_CONFIGURED", "Machine runtime state must exist before switching variants.");
-            }
-        }
+        await LockMachineRuntimeAsync(connection, transaction, selection.MachineId, cancellationToken);
 
         await using (var active = new NpgsqlCommand(
                          $"SELECT id FROM ops.transport_requests WHERE machine_id = @machine_id AND status IN ({ActiveStatusesSql}) LIMIT 1",
@@ -294,6 +285,23 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             transaction);
         command.Parameters.AddWithValue("idempotency_key", idempotencyKey);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task LockMachineRuntimeAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid machineId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT machine_id FROM ops.machine_runtime_state WHERE machine_id = @machine_id FOR UPDATE",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("machine_id", machineId);
+        if (await command.ExecuteScalarAsync(cancellationToken) is null)
+        {
+            throw new WorkflowRuleException("RUNTIME_STATE_NOT_CONFIGURED", "Machine runtime state must exist before changing workflow state.");
+        }
     }
 
     private static async Task LockAndValidateRuntimeContextAsync(
@@ -619,10 +627,55 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         string key,
         CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(RequestSelectSql + " WHERE r.idempotency_key = @key FOR UPDATE OF r", connection, transaction);
+        await using var command = new NpgsqlCommand(RequestSelectSql + " WHERE r.idempotency_key = @key", connection, transaction);
         command.Parameters.AddWithValue("key", key);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadRequest(reader) : null;
+    }
+
+    private static async Task<TransportRequestSnapshot> FindRequestAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid requestId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(RequestSelectSql + " WHERE r.id = @id", connection, transaction);
+        command.Parameters.AddWithValue("id", requestId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadRequest(reader)
+            : throw new WorkflowRuleException("REQUEST_NOT_FOUND", $"Transport request {requestId} does not exist.");
+    }
+
+    private static async Task<LockedWorkflowRequest> LockWorkflowRequestAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid requestId,
+        CancellationToken cancellationToken)
+    {
+        // The first read discovers immutable lock-scope identifiers without taking a row lock.
+        // Every mutation then follows the global order: machine -> UUID-ordered slots -> request.
+        var discovered = await FindRequestAsync(connection, transaction, requestId, cancellationToken);
+        await LockMachineRuntimeAsync(connection, transaction, discovered.MachineId, cancellationToken);
+
+        var slots = new Dictionary<Guid, SlotSnapshot>();
+        foreach (var slotId in EndpointSlotIds(discovered))
+        {
+            slots.Add(slotId, await LockSlotAsync(connection, transaction, slotId, cancellationToken));
+        }
+
+        var locked = await LockRequestAsync(connection, transaction, requestId, cancellationToken);
+        if (locked.MachineId != discovered.MachineId
+            || locked.TaskType != discovered.TaskType
+            || locked.SourceSlotId != discovered.SourceSlotId
+            || locked.DestinationSlotId != discovered.DestinationSlotId)
+        {
+            throw new WorkflowRuleException(
+                "REQUEST_LOCK_SCOPE_CHANGED",
+                "Transport request lock-scope fields changed while acquiring the workflow lock hierarchy.");
+        }
+
+        return new LockedWorkflowRequest(locked, slots);
     }
 
     private static async Task<TransportRequestSnapshot> LockRequestAsync(
@@ -799,6 +852,18 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
     private static Guid ReservedSlotId(TransportRequestSnapshot request) => request.TaskType == TransportTaskType.BringEmpty
         ? request.DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", "BRING_EMPTY request has no destination slot.")
         : request.SourceSlotId ?? throw new WorkflowRuleException("SOURCE_REQUIRED", "Removal request has no source slot.");
+
+    private static Guid[] EndpointSlotIds(TransportRequestSnapshot request) =>
+        new[] { request.SourceSlotId, request.DestinationSlotId }
+            .Where(static value => value.HasValue)
+            .Select(static value => value!.Value)
+            .Distinct()
+            .Order()
+            .ToArray();
+
+    private sealed record LockedWorkflowRequest(
+        TransportRequestSnapshot Request,
+        IReadOnlyDictionary<Guid, SlotSnapshot> Slots);
 
     private static void AddNullableUuid(NpgsqlCommand command, string name, Guid? value) =>
         command.Parameters.Add(name, NpgsqlDbType.Uuid).Value = value.HasValue ? value.Value : DBNull.Value;

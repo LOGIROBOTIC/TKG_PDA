@@ -1,0 +1,182 @@
+import type {
+  AdminSession,
+  AdminUser,
+  AuditRecord,
+  ContainerType,
+  DataIssue,
+  Device,
+  DeviceDraft,
+  JsonObject,
+  Layout,
+  Machine,
+  MachinePermission,
+  Part,
+  ProblemDetails,
+  ProductGroup,
+  Role,
+  RoleCode,
+  Slot,
+  SlotDraft,
+  UserDraft,
+  Variant,
+} from './types'
+
+export class ApiProblem extends Error {
+  readonly status: number
+  readonly code: string
+  readonly correlationId?: string
+
+  constructor(problem: ProblemDetails) {
+    super(problem.detail || problem.title)
+    this.name = 'ApiProblem'
+    this.status = problem.status
+    this.code = problem.code || 'HTTP_ERROR'
+    this.correlationId = problem.correlationId
+  }
+
+  get isConcurrencyConflict() {
+    return this.status === 409 && this.code === 'CONCURRENCY_CONFLICT'
+  }
+}
+
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  token?: string | null
+  body?: unknown
+  ifMatch?: number
+  layoutVersion?: number
+  signal?: AbortSignal
+}
+
+export interface ApiResult<T> {
+  data: T
+  etag: number | null
+}
+
+const request = async <T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> => {
+  const headers = new Headers({ Accept: 'application/json' })
+  if (options.body !== undefined) headers.set('Content-Type', 'application/json')
+  if (options.token) headers.set('Authorization', `Bearer ${options.token}`)
+  if (options.ifMatch !== undefined) headers.set('If-Match', `"${options.ifMatch}"`)
+  if (options.layoutVersion !== undefined) headers.set('X-Layout-Version', `"${options.layoutVersion}"`)
+
+  const response = await fetch(path, {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
+  })
+
+  if (!response.ok) {
+    let problem: ProblemDetails
+    try {
+      problem = (await response.json()) as ProblemDetails
+    } catch {
+      problem = {
+        status: response.status,
+        title: response.statusText || 'İstek başarısız',
+        detail: 'Sunucu beklenen ProblemDetails yanıtını üretmedi.',
+        code: 'UNEXPECTED_HTTP_RESPONSE',
+      }
+    }
+    if (response.status === 401 && options.token) window.dispatchEvent(new Event('tkg:unauthorized'))
+    throw new ApiProblem(problem)
+  }
+
+  const etagValue = response.headers.get('etag')?.replaceAll('"', '')
+  const etag = etagValue && Number.isFinite(Number(etagValue)) ? Number(etagValue) : null
+  if (response.status === 204) return { data: undefined as T, etag }
+  return { data: (await response.json()) as T, etag }
+}
+
+export const loginAdmin = async (username: string, password: string) =>
+  (await request<AdminSession>('/api/v1/admin/auth/login', { method: 'POST', body: { username, password } })).data
+
+export const createAdminApi = (token: string) => ({
+  roles: async (signal?: AbortSignal) => (await request<Role[]>('/api/v1/admin/roles', { token, signal })).data,
+  users: async (signal?: AbortSignal) => (await request<AdminUser[]>('/api/v1/admin/users', { token, signal })).data,
+  createUser: async (draft: UserDraft) => (await request<AdminUser>('/api/v1/admin/users', { method: 'POST', token, body: draft })).data,
+  updateUser: async (user: AdminUser, draft: Pick<AdminUser, 'fullName' | 'employeeNo' | 'isActive'>) =>
+    (await request<AdminUser>(`/api/v1/admin/users/${user.id}`, { method: 'PUT', token, ifMatch: user.concurrencyToken, body: draft })).data,
+  resetPassword: async (user: AdminUser, newPassword: string) =>
+    (await request<AdminUser>(`/api/v1/admin/users/${user.id}/password-reset`, { method: 'POST', token, ifMatch: user.concurrencyToken, body: { newPassword } })).data,
+  setRoles: async (user: AdminUser, roles: RoleCode[]) =>
+    (await request<AdminUser>(`/api/v1/admin/users/${user.id}/roles`, { method: 'PUT', token, ifMatch: user.concurrencyToken, body: { roles } })).data,
+  setPermission: async (user: AdminUser, permission: MachinePermission) =>
+    (await request<MachinePermission>(`/api/v1/admin/users/${user.id}/machine-permissions/${permission.machineId}`, {
+      method: 'PUT', token, ifMatch: user.concurrencyToken, body: permission,
+    })).data,
+  removePermission: async (user: AdminUser, machineId: string) =>
+    (await request<void>(`/api/v1/admin/users/${user.id}/machine-permissions/${machineId}`, { method: 'DELETE', token, ifMatch: user.concurrencyToken })).data,
+
+  devices: async (signal?: AbortSignal) => (await request<Device[]>('/api/v1/admin/devices', { token, signal })).data,
+  createDevice: async (draft: DeviceDraft) => (await request<Device>('/api/v1/admin/devices', { method: 'POST', token, body: draft })).data,
+  updateDevice: async (device: Device, draft: Omit<DeviceDraft, 'code'>) =>
+    (await request<Device>(`/api/v1/admin/devices/${device.id}`, { method: 'PUT', token, ifMatch: device.concurrencyToken, body: draft })).data,
+
+  machines: async (signal?: AbortSignal) => (await request<Machine[]>('/api/v1/admin/machines', { token, signal })).data,
+  updateMachine: async (machine: Machine, draft: Pick<Machine, 'displayName' | 'displayOrder' | 'isActive'>) =>
+    (await request<Machine>(`/api/v1/admin/machines/${machine.id}`, { method: 'PUT', token, ifMatch: machine.concurrencyToken, body: draft })).data,
+  variants: async (machineId?: string, signal?: AbortSignal) =>
+    (await request<Variant[]>(`/api/v1/admin/variants${machineId ? `?machineId=${machineId}` : ''}`, { token, signal })).data,
+  createVariant: async (draft: Pick<Variant, 'machineId' | 'code' | 'name' | 'displayOrder'>) =>
+    (await request<Variant>('/api/v1/admin/variants', { method: 'POST', token, body: draft })).data,
+  updateVariant: async (variant: Variant, draft: Pick<Variant, 'name' | 'displayOrder' | 'isActive'>) =>
+    (await request<Variant>(`/api/v1/admin/variants/${variant.id}`, { method: 'PUT', token, ifMatch: variant.concurrencyToken, body: draft })).data,
+  setDefaultLayout: async (variant: Variant, layoutId: string) =>
+    (await request<Variant>(`/api/v1/admin/variants/${variant.id}/default-layout`, { method: 'PUT', token, ifMatch: variant.concurrencyToken, body: { layoutId } })).data,
+
+  layouts: async (machineId?: string, signal?: AbortSignal) =>
+    (await request<Layout[]>(`/api/v1/admin/layouts${machineId ? `?machineId=${machineId}` : ''}`, { token, signal })).data,
+  createLayout: async (draft: Pick<Layout, 'machineId' | 'code' | 'name'>) =>
+    (await request<Layout>('/api/v1/admin/layouts', { method: 'POST', token, body: draft })).data,
+  updateLayout: async (layout: Layout, name: string) =>
+    (await request<Layout>(`/api/v1/admin/layouts/${layout.id}`, { method: 'PUT', token, ifMatch: layout.concurrencyToken, body: { name } })).data,
+  cloneLayout: async (layout: Layout) =>
+    (await request<Layout>(`/api/v1/admin/layouts/${layout.id}/versions`, { method: 'POST', token, ifMatch: layout.concurrencyToken })).data,
+  publishLayout: async (layout: Layout) =>
+    (await request<Layout>(`/api/v1/admin/layouts/${layout.id}/publish`, { method: 'POST', token, ifMatch: layout.concurrencyToken })).data,
+  archiveLayout: async (layout: Layout) =>
+    (await request<Layout>(`/api/v1/admin/layouts/${layout.id}/archive`, { method: 'POST', token, ifMatch: layout.concurrencyToken })).data,
+  slots: async (layoutId: string, signal?: AbortSignal) =>
+    (await request<Slot[]>(`/api/v1/admin/layouts/${layoutId}/slots`, { token, signal })).data,
+  createSlot: async (layout: Layout, draft: Omit<SlotDraft, 'isEnabled'>) =>
+    (await request<Slot>(`/api/v1/admin/layouts/${layout.id}/slots`, { method: 'POST', token, ifMatch: layout.concurrencyToken, body: draft })).data,
+  updateSlot: async (layout: Layout, slot: Slot, draft: Omit<SlotDraft, 'code'>) =>
+    (await request<Slot>(`/api/v1/admin/layouts/${layout.id}/slots/${slot.id}`, {
+      method: 'PUT', token, ifMatch: slot.concurrencyToken, layoutVersion: layout.concurrencyToken, body: draft,
+    })).data,
+
+  parts: async (signal?: AbortSignal) => (await request<Part[]>('/api/v1/admin/parts', { token, signal })).data,
+  createPart: async (draft: Pick<Part, 'code' | 'description'>) =>
+    (await request<Part>('/api/v1/admin/parts', { method: 'POST', token, body: draft })).data,
+  updatePart: async (part: Part, draft: Pick<Part, 'description' | 'isActive'>) =>
+    (await request<Part>(`/api/v1/admin/parts/${part.id}`, { method: 'PUT', token, ifMatch: part.concurrencyToken, body: draft })).data,
+  productGroups: async (variantId?: string, signal?: AbortSignal) =>
+    (await request<ProductGroup[]>(`/api/v1/admin/product-groups${variantId ? `?variantId=${variantId}` : ''}`, { token, signal })).data,
+  createProductGroup: async (draft: { variantId: string; mainPartId: string; name: string | null; displayOrder: number }) =>
+    (await request<ProductGroup>('/api/v1/admin/product-groups', { method: 'POST', token, body: draft })).data,
+  updateProductGroup: async (group: ProductGroup, draft: Pick<ProductGroup, 'name' | 'displayOrder' | 'isActive'>) =>
+    (await request<ProductGroup>(`/api/v1/admin/product-groups/${group.id}`, { method: 'PUT', token, ifMatch: group.concurrencyToken, body: draft })).data,
+  setProductGroupPart: async (group: ProductGroup, partId: string, draft: JsonObject) =>
+    (await request<ProductGroup>(`/api/v1/admin/product-groups/${group.id}/parts/${partId}`, { method: 'PUT', token, ifMatch: group.concurrencyToken, body: draft })).data,
+  removeProductGroupPart: async (group: ProductGroup, partId: string) =>
+    (await request<void>(`/api/v1/admin/product-groups/${group.id}/parts/${partId}`, { method: 'DELETE', token, ifMatch: group.concurrencyToken })).data,
+
+  containers: async (signal?: AbortSignal) => (await request<ContainerType[]>('/api/v1/admin/containers', { token, signal })).data,
+  createContainer: async (draft: Omit<ContainerType, 'id' | 'isActive' | 'concurrencyToken'>) =>
+    (await request<ContainerType>('/api/v1/admin/containers', { method: 'POST', token, body: draft })).data,
+  updateContainer: async (container: ContainerType, draft: Omit<ContainerType, 'id' | 'code' | 'concurrencyToken'>) =>
+    (await request<ContainerType>(`/api/v1/admin/containers/${container.id}`, { method: 'PUT', token, ifMatch: container.concurrencyToken, body: draft })).data,
+
+  dataIssues: async (signal?: AbortSignal) => (await request<DataIssue[]>('/api/v1/admin/data-issues', { token, signal })).data,
+  audit: async (filters?: { limit?: number; actorUserId?: string; entityType?: string }, signal?: AbortSignal) => {
+    const search = new URLSearchParams()
+    if (filters?.limit) search.set('limit', String(filters.limit))
+    if (filters?.actorUserId) search.set('actorUserId', filters.actorUserId)
+    if (filters?.entityType) search.set('entityType', filters.entityType)
+    return (await request<AuditRecord[]>(`/api/v1/admin/audit-logs?${search}`, { token, signal })).data
+  },
+})
+
+export type AdminApi = ReturnType<typeof createAdminApi>

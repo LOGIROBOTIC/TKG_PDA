@@ -2,7 +2,7 @@
 
 TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemin veri ve iş akışı temelidir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri ve bunların doğrulama araçlarını içerir.
 
-> Baseline durumu: Phase 01–03 kabul edildi ve Phase 03 PR #1 `main` dalına merge edildi. **Phase 04 — Backend API + Authentication/RBAC `agent/phase-04-authenticated-api` dalında uygulanmış ve review beklemektedir.** UI, RDS/SEER, PLC, SAP, robot koordinatları ve execution callback entegrasyonu bu phase'in kapsamında değildir.
+> Baseline durumu: Phase 01–04 kabul edildi; Phase 04 PR #2 `main` dalına merge edildi. **Phase 05 — Admin Configuration API `agent/phase-05-admin-configuration` dalında uygulanmış ve review beklemektedir.** Admin Web/PDA UI, RDS/SEER, PLC, SAP, robot koordinatları ve execution callback entegrasyonu henüz başlamamıştır.
 
 ## Mevcut baseline
 
@@ -13,7 +13,8 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 | Phase 02A — Textual Master Data | Tamamlandı | 161 part, 10 container type, 51 product group, 191 planning row |
 | Phase 02B — Physical Layout Extraction | Tamamlandı | 21 layout, 24 variant assignment, 183 display slot |
 | Phase 03 — Business Workflow Engine | Tamamlandı | `BRING_EMPTY`, `REMOVE_FULL`, `REMOVE_EMPTY`, reservation, idempotency ve variant-switch koruması |
-| Phase 04 — Backend API + Auth | Review bekliyor | JWT, RBAC, device binding, machine permission ve workflow HTTP boundary |
+| Phase 04 — Backend API + Auth | Tamamlandı | JWT, RBAC, device binding, machine permission ve workflow HTTP boundary |
+| Phase 05 — Admin Configuration API | Review bekliyor | Admin Web auth boundary, provisioning, draft/publish/versioning, ETag ve audit |
 
 Phase 02B'deki 183 `master.layout_slots` kaydının 172'si lojistik pozisyon, 11'i `slot_role = 'MACHINE'` olan makine/hücre bölgesidir. Bu 11 bölge yalnızca fiziksel ve ekran yerleşim referansıdır; taşıma isteğinin `source_slot_id` veya `destination_slot_id` değeri olamaz. Şema ayrımı mevcut `slot_role` alanıyla yapabiliyor; Phase 03 workflow engine bu invariant'ı uygular ve Phase 04 API bütün mutasyonları aynı service sınırından geçirir.
 
@@ -65,6 +66,7 @@ dotnet build TKG.Pda.slnx --configuration Release
 dotnet test tests/TkgPda.Auth.Tests --configuration Release
 pwsh tests/phase_03/run_postgres_integration.ps1
 pwsh tests/phase_04/run_postgres_api_integration.ps1
+pwsh tests/phase_05/run_postgres_admin_integration.ps1
 ```
 
 Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretmez. `ui_x`, `ui_y`, `ui_width`, `ui_height` yalnızca PDA ekranında kullanılacak 0–1 normalize gösterim geometrisidir.
@@ -79,6 +81,7 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 - [Phase 02B notları](docs/PHASE_02B_NOTES.md)
 - [Phase 03 workflow engine notları](docs/PHASE_03_NOTES.md)
 - [Phase 04 authenticated API notları](docs/PHASE_04_NOTES.md)
+- [Phase 05 Admin Configuration API](docs/PHASE_05_ADMIN_CONFIGURATION_API.md)
 - [Database specification v0.1](docs/TKG_PDA_DATABASE_SPEC_v0.1.md)
 
 ## Bilinen veri kalitesi sınırları

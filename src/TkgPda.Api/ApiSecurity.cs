@@ -10,10 +10,10 @@ namespace TkgPda.Api;
 
 public static class RoleCodes
 {
-    public const string Admin = "ADMIN";
-    public const string Supervisor = "SUPERVISOR";
-    public const string LineOperator = "LINE_OPERATOR";
-    public const string WarehouseOperator = "WAREHOUSE_OPERATOR";
+    public const string Admin = KnownRoleCodes.Admin;
+    public const string Supervisor = KnownRoleCodes.Supervisor;
+    public const string LineOperator = KnownRoleCodes.LineOperator;
+    public const string WarehouseOperator = KnownRoleCodes.WarehouseOperator;
 
     public static readonly string[] OperatorRoles = [Admin, Supervisor, LineOperator, WarehouseOperator];
     public static readonly string[] VariantManagerRoles = [Admin, Supervisor];
@@ -23,6 +23,7 @@ public static class PolicyNames
 {
     public const string Operator = "operator";
     public const string VariantManager = "variant-manager";
+    public const string Administrator = "administrator";
 }
 
 public static class ApiClaimNames
@@ -30,6 +31,13 @@ public static class ApiClaimNames
     public const string DeviceId = "device_id";
     public const string DeviceCode = "device_code";
     public const string FullName = "full_name";
+    public const string ClientType = "client_type";
+}
+
+public static class ClientTypes
+{
+    public const string DeviceBound = "DEVICE_BOUND";
+    public const string AdminWeb = "ADMIN_WEB";
 }
 
 public sealed record JwtOptions(
@@ -67,7 +75,13 @@ public sealed record AccessTokenResult(string Token, DateTimeOffset ExpiresAt);
 
 public sealed class JwtTokenService(JwtOptions options, TimeProvider timeProvider)
 {
-    public AccessTokenResult Issue(AuthUserRecord user, DeviceRecord device)
+    public AccessTokenResult Issue(AuthUserRecord user, DeviceRecord device) =>
+        Issue(user, ClientTypes.DeviceBound, device);
+
+    public AccessTokenResult IssueAdmin(AuthUserRecord user) =>
+        Issue(user, ClientTypes.AdminWeb, device: null);
+
+    private AccessTokenResult Issue(AuthUserRecord user, string clientType, DeviceRecord? device)
     {
         var issuedAt = timeProvider.GetUtcNow();
         var expiresAt = issuedAt.AddMinutes(options.ExpiryMinutes);
@@ -77,9 +91,14 @@ public sealed class JwtTokenService(JwtOptions options, TimeProvider timeProvide
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(ApiClaimNames.FullName, user.FullName),
-            new(ApiClaimNames.DeviceId, device.Id.ToString()),
-            new(ApiClaimNames.DeviceCode, device.Code)
+            new(ApiClaimNames.ClientType, clientType)
         };
+        if (device is not null)
+        {
+            claims.Add(new Claim(ApiClaimNames.DeviceId, device.Id.ToString()));
+            claims.Add(new Claim(ApiClaimNames.DeviceCode, device.Code));
+        }
+
         claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         var token = new JwtSecurityToken(
@@ -112,7 +131,7 @@ public sealed class JwtTokenService(JwtOptions options, TimeProvider timeProvide
     };
 }
 
-public sealed class Pbkdf2PasswordHasher
+public sealed class Pbkdf2PasswordHasher : IPasswordHashService
 {
     public const int Iterations = 210_000;
     private const int SaltBytes = 16;
@@ -204,6 +223,12 @@ public static class PrincipalExtensions
             : throw new ApiException(StatusCodes.Status401Unauthorized, "INVALID_TOKEN_SUBJECT", "The access token has no valid user subject.");
 
     public static bool IsAdministrator(this ClaimsPrincipal principal) => principal.IsInRole(RoleCodes.Admin);
+
+    public static bool IsDeviceBound(this ClaimsPrincipal principal) =>
+        principal.HasClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound);
+
+    public static bool IsAdminWeb(this ClaimsPrincipal principal) =>
+        principal.HasClaim(ApiClaimNames.ClientType, ClientTypes.AdminWeb);
 }
 
 public sealed class MachineAccessService(IApiDataStore dataStore)
@@ -243,6 +268,22 @@ public sealed class DeviceContextMiddleware(RequestDelegate next)
         {
             await next(context);
             return;
+        }
+
+        if (context.User.IsAdminWeb())
+        {
+            if (!context.User.IsAdministrator())
+            {
+                throw new ApiException(StatusCodes.Status403Forbidden, "ADMIN_WEB_ROLE_REQUIRED", "Admin Web tokens require the ADMIN role.");
+            }
+
+            await next(context);
+            return;
+        }
+
+        if (!context.User.IsDeviceBound())
+        {
+            throw new ApiException(StatusCodes.Status401Unauthorized, "INVALID_CLIENT_CONTEXT", "The access token has no supported client context.");
         }
 
         var tokenDeviceCode = context.User.FindFirstValue(ApiClaimNames.DeviceCode);

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TkgPda.Domain/TkgPda.Domain.csproj" />
+    <Project Path="src/TkgPda.Application/TkgPda.Application.csproj" />
+    <Project Path="src/TkgPda.Infrastructure.Postgres/TkgPda.Infrastructure.Postgres.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TkgPda.Domain.Tests/TkgPda.Domain.Tests.csproj" />
+    <Project Path="tests/TkgPda.Application.Tests/TkgPda.Application.Tests.csproj" />
+    <Project Path="tests/TkgPda.Infrastructure.Postgres.Tests/TkgPda.Infrastructure.Postgres.Tests.csproj" />
+  </Folder>
+</Solution>

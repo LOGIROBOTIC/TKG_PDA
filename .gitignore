@@ -29,6 +29,14 @@ venv/
 # Node/tool caches
 node_modules/
 
+# .NET build and test output
+bin/
+obj/
+TestResults/
+.vs/
+*.user
+*.suo
+
 # Local PostgreSQL clusters and transient database artifacts
 /.codex-pg-*/
 /.postgres-*/

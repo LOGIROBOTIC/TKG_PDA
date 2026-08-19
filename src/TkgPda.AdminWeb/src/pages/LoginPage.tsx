@@ -55,7 +55,7 @@ export function LoginPage() {
           <label><span>Kullanıcı adı</span><div className="input-with-icon"><KeyRound size={18} /><TextInput autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required /></div></label>
           <label><span>Parola</span><div className="input-with-icon"><LockKeyhole size={18} /><TextInput type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></div></label>
           <Button type="submit" disabled={busy || !username || !password}>{busy ? 'Doğrulanıyor…' : 'Yönetim merkezine gir'} <ArrowRight size={18} /></Button>
-          <div className="security-note"><ShieldCheck size={17} /> Oturum bu sekme için imzalı JWT ile yetkilendirilir.</div>
+          <div className="security-note"><ShieldCheck size={17} /> Oturum yalnızca uygulama belleğinde tutulur; sayfa yenilenince yeniden giriş gerekir.</div>
         </form>
       </section>
     </main>

@@ -13,6 +13,8 @@ dist-ssr
 coverage
 playwright-report
 test-results
+# E2E harness runtime handoff file (written by global setup, removed by teardown)
+e2e/.e2e-runtime.json
 *.local
 .env
 .env.*

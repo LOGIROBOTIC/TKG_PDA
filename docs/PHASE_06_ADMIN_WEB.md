@@ -1,6 +1,6 @@
 # TKG PDA Phase 06 — Admin Web
 
-**Status:** Implemented on `agent/phase-06-admin-web`; awaiting draft-PR review
+**Status:** Implemented on `agent/phase-06-admin-web` (PR #4); Phase 06.1 security & acceptance hardening applied — memory-only access token and real-browser acceptance suite
 
 **Baseline:** Phase 05 merged to `main` at `653df183f1b4d33326ef28f9704753673b5b257a`
 
@@ -36,12 +36,13 @@ Production deployments must serve the static build and proxy `/api` and `/health
 
 - Login uses `POST /api/v1/admin/auth/login` and does not request `X-Device-Code`.
 - Only a response with `clientType = ADMIN_WEB` and the `ADMIN` role is accepted by the client.
-- The bearer JWT is kept in `sessionStorage` under `tkg.admin.session.v1`; it is not written to `localStorage`, cookies, source code or build-time environment files.
-- Closing the browser tab ends client-side persistence. The session is removed at `expiresAt`, on explicit logout and after an authenticated `401` response.
+- **The bearer JWT is held only in application runtime memory (React state).** It is never written to `localStorage`, `sessionStorage`, `IndexedDB`, cookies, the URL/query string, source code or build-time environment files, and is never logged to the console.
+- Because the token is memory-only, **a full browser refresh discards the session and returns the operator to `/login`. This is intentional:** the accepted Phase 05 auth schema has no refresh-token or server-side session model, so no persistence or silent re-authentication is attempted.
+- The session is also cleared on explicit logout, at `expiresAt`, and after an authenticated `401` response. Clearing the token additionally clears the authenticated user and the relevant TanStack Query cache so no stale authenticated UI remains.
 - No browser-side mechanism can replace API authorization. Every request is re-authorized by Phase 05.
 - Login failures show a generic message and never disclose whether the username or password was wrong.
 
-`sessionStorage` reduces persistence but remains readable by JavaScript running in the origin. Production hosting must enforce HTTPS, a restrictive Content-Security-Policy, no third-party scripts and normal dependency/security patching. Server-side revocation is not representable in the current auth schema.
+Keeping the token out of every web store removes the persisted-token XSS exfiltration surface entirely; the trade-off — re-login after refresh — is accepted for Phase 06. Production hosting must still enforce HTTPS, a restrictive Content-Security-Policy, no third-party scripts and normal dependency/security patching. Server-side revocation is not representable in the current auth schema.
 
 ## Route inventory
 
@@ -104,7 +105,7 @@ Supported editor behavior:
 - inspector editing for display name, role, default container, order and load flags;
 - slot creation only on draft layouts;
 - NULL geometry preservation and an explicit user action before placing such a slot;
-- `MACHINE` regions remain visible reference areas and are not treated as transport endpoints;
+- `MACHINE` regions are visibly labelled **“taşıma dışı”** reference areas and are not treated as transport endpoints;
 - unknown container footprint values stay NULL; category never generates guessed dimensions.
 
 The editor exposes only the schema-backed slot roles: `MACHINE`, `STAGING`, `EMPTY_STORAGE`, `FULL_STORAGE`, `WAREHOUSE`, `PICKUP`, `DROP`, `SHARED` and `OTHER`. Container category and product-group relation controls likewise use the exact Phase 05 allow-lists; the client cannot invent an unsupported enum value through these forms.
@@ -115,7 +116,7 @@ Client-side checks improve feedback but do not replace Phase 05 publish validati
 
 Entity mutations send `If-Match: "<concurrencyToken>"`. Slot updates additionally send `X-Layout-Version: "<layout concurrencyToken>"`, protecting both the slot row and its parent draft. After every mutation attempt the relevant query is invalidated and refreshed.
 
-Non-success responses are parsed as RFC-style ProblemDetails. The UI shows the stable error code and correlation ID. `409 + CONCURRENCY_CONFLICT` receives dedicated copy explaining that another administrator changed the record; the UI refreshes instead of silently overwriting it. The client never auto-retries mutations.
+Non-success responses are parsed as RFC-style ProblemDetails. The UI shows the stable error code and correlation ID. `409 + CONCURRENCY_CONFLICT` receives dedicated copy explaining that another administrator changed the record; the conflicting write is not retried or applied, and the UI offers an explicit **“Sunucudan yeniden yükle”** action. The client never auto-retries mutations.
 
 ## Audit and data quality
 
@@ -137,33 +138,36 @@ npm run build
 
 `VITE_TKG_API_TARGET` is not embedded into the application. For local proxy selection set the process environment variable `TKG_API_TARGET`; the default is `http://localhost:5000`.
 
+### Real-browser acceptance harness
+
+`npm run test:e2e` is self-provisioning. Playwright global setup (`e2e/global-setup.ts`) initializes a throwaway PostgreSQL 18 cluster, applies the authoritative `db/migrations/001_initial_schema.sql` baseline plus the Phase 02A/02B seeds, seeds a single isolated `ADMIN` identity, builds and starts the real `TkgPda.Api` (Release), and waits for `/health/ready`. The Vite server proxies `/api` to that API, and real Chromium drives the real React client. Global teardown stops the API, stops PostgreSQL and removes the temp cluster and ignored runtime handoff. The admin password and JWT signing key are randomly generated per run, exist only for the isolated runtime, and are never production configuration or committed source values. The PostgreSQL binary directory can be overridden with `TKG_PG_BIN` (default `C:\Program Files\PostgreSQL\18\bin`).
+
 Validation results:
 
 | Check | Result |
 |---|---|
 | TypeScript project build | PASS |
 | Oxlint | PASS |
-| Vitest unit/component | 19/19 PASS |
-| Playwright Chromium E2E | 4/4 PASS |
-| Vite production build | PASS, 365.24 kB JS / 108.49 kB gzip |
-| Desktop + 390×844 visual inspection | PASS; no horizontal overflow or console warning/error |
-| .NET format verification | PASS |
-| .NET Release build | PASS; 0 warning, 0 error |
+| Vitest unit/component | 23/23 PASS in 5 files |
+| Playwright Chromium E2E (real API + PostgreSQL 18.3) | 19/19 PASS |
+| Vite production build | PASS, 365.80 kB JS / 108.60 kB gzip |
 | Domain / Application / Auth unit regression | 34/34, 9/9, 14/14 PASS |
 | Phase 03 PostgreSQL workflow/concurrency | 20/20 PASS on PostgreSQL 18.3 |
 | Phase 04 PostgreSQL authenticated API | 19/19 PASS on PostgreSQL 18.3 |
 | Phase 05 PostgreSQL Admin API | 20/20 PASS on PostgreSQL 18.3 |
-| Phase 02A regression + double-seed | 10/10 PASS; integration PASS on PostgreSQL 18.3 |
-| Phase 02B regression + double-seed | 13/13 PASS; deterministic integration PASS on PostgreSQL 18.3 |
-| npm/NuGet vulnerability audit | 0 known vulnerabilities |
+| Phase 02A / 02B baseline | unchanged (no schema/seed files modified in Phase 06.1) |
+| npm vulnerability audit | 0 known vulnerabilities |
+| NuGet vulnerable-package audit | 0 vulnerable direct/transitive packages across the solution |
 
-Unit tests cover auth storage/boundaries, cache clearing between principals, typed HTTP headers/errors, exact schema enum rendering, permission behavior and normalized editor behavior. E2E tests cover ADMIN_WEB login/dashboard, permission matrix, two-level ETag save and actionable 409 UX.
+Unit tests cover memory-only token handling (no `localStorage`/`sessionStorage`/`IndexedDB` persistence, logout/401/expiry clearing), cache clearing between principals, typed HTTP headers/errors, exact schema enum rendering, permission behavior and normalized editor behavior.
+
+The 19 real-browser scenarios cover: (01) device-less ADMIN_WEB login; the token-storage security proof (token only in memory — never in web storage, IndexedDB, cookies, URL or console); (15) refresh-forces-relogin; (14) logout clears state and blocks protected routes; the unauthenticated-route guard; (401) server-rejection clears state; (02) dashboard real backend data; (03) create user with no password in the DOM; (04) change role; (05) modify machine permission; (06) register PDA device; (07) deactivate PDA device; (13) read-only data-quality evidence; (08) create DRAFT layout; (09) edit/save a slot; (10) a second real ADMIN_WEB API actor creates a stale ETag, the conflict UX preserves the newer value and offers refetch; (11) publish; (12) resulting audit entry; and layout-editor acceptance on a seeded published layout (MACHINE region + logistics slots render, MACHINE is visibly transport-excluded, published is read-only, draft is editable, normalized geometry is bounded, and “Robot Haritası Değildir” is visible).
 
 Generated `node_modules`, `dist`, coverage, Playwright reports, test results, screenshots and `.env*` are ignored and must not be committed.
 
 ## Known limitations
 
-- There is no refresh-token or server-side session-revocation model in the accepted schema.
+- There is no refresh-token or server-side session-revocation model in the accepted schema. The Admin Web token is therefore memory-only and a browser refresh intentionally requires re-login; no refresh-token/session infrastructure exists or is introduced by Phase 06.
 - The application is not yet packaged behind a production reverse proxy with final CSP/security headers.
 - Pagination is not available in the current Phase 05 list contracts; screens use client-side search/filtering.
 - Layout editing saves one slot at a time; there is no bulk transactional canvas save or undo history.

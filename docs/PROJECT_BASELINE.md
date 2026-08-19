@@ -164,7 +164,7 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 
 ### 7.1 Admin Web sınırları
 
-- JWT yalnız sekme ömründeki `sessionStorage` içinde tutulur; `localStorage`, `.env` veya source code'a yazılmaz.
+- JWT yalnız uygulama çalışma-zamanı belleğinde (React state) tutulur; `localStorage`, `sessionStorage`, `IndexedDB`, cookie, URL, `.env` veya source code'a yazılmaz ve console'a loglanmaz. Bellek-tabanlı olduğu için tam sayfa yenilemesi oturumu bilinçli olarak sonlandırır ve yeniden girişi zorunlu kılar; kabul edilmiş şemada refresh-token/oturum modeli yoktur.
 - Logout veya token değişiminde server-state cache tamamen temizlenir; aynı sekmede farklı admin hesapları arasında veri taşınmaz.
 - Admin istemcisi `X-Device-Code` göndermez; PDA kimlik doğrulaması ayrı kalır.
 - Bütün mutasyonlar API üzerinden geçer ve `If-Match`; slot güncellemesi ayrıca `X-Layout-Version` kullanır.

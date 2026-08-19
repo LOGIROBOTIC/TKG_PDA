@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowLeft, BoxSelect, Grid3X3, LockKeyhole, Minus, Mouse
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAdminApi } from '../api/ApiContext'
+import { ApiProblem } from '../api/client'
 import type { Slot, SlotDraft, SlotRole } from '../api/types'
 import { useToast } from '../components/Toast'
 import { Button, Check, Definition, EmptyState, ErrorState, Field, LoadingState, Modal, Panel, SelectInput, StatusPill, TextInput } from '../components/ui'
@@ -32,6 +33,7 @@ export function LayoutEditorPage() {
   const [grid, setGrid] = useState(0.01)
   const [zoom, setZoom] = useState(1)
   const [busy, setBusy] = useState(false)
+  const [conflict, setConflict] = useState<ApiProblem | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const selectedSlot = slots.data?.find((item) => item.id === selectedId) ?? null
@@ -66,7 +68,7 @@ export function LayoutEditorPage() {
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
   }, [grid])
 
-  const choose = (slot: Slot) => { setSelectedId(slot.id); setWorking(toDraft(slot)) }
+  const choose = (slot: Slot) => { setConflict(null); setSelectedId(slot.id); setWorking(toDraft(slot)) }
   const startDrag = (slot: Slot, mode: DragState['mode'], event: ReactPointerEvent) => {
     if (!editable || !canvasRef.current || !placed(slot)) return
     event.preventDefault(); event.stopPropagation(); choose(slot)
@@ -78,15 +80,30 @@ export function LayoutEditorPage() {
     setWorking({ ...working, x: clamp(working.x! + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0), 0, 1 - working.width!), y: clamp(working.y! + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0), 0, 1 - working.height!) })
   }
   const refresh = async () => { await Promise.all([client.invalidateQueries({ queryKey: ['layouts'] }), client.invalidateQueries({ queryKey: ['slots', layoutId] })]) }
+  const reloadAfterConflict = async () => {
+    setBusy(true)
+    try {
+      await refresh()
+      setSelectedId(null)
+      setWorking(null)
+      setConflict(null)
+    } finally {
+      setBusy(false)
+    }
+  }
   const save = async () => {
     if (!layout || !selectedSlot || !working) return
-    setBusy(true)
+    setBusy(true); setConflict(null)
     try {
       const { code: _code, ...payload } = working
       await api.updateSlot(layout, selectedSlot, payload)
       await refresh(); toast.success('Slot kaydedildi', `${working.code} · normalize geometri güncellendi`)
       setSelectedId(null); setWorking(null)
-    } catch (error) { toast.error(error, 'Slot kaydedilemedi'); await refresh() } finally { setBusy(false) }
+    } catch (error) {
+      toast.error(error, 'Slot kaydedilemedi')
+      if (error instanceof ApiProblem && error.isConcurrencyConflict) setConflict(error)
+      await refresh()
+    } finally { setBusy(false) }
   }
   const create = async (draft: Omit<SlotDraft, 'isEnabled'>) => {
     if (!layout) return
@@ -105,12 +122,13 @@ export function LayoutEditorPage() {
     <div className="editor-title"><Link to="/layouts" className="back-link"><ArrowLeft size={17} /> Layoutlar</Link><div><span className="eyebrow">{machine?.code} · {layout.code}</span><h1>{layout.name} <span>v{layout.version}</span></h1></div><StatusPill value={layout.status} />{editable ? <Button disabled={!selectedSlot || !working || busy} onClick={save}><Save size={17} /> Seçili slotu kaydet</Button> : <span className="read-only"><LockKeyhole size={16} /> Salt okunur</span>}</div>
     <div className="warning-banner warning-banner--editor"><strong>Robot Haritası Değildir</strong><span>Normalize geometri yalnız fiziksel/ekran yerleşimi içindir. Robot X/Y, waypoint, rota, map veya stitch konfigürasyonu üretmez.</span></div>
     <div className="editor-toolbar"><div><Button size="sm" variant="secondary" disabled={!editable} onClick={() => setCreateOpen(true)}><Plus size={15} /> Slot ekle</Button><span className="toolbar-divider" /><Grid3X3 size={16} /><SelectInput aria-label="Grid hassasiyeti" value={grid} onChange={(event) => setGrid(Number(event.target.value))}><option value="0.02">%2 grid</option><option value="0.01">%1 grid</option><option value="0.005">%0,5 grid</option></SelectInput></div><div><Button size="sm" variant="ghost" onClick={() => setZoom((value) => clamp(value - 0.1, 0.7, 1.5))}><ZoomOut size={16} /></Button><span>{Math.round(zoom * 100)}%</span><Button size="sm" variant="ghost" onClick={() => setZoom((value) => clamp(value + 0.1, 0.7, 1.5))}><ZoomIn size={16} /></Button></div></div>
+    {conflict && <div className="overlap-alert conflict-alert" role="alert"><AlertTriangle /><div><strong>Güncel sunucu kaydını yeniden yükleyin</strong><span>Çakışan yazma uygulanmadı; mevcut form değerleri yalnız karşılaştırma için korunuyor.</span></div><Button size="sm" variant="secondary" disabled={busy} onClick={() => void reloadAfterConflict()}>Sunucudan yeniden yükle</Button></div>}
     {overlapIds.size > 0 && <div className="overlap-alert"><AlertTriangle /><div><strong>{overlapIds.size} slot çakışıyor</strong><span>Turuncu işaretli alanları yayın öncesinde doğrulayın. Editör otomatik yer değiştirme yapmaz.</span></div></div>}
     <div className="editor-layout">
       <Panel className="canvas-panel"><div className="canvas-scroll"><div className="layout-canvas" ref={canvasRef} tabIndex={0} onKeyDown={nudge} style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }} data-testid="layout-canvas">
         <div className="canvas-grid" />
         <div className="machine-axis machine-axis--x">Normalize X →</div><div className="machine-axis machine-axis--y">Normalize Y →</div>
-        {displaySlots.filter(placed).map((slot) => <button type="button" key={slot.id} data-testid={`slot-${slot.code}`} className={`layout-slot layout-slot--${slot.role.toLowerCase()} ${slot.id === selectedId ? 'selected' : ''} ${overlapIds.has(slot.id) ? 'overlap' : ''} ${!slot.isEnabled ? 'disabled' : ''}`} style={{ left: `${slot.x! * 100}%`, top: `${slot.y! * 100}%`, width: `${slot.width! * 100}%`, height: `${slot.height! * 100}%` }} onClick={() => choose(slot)} onPointerDown={(event) => startDrag(slot, 'move', event)}><span>{slot.code}</span><small>{slot.displayName}</small><em>{slot.role}</em>{editable && slot.id === selectedId && <i className="resize-handle" onPointerDown={(event) => startDrag(slot, 'resize', event)} />}</button>)}
+        {displaySlots.filter(placed).map((slot) => <button type="button" key={slot.id} data-testid={`slot-${slot.code}`} aria-label={`${slot.code} · ${slot.displayName} · ${slot.role === 'MACHINE' ? 'taşıma dışı referans' : slot.role}`} className={`layout-slot layout-slot--${slot.role.toLowerCase()} ${slot.id === selectedId ? 'selected' : ''} ${overlapIds.has(slot.id) ? 'overlap' : ''} ${!slot.isEnabled ? 'disabled' : ''}`} style={{ left: `${slot.x! * 100}%`, top: `${slot.y! * 100}%`, width: `${slot.width! * 100}%`, height: `${slot.height! * 100}%` }} onClick={() => choose(slot)} onPointerDown={(event) => startDrag(slot, 'move', event)}><span>{slot.code}</span><small>{slot.displayName}</small><em>{slot.role === 'MACHINE' ? 'MACHINE · taşıma dışı' : slot.role}</em>{editable && slot.id === selectedId && <i className="resize-handle" onPointerDown={(event) => startDrag(slot, 'resize', event)} />}</button>)}
         {!displaySlots.some(placed) && <div className="canvas-empty"><BoxSelect /><strong>Yerleştirilmiş slot yok</strong><span>NULL geometrili bir slot seçip “Canvas’a yerleştir” kullanın.</span></div>}
       </div></div><div className="canvas-legend">{roles.map((role) => <span key={role}><i className={`legend-dot legend-dot--${role.toLowerCase()}`} /> {role}</span>)}</div></Panel>
       <Panel className="inspector"><div className="inspector__head"><div><span className="eyebrow">Slot inspector</span><h2>{selectedSlot?.code ?? 'Slot seçin'}</h2></div>{selectedSlot && <StatusPill value={selectedSlot.isEnabled ? 'ACTIVE' : 'INACTIVE'} />}</div>

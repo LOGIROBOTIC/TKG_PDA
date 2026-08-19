@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { AuthProvider, authStorageKey, useAuth } from '../auth/AuthContext'
+import { AuthProvider, useAuth } from '../auth/AuthContext'
 import { session } from '../test/fixtures'
 import { ApiProvider } from './ApiContext'
 
@@ -14,9 +14,8 @@ describe('Admin API session isolation', () => {
   it('clears cached administration data when the authenticated token changes', async () => {
     const queryClient = new QueryClient()
     queryClient.setQueryData(['users'], [{ username: 'first-admin' }])
-    sessionStorage.setItem(authStorageKey, JSON.stringify(session))
 
-    render(<QueryClientProvider client={queryClient}><AuthProvider><ApiProvider><LogoutProbe /></ApiProvider></AuthProvider></QueryClientProvider>)
+    render(<QueryClientProvider client={queryClient}><AuthProvider initialSession={session}><ApiProvider><LogoutProbe /></ApiProvider></AuthProvider></QueryClientProvider>)
     expect(queryClient.getQueryData(['users'])).toBeDefined()
     await userEvent.click(screen.getByRole('button', { name: 'logout' }))
     await waitFor(() => expect(queryClient.getQueryData(['users'])).toBeUndefined())

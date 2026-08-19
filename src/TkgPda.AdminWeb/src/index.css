@@ -187,6 +187,8 @@ textarea.input { resize: vertical; }
 .warning-banner--editor { flex-direction: row; align-items: center; }
 .overlap-alert { border-color: #f1c375; color: #85520a; background: #fff4dd; }
 .overlap-alert div { display: flex; flex-direction: column; }
+.conflict-alert { justify-content: flex-start; }
+.conflict-alert .button { margin-left: auto; }
 .machine-tabs { display: grid; grid-template-columns: repeat(9, minmax(100px, 1fr)); border: 1px solid #dde3eb; border-radius: 11px; background: #fff; box-shadow: var(--shadow); overflow-x: auto; }
 .machine-tabs button { display: flex; min-width: 100px; flex-direction: column; padding: 12px 10px; border: 0; border-right: 1px solid #e6eaf0; color: #687487; background: #fff; text-align: left; }
 .machine-tabs button:last-child { border: 0; }
@@ -243,6 +245,7 @@ textarea.input { resize: vertical; }
 .layout-slot--shared, .layout-slot--warehouse { border-color: #9a6e18; color: #624400; background: rgba(250,226,164,.9); }
 .layout-slot--staging, .layout-slot--other { border-color: #856bb3; color: #51377d; background: rgba(224,213,245,.9); }
 .layout-slot--machine { border: 2px dashed #6d7682; color: #383f48; background: rgba(204,210,217,.65); }
+.layout-slot--machine em { font-size: 7px; font-weight: 800; }
 .layout-slot.selected { z-index: 6; outline: 3px solid rgba(47,111,237,.28); box-shadow: 0 5px 14px rgba(22,57,104,.2); }
 .layout-slot.overlap { border-color: #e47418; box-shadow: 0 0 0 3px rgba(228,116,24,.3); }
 .layout-slot.disabled { opacity: .4; filter: grayscale(.6); }

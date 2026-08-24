@@ -1,0 +1,52 @@
+String actionLabel(String action) => switch (action) {
+  'BRING_EMPTY' => 'Boş Kasa Getir',
+  'REMOVE_FULL' => 'Dolu Kasayı Kaldır',
+  'REMOVE_EMPTY' => 'Boş Kasayı Kaldır',
+  _ => action,
+};
+
+String executionStateLabel(String state) => switch (state) {
+  'REQUESTED' => 'Talep oluşturuldu',
+  'QUEUED' => 'Sırada',
+  'WAITING_FOR_ROBOT' => 'Robot bekleniyor',
+  'ROBOT_ASSIGNED' => 'Robot atandı',
+  'RUNNING' => 'Taşıma devam ediyor',
+  'WAITING' => 'Geçiş için bekleniyor',
+  'COMPLETED' => 'Tamamlandı',
+  'FAILED' => 'Tamamlanamadı',
+  'TERMINATED' => 'Sonlandırıldı',
+  _ => 'Durum güncelleniyor',
+};
+
+String occupancyLabel(String state) => switch (state) {
+  'VACANT' => 'Boş konum',
+  'OCCUPIED' => 'Dolu konum',
+  _ => 'Doluluk bilinmiyor',
+};
+
+String loadLabel(String state) => switch (state) {
+  'EMPTY' => 'Boş kasa/palet',
+  'FULL' => 'Dolu kasa/palet',
+  _ => 'Yük durumu bilinmiyor',
+};
+
+String failureLabel(String? code, String? operatorMessage) {
+  if (operatorMessage != null && operatorMessage.trim().isNotEmpty) {
+    return operatorMessage;
+  }
+  return switch (code) {
+    'WORKSITE_BUSY' => 'Konum şu anda kullanımda.',
+    'PATH_UNAVAILABLE' => 'Robot hedef noktaya ulaşamıyor.',
+    'EXECUTION_FAILED' => 'Robot görevi tamamlayamadı.',
+    'TRAFFIC_WAITING' => 'Robot trafiği nedeniyle görev bekliyor.',
+    _ => 'İşlem durumu kontrol ediliyor.',
+  };
+}
+
+String readinessLabel(String? code) => switch (code) {
+  'RDS_WORKSITE_NOT_MAPPED' => 'Robot noktası henüz eşlenmemiş.',
+  _ => 'Robot yürütme hazırlığı tamamlanmamış.',
+};
+
+String knownOr(String? value) =>
+    value == null || value.trim().isEmpty ? 'Tanımlı değil' : value;

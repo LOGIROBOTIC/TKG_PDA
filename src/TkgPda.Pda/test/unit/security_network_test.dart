@@ -1,0 +1,164 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:tkg_pda/core/auth/session_memory.dart';
+import 'package:tkg_pda/core/errors/api_problem.dart';
+import 'package:tkg_pda/core/network/api_client.dart';
+import 'package:tkg_pda/core/storage/device_code_store.dart';
+import 'package:tkg_pda/data/models/pda_models.dart';
+
+import '../support/fakes.dart';
+
+void main() {
+  group('secure local state', () {
+    test('device code persists and can be cleared', () async {
+      final store = MemoryDeviceCodeStore();
+
+      await store.write('  PDA-42  ');
+
+      expect(await store.read(), 'PDA-42');
+      await store.clear();
+      expect(await store.read(), isNull);
+    });
+
+    test('JWT exists only in memory and clear removes the full session', () {
+      final memory = SessionMemory();
+      memory.establish(
+        LoginSession(
+          accessToken: 'ephemeral',
+          expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          user: testUser,
+          device: testDevice,
+        ),
+      );
+
+      expect(memory.accessToken, 'ephemeral');
+      expect(memory.isAuthenticated, isTrue);
+      memory.clear();
+      expect(memory.accessToken, isNull);
+      expect(memory.user, isNull);
+      expect(memory.device, isNull);
+    });
+
+    test('password is never written to the persistent device store', () async {
+      final store = MemoryDeviceCodeStore();
+      await store.write(testDeviceCode);
+
+      expect(store.value, testDeviceCode);
+      expect(store.value, isNot(contains('operator-password')));
+    });
+  });
+
+  group('HTTP security boundary', () {
+    test(
+      'authenticated request sends Authorization and X-Device-Code',
+      () async {
+        late http.Request captured;
+        final client = ApiClient(
+          baseUri: Uri.parse('https://api.example.test'),
+          deviceCode: () => testDeviceCode,
+          accessToken: () => 'memory-token',
+          onUnauthorized: () {},
+          httpClient: MockClient((request) async {
+            captured = request;
+            return http.Response('{}', 200);
+          }),
+        );
+
+        await client.get('/api/v1/auth/me');
+
+        expect(captured.headers['X-Device-Code'], testDeviceCode);
+        expect(captured.headers['Authorization'], 'Bearer memory-token');
+        expect(captured.headers['X-Correlation-ID'], isNotEmpty);
+      },
+    );
+
+    test(
+      'login request sends device code without an Authorization header',
+      () async {
+        late http.Request captured;
+        final client = ApiClient(
+          baseUri: Uri.parse('https://api.example.test'),
+          deviceCode: () => testDeviceCode,
+          accessToken: () => null,
+          onUnauthorized: () {},
+          httpClient: MockClient((request) async {
+            captured = request;
+            return http.Response('{}', 200);
+          }),
+        );
+
+        await client.post(
+          '/api/v1/auth/login',
+          body: {'username': 'operator', 'password': 'transient'},
+          mutation: false,
+        );
+
+        expect(captured.headers['X-Device-Code'], testDeviceCode);
+        expect(captured.headers, isNot(contains('Authorization')));
+      },
+    );
+
+    test('401 invokes the session clearing callback', () async {
+      var cleared = false;
+      final client = ApiClient(
+        baseUri: Uri.parse('https://api.example.test'),
+        deviceCode: () => testDeviceCode,
+        accessToken: () => 'memory-token',
+        onUnauthorized: () => cleared = true,
+        httpClient: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'code': 'INVALID_TOKEN',
+              'detail': 'expired',
+              'correlationId': 'corr-401',
+            }),
+            401,
+            headers: {'content-type': 'application/problem+json'},
+          ),
+        ),
+      );
+
+      await expectLater(
+        client.get('/api/v1/auth/me'),
+        throwsA(isA<ApiProblem>()),
+      );
+      expect(cleared, isTrue);
+    });
+
+    test(
+      'ProblemDetails preserves stable code detail and correlation',
+      () async {
+        final client = ApiClient(
+          baseUri: Uri.parse('https://api.example.test'),
+          deviceCode: () => testDeviceCode,
+          accessToken: () => null,
+          onUnauthorized: () {},
+          httpClient: MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'code': 'SLOT_ALREADY_RESERVED',
+                'detail': 'slot busy',
+                'correlationId': 'corr-409',
+              }),
+              409,
+            ),
+          ),
+        );
+
+        try {
+          await client.get('/api/v1/test');
+          fail('ApiProblem expected');
+        } on ApiProblem catch (problem) {
+          expect(problem.status, 409);
+          expect(problem.code, 'SLOT_ALREADY_RESERVED');
+          expect(problem.detail, 'slot busy');
+          expect(problem.correlationId, 'corr-409');
+          expect(problem.shouldRefetch, isTrue);
+        }
+      },
+    );
+  });
+}

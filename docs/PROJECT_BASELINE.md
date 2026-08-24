@@ -1,8 +1,8 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–05 kabulü ve Phase 06 feature uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 06 mevcut API ve şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–06 tamamlanması ve Phase 07A backend contract uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 07A mevcut API ve şemayı migration değiştirmeden kullanır.
 
-> Phase 06 henüz `main`e merge edilmemiştir. Güncel feature ayrıntıları için [PHASE_06_ADMIN_WEB.md](PHASE_06_ADMIN_WEB.md) belgesine bakın.
+> Phase 06 PR #4 `main`e merge edilmiştir. Phase 07A ayrıntıları için [PHASE_07A_PDA_RDS_CONTRACT_READINESS.md](PHASE_07A_PDA_RDS_CONTRACT_READINESS.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -15,8 +15,9 @@ Bu belge, Phase 01–05 kabulü ve Phase 06 feature uygulaması sonrasındaki g�
 | 03 | Business Workflow Engine | Kabul edildi |
 | 04 | Backend API + Authentication/RBAC | Kabul edildi |
 | 05 | Admin Configuration API | Kabul edildi |
-| 06 | Admin Web | Review bekliyor |
-| 07 | Flutter PDA Application | Planlandı |
+| 06 | Admin Web | Tamamlandı |
+| 07A | PDA + RDS Contract Readiness | Uygulandı |
+| 07B | Flutter PDA Application | Planlandı |
 | 08 | RDS Task Integration | Planlandı |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
 | 10 | System Integration & Tests | Planlandı |
@@ -157,6 +158,7 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 - Phase 04, device-bound PDA JWT, RBAC, machine permission, operational context ve transport HTTP boundary'sini sağlar.
 - Phase 05, device-less ADMIN Web JWT ile user/device/permission ve master-configuration API'sini sağlar.
 - Phase 06, bu boundary üzerinde React/TypeScript Admin Web, görsel permission matrisi, data-quality/audit ekranları ve normalize 2D layout editörünü sağlar.
+- Phase 07A, aynı operational-context endpoint'inde aktif variant product group/part'larını, aktif talepleri, role-sensitive `availableActions`, task-template readiness ile persisted RDS WorkSite/task projeksiyonunu sağlar.
 - `WAREHOUSE_OPERATOR` yalnızca `BRING_EMPTY` oluşturabilir ve kendi `BRING_EMPTY` talebini iptal edebilir; line-side remove işlemleri otomatik yetki değildir.
 - Admin mutasyonları `ETag/If-Match` optimistic concurrency ve transaction içi audit kullanır.
 - Layoutlar draft üzerinde düzenlenir; published/archived sürümler immutable kalır ve yeni sürüm clone/publish akışından geçer.
@@ -172,6 +174,17 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 - Unknown footprint veya association değerleri UI tarafından tahmin edilmez.
 - Phase 06 veritabanı migration'ı veya backend state bypass'ı eklemez.
 
+### 7.2 PDA/RDS contract sınırı
+
+- PDA iş kurallarını yeniden kurmaz; `BRING_EMPTY`, `REMOVE_FULL`, `REMOVE_EMPTY` seçenekleri Application policy tarafından enabled/disabled sebebiyle döner.
+- `WAREHOUSE_OPERATOR` yalnız `BRING_EMPTY`; `ADMIN_WEB` ise hiçbir PDA transport capability almaz.
+- Aktif talep bir slotu meşgul ettiğinde ikinci action `SLOT_BUSY` olur; `occupancy_state` değerlerine `RESERVED` eklenmez.
+- RDS WorkSite ve task alanları yalnız `integration` şemasındaki persisted kanıttan okunur. Mapping veya template yokluğu açık/nullable kalır; WorkSite ID veya task label üretilmez.
+- PDA execution state, TKG business status ile kalıcı RDS task kanıtının kararlı projeksiyonudur. Canlı RDS çağrısı ve status mutation yoktur.
+- Normalize layout geometri robot/RDS/map koordinatı değildir.
+
+Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) belgesindedir.
+
 ## 8. Sonraki aşama sınırı
 
-Phase 07 Flutter PDA uygulamasıdır. RDS/SEER, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır.
+Phase 07B Flutter PDA uygulamasıdır. Canlı RDS task/WorkSite/callback/alarm entegrasyonu Phase 08'e aittir. SEER map/profile, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır.

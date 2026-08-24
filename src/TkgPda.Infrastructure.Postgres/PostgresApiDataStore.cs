@@ -129,7 +129,7 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
         return result;
     }
 
-    public async Task<OperationalContextRecord?> GetOperationalContextAsync(
+    public async Task<OperationalContextDataRecord?> GetOperationalContextDataAsync(
         Guid userId,
         Guid machineId,
         bool administrator,
@@ -234,7 +234,7 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
             }
         }
 
-        var slots = new List<SlotContextRecord>();
+        var slots = new List<SlotContextDataRecord>();
         if (activeLayoutId.HasValue)
         {
             await using var command = new NpgsqlCommand(
@@ -246,12 +246,17 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                        COALESCE(rs.load_state, 'UNKNOWN'),
                        rs.current_part_id, p.part_code,
                        rs.current_container_type_id, cct.code,
-                       COALESCE(rs.row_version, 0), rs.updated_at
+                       COALESCE(rs.row_version, 0), rs.updated_at,
+                       rw.id, rw.rds_site_id, rw.area, rw.group_name, rw.rds_type,
+                       rw.last_filled, rw.last_locked, rw.last_disabled,
+                       rw.last_sync_failed, rw.last_content, rw.last_agv_id, rw.last_sync_at
                 FROM master.layout_slots s
                 LEFT JOIN master.container_types dct ON dct.id = s.default_container_type_id
                 LEFT JOIN ops.slot_runtime_state rs ON rs.layout_slot_id = s.id
                 LEFT JOIN master.parts p ON p.id = rs.current_part_id
                 LEFT JOIN master.container_types cct ON cct.id = rs.current_container_type_id
+                LEFT JOIN integration.layout_slot_rds_mapping rmap ON rmap.layout_slot_id = s.id
+                LEFT JOIN integration.rds_worksites rw ON rw.id = rmap.rds_worksite_id
                 WHERE s.layout_id = @layout_id
                 ORDER BY s.display_order, s.code
                 """,
@@ -262,7 +267,22 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
             {
                 var role = reader.GetString(3);
                 var enabled = reader.GetBoolean(4);
-                slots.Add(new SlotContextRecord(
+                var rdsWorkSite = reader.IsDBNull(20)
+                    ? new RdsWorkSiteProjectionRecord(false, null, null, null, null, null, null, null, null, null, null, null)
+                    : new RdsWorkSiteProjectionRecord(
+                        true,
+                        NullableString(reader, 21),
+                        NullableString(reader, 22),
+                        NullableString(reader, 23),
+                        NullableInt32(reader, 24),
+                        NullableInt32(reader, 25),
+                        NullableInt32(reader, 26),
+                        NullableInt32(reader, 27),
+                        NullableInt32(reader, 28),
+                        NullableString(reader, 29),
+                        NullableString(reader, 30),
+                        NullableDateTimeOffset(reader, 31));
+                slots.Add(new SlotContextDataRecord(
                     reader.GetGuid(0),
                     reader.GetString(1),
                     reader.GetString(2),
@@ -283,11 +303,20 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                     NullableGuid(reader, 16),
                     NullableString(reader, 17),
                     reader.GetInt64(18),
-                    reader.IsDBNull(19) ? null : reader.GetFieldValue<DateTimeOffset>(19)));
+                    NullableDateTimeOffset(reader, 19),
+                    rdsWorkSite));
             }
         }
 
-        return new OperationalContextRecord(
+        var productGroups = activeVariantId.HasValue
+            ? await ReadProductGroupsAsync(connection, activeVariantId.Value, cancellationToken)
+            : [];
+        var activeRequests = await ReadActiveRequestsAsync(connection, machineId, userId, cancellationToken);
+        var taskTemplates = activeVariantId.HasValue
+            ? await ReadTaskTemplatesAsync(connection, activeVariantId.Value, cancellationToken)
+            : [];
+
+        return new OperationalContextDataRecord(
             machine,
             activeVariantId,
             activeVariantCode,
@@ -300,7 +329,191 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
             runtimeRowVersion,
             runtimeUpdatedAt,
             variants,
-            slots);
+            slots,
+            productGroups,
+            activeRequests,
+            taskTemplates);
+    }
+
+    private static async Task<IReadOnlyList<PdaProductGroupRecord>> ReadProductGroupsAsync(
+        NpgsqlConnection connection,
+        Guid activeVariantId,
+        CancellationToken cancellationToken)
+    {
+        var groups = new List<PdaProductGroupRecord>();
+        await using (var command = new NpgsqlCommand(
+                         """
+                         SELECT pg.id, pg.main_part_id, p.part_code, pg.name, pg.display_order
+                         FROM master.product_groups pg
+                         JOIN master.parts p ON p.id = pg.main_part_id AND p.is_active
+                         WHERE pg.variant_id = @variant_id AND pg.is_active
+                         ORDER BY pg.display_order, p.part_code
+                         """,
+                         connection))
+        {
+            command.Parameters.AddWithValue("variant_id", activeVariantId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                groups.Add(new PdaProductGroupRecord(
+                    reader.GetGuid(0),
+                    reader.GetGuid(1),
+                    reader.GetString(2),
+                    NullableString(reader, 3),
+                    reader.GetInt32(4),
+                    []));
+            }
+        }
+
+        if (groups.Count == 0)
+        {
+            return groups;
+        }
+
+        var partsByGroup = groups.ToDictionary(static group => group.Id, static _ => new List<PdaProductGroupPartRecord>());
+        await using (var command = new NpgsqlCommand(
+                         """
+                         SELECT gpp.product_group_id, gpp.id, gpp.part_id, p.part_code,
+                                gpp.container_type_id, ct.code, gpp.relation_type,
+                                gpp.lot_quantity, gpp.display_order
+                         FROM master.product_group_parts gpp
+                         JOIN master.product_groups pg ON pg.id = gpp.product_group_id
+                         JOIN master.parts p ON p.id = gpp.part_id AND p.is_active
+                         LEFT JOIN master.container_types ct ON ct.id = gpp.container_type_id
+                         WHERE pg.variant_id = @variant_id
+                           AND pg.is_active
+                           AND gpp.is_active
+                         ORDER BY pg.display_order, gpp.display_order, p.part_code
+                         """,
+                         connection))
+        {
+            command.Parameters.AddWithValue("variant_id", activeVariantId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (partsByGroup.TryGetValue(reader.GetGuid(0), out var parts))
+                {
+                    parts.Add(new PdaProductGroupPartRecord(
+                        reader.GetGuid(1),
+                        reader.GetGuid(2),
+                        reader.GetString(3),
+                        NullableGuid(reader, 4),
+                        NullableString(reader, 5),
+                        reader.GetString(6),
+                        NullableDecimal(reader, 7),
+                        reader.GetInt32(8)));
+                }
+            }
+        }
+
+        return groups.Select(group => group with { Parts = partsByGroup[group.Id] }).ToArray();
+    }
+
+    private static async Task<IReadOnlyList<ActiveTransportDataRecord>> ReadActiveRequestsAsync(
+        NpgsqlConnection connection,
+        Guid machineId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<ActiveTransportDataRecord>();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT r.id, r.request_no, tt.code, r.status,
+                   r.requested_by, u.username,
+                   r.source_slot_id, r.destination_slot_id,
+                   r.product_group_id, r.part_id, r.container_type_id,
+                   r.priority, r.created_at, r.failure_code, r.failure_message,
+                   r.correlation_id,
+                   rt.id, rt.rds_task_record_id, rt.rds_task_label,
+                   rt.out_order_no, rt.agv_id, rt.rds_status, rt.ended_reason,
+                   rt.sent_at, rt.started_at, rt.ended_at, rt.last_sync_at
+            FROM ops.transport_requests r
+            JOIN master.task_types tt ON tt.id = r.task_type_id
+            LEFT JOIN auth.users u ON u.id = r.requested_by
+            LEFT JOIN integration.rds_tasks rt ON rt.transport_request_id = r.id
+            WHERE r.machine_id = @machine_id
+              AND r.status IN ('CREATED','VALIDATING','QUEUED','SENT_TO_RDS','RUNNING')
+            ORDER BY r.created_at DESC, r.request_no DESC
+            """,
+            connection);
+        command.Parameters.AddWithValue("machine_id", machineId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var requestedBy = NullableGuid(reader, 4);
+            var rdsTask = reader.IsDBNull(16)
+                ? null
+                : new RdsTaskDataRecord(
+                    NullableString(reader, 17),
+                    NullableString(reader, 18),
+                    NullableString(reader, 19),
+                    NullableString(reader, 20),
+                    NullableInt32(reader, 21),
+                    NullableString(reader, 22),
+                    NullableDateTimeOffset(reader, 23),
+                    NullableDateTimeOffset(reader, 24),
+                    NullableDateTimeOffset(reader, 25),
+                    NullableDateTimeOffset(reader, 26));
+            result.Add(new ActiveTransportDataRecord(
+                reader.GetGuid(0),
+                reader.GetInt64(1),
+                WorkflowCode.ParseTaskType(reader.GetString(2)),
+                WorkflowCode.ParseTransportStatus(reader.GetString(3)),
+                requestedBy,
+                NullableString(reader, 5),
+                requestedBy == userId,
+                NullableGuid(reader, 6),
+                NullableGuid(reader, 7),
+                NullableGuid(reader, 8),
+                NullableGuid(reader, 9),
+                NullableGuid(reader, 10),
+                reader.GetInt32(11),
+                reader.GetFieldValue<DateTimeOffset>(12),
+                NullableString(reader, 13),
+                NullableString(reader, 14),
+                reader.GetGuid(15),
+                rdsTask));
+        }
+
+        return result;
+    }
+
+    private static async Task<IReadOnlyList<PdaTaskTemplateRecord>> ReadTaskTemplatesAsync(
+        NpgsqlConnection connection,
+        Guid activeVariantId,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<PdaTaskTemplateRecord>();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT t.id, t.variant_id, t.product_group_id, t.task_type_id,
+                   tt.code, t.source_slot_group_id, t.destination_slot_group_id,
+                   t.rds_task_label, t.priority
+            FROM master.task_templates t
+            JOIN master.task_types tt ON tt.id = t.task_type_id AND tt.is_active
+            WHERE t.variant_id = @variant_id AND t.is_active
+            ORDER BY t.product_group_id NULLS FIRST, tt.code, t.priority, t.id
+            """,
+            connection);
+        command.Parameters.AddWithValue("variant_id", activeVariantId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var label = NullableString(reader, 7);
+            result.Add(new PdaTaskTemplateRecord(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                NullableGuid(reader, 2),
+                reader.GetGuid(3),
+                reader.GetString(4),
+                NullableGuid(reader, 5),
+                NullableGuid(reader, 6),
+                label,
+                !string.IsNullOrWhiteSpace(label),
+                reader.GetInt32(8)));
+        }
+
+        return result;
     }
 
     public async Task<TransportRequestSnapshot?> FindTransportRequestAsync(
@@ -394,6 +607,12 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
 
     private static decimal? NullableDecimal(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetDecimal(ordinal);
+
+    private static int? NullableInt32(NpgsqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetInt32(ordinal);
+
+    private static DateTimeOffset? NullableDateTimeOffset(NpgsqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateTimeOffset>(ordinal);
 
     private static void AddNullableUuid(NpgsqlCommand command, string name, Guid? value) =>
         command.Parameters.Add(name, NpgsqlDbType.Uuid).Value = value.HasValue ? value.Value : DBNull.Value;

@@ -1,6 +1,6 @@
 # TKG PDA Dokümantasyon İndeksi
 
-Bu dizin, kabul edilmiş Phase 01–05 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 06 React Admin Web feature branch üzerinde uygulanmış ve review beklemektedir.
+Bu dizin, tamamlanmış Phase 01–06 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 07A, gelecekteki PDA ve RDS adapter için backend sözleşmesini migration veya canlı RDS bağlantısı olmadan hazırlar.
 
 ## Başlangıç noktaları
 
@@ -17,6 +17,8 @@ Bu dizin, kabul edilmiş Phase 01–05 baseline'ının mimari kararlarını, ver
 - [PHASE_04_NOTES.md](PHASE_04_NOTES.md) — JWT, RBAC, cihaz bağlama, machine permission ve HTTP sözleşmesi
 - [PHASE_05_ADMIN_CONFIGURATION_API.md](PHASE_05_ADMIN_CONFIGURATION_API.md) — Admin Web auth, provisioning, configuration lifecycle, concurrency ve audit
 - [PHASE_06_ADMIN_WEB.md](PHASE_06_ADMIN_WEB.md) — React UI mimarisi, normalize layout editörü, hata UX'i ve frontend testleri
+- [PHASE_07A_PDA_RDS_CONTRACT_READINESS.md](PHASE_07A_PDA_RDS_CONTRACT_READINESS.md) — PDA operational context, action ve persisted execution projection kabulü
+- [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) — Phase 08 için normative TKG/RDS/PDA sorumluluk ve entegrasyon sözleşmesi
 - [Seed workflow](../db/seeds/README.md) — deterministik seed üretme ve DB'ye uygulama sırası
 
 ## Referanslar

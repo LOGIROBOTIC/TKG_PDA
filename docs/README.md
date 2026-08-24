@@ -1,6 +1,6 @@
 # TKG PDA Dokümantasyon İndeksi
 
-Bu dizin, kabul edilmiş Phase 01–04 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 05 Admin Configuration API feature branch üzerinde uygulanmış ve review beklemektedir.
+Bu dizin, kabul edilmiş Phase 01–05 baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 06 React Admin Web feature branch üzerinde uygulanmış ve review beklemektedir.
 
 ## Başlangıç noktaları
 
@@ -16,6 +16,7 @@ Bu dizin, kabul edilmiş Phase 01–04 baseline'ının mimari kararlarını, ver
 - [PHASE_03_NOTES.md](PHASE_03_NOTES.md) — transport state machine, reservation/concurrency ve idempotency davranışı
 - [PHASE_04_NOTES.md](PHASE_04_NOTES.md) — JWT, RBAC, cihaz bağlama, machine permission ve HTTP sözleşmesi
 - [PHASE_05_ADMIN_CONFIGURATION_API.md](PHASE_05_ADMIN_CONFIGURATION_API.md) — Admin Web auth, provisioning, configuration lifecycle, concurrency ve audit
+- [PHASE_06_ADMIN_WEB.md](PHASE_06_ADMIN_WEB.md) — React UI mimarisi, normalize layout editörü, hata UX'i ve frontend testleri
 - [Seed workflow](../db/seeds/README.md) — deterministik seed üretme ve DB'ye uygulama sırası
 
 ## Referanslar

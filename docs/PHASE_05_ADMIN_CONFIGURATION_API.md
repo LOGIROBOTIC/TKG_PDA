@@ -1,6 +1,6 @@
 # TKG PDA Phase 05 — Admin Configuration API
 
-**Status:** Implemented on `agent/phase-05-admin-configuration`; awaiting draft-PR review
+**Status:** Accepted; PR #3 merged to `main` at `653df183f1b4d33326ef28f9704753673b5b257a`
 
 **Baseline:** Phase 04 merged to `main` at `92e082f636c5820ddcd5e2ef84668b63dcf74f18`
 **Scope:** Admin authentication, provisioning, configuration lifecycle, optimistic concurrency, data-quality visibility and audit API

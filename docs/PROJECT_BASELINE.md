@@ -1,8 +1,8 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–04 kabulü ve Phase 05 feature uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 05 mevcut şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–05 kabulü ve Phase 06 feature uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 06 mevcut API ve şemayı migration değiştirmeden kullanır.
 
-> Phase 05 henüz `main`e merge edilmemiştir. Güncel feature ayrıntıları için [PHASE_05_ADMIN_CONFIGURATION_API.md](PHASE_05_ADMIN_CONFIGURATION_API.md) belgesine bakın.
+> Phase 06 henüz `main`e merge edilmemiştir. Güncel feature ayrıntıları için [PHASE_06_ADMIN_WEB.md](PHASE_06_ADMIN_WEB.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -14,8 +14,8 @@ Bu belge, Phase 01–04 kabulü ve Phase 05 feature uygulaması sonrasındaki g�
 | 02B | Physical Layout Extraction | Kabul edildi |
 | 03 | Business Workflow Engine | Kabul edildi |
 | 04 | Backend API + Authentication/RBAC | Kabul edildi |
-| 05 | Admin Configuration API | Review bekliyor |
-| 06 | Admin Web | Planlandı |
+| 05 | Admin Configuration API | Kabul edildi |
+| 06 | Admin Web | Review bekliyor |
 | 07 | Flutter PDA Application | Planlandı |
 | 08 | RDS Task Integration | Planlandı |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
@@ -156,11 +156,22 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 - Phase 03, üç lojistik operasyonun state machine, slot reservation, idempotency, cancellation ve variant-switch guard'larını uygular.
 - Phase 04, device-bound PDA JWT, RBAC, machine permission, operational context ve transport HTTP boundary'sini sağlar.
 - Phase 05, device-less ADMIN Web JWT ile user/device/permission ve master-configuration API'sini sağlar.
+- Phase 06, bu boundary üzerinde React/TypeScript Admin Web, görsel permission matrisi, data-quality/audit ekranları ve normalize 2D layout editörünü sağlar.
 - `WAREHOUSE_OPERATOR` yalnızca `BRING_EMPTY` oluşturabilir ve kendi `BRING_EMPTY` talebini iptal edebilir; line-side remove işlemleri otomatik yetki değildir.
 - Admin mutasyonları `ETag/If-Match` optimistic concurrency ve transaction içi audit kullanır.
 - Layoutlar draft üzerinde düzenlenir; published/archived sürümler immutable kalır ve yeni sürüm clone/publish akışından geçer.
 - Hiçbir Admin API metodu `ops` runtime state'ini veya transport status'unu doğrudan değiştirmez.
 
+### 7.1 Admin Web sınırları
+
+- JWT yalnız uygulama çalışma-zamanı belleğinde (React state) tutulur; `localStorage`, `sessionStorage`, `IndexedDB`, cookie, URL, `.env` veya source code'a yazılmaz ve console'a loglanmaz. Bellek-tabanlı olduğu için tam sayfa yenilemesi oturumu bilinçli olarak sonlandırır ve yeniden girişi zorunlu kılar; kabul edilmiş şemada refresh-token/oturum modeli yoktur.
+- Logout veya token değişiminde server-state cache tamamen temizlenir; aynı sekmede farklı admin hesapları arasında veri taşınmaz.
+- Admin istemcisi `X-Device-Code` göndermez; PDA kimlik doğrulaması ayrı kalır.
+- Bütün mutasyonlar API üzerinden geçer ve `If-Match`; slot güncellemesi ayrıca `X-Layout-Version` kullanır.
+- Layout editörü yalnız 0–1 normalize ekran/fiziksel referans geometrisini düzenler ve **Robot Haritası Değildir** uyarısını kalıcı gösterir.
+- Unknown footprint veya association değerleri UI tarafından tahmin edilmez.
+- Phase 06 veritabanı migration'ı veya backend state bypass'ı eklemez.
+
 ## 8. Sonraki aşama sınırı
 
-Phase 06, bu API üzerinde Admin Web arayüzüdür. Phase 07 Flutter PDA uygulamasıdır. RDS/SEER, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır.
+Phase 07 Flutter PDA uygulamasıdır. RDS/SEER, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır.

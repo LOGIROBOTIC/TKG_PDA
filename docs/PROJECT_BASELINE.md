@@ -1,8 +1,8 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–08A tamamlanması ve Phase 08B RDS execution integration uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08B mevcut şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–08C tamamlanması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08B/08C mevcut şemayı migration değiştirmeden kullanır.
 
-> Phase 08A PR #7 `main`e merge edilmiştir. Phase 08B ayrıntıları ve canlı gate sonucu için [PHASE_08B_RDS_EXECUTION_INTEGRATION.md](PHASE_08B_RDS_EXECUTION_INTEGRATION.md) belgesine bakın.
+> Phase 08B PR #8 `main`e merge edilmiştir. Canlı simulator kabulü için [PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md](PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -19,7 +19,8 @@ Bu belge, Phase 01–08A tamamlanması ve Phase 08B RDS execution integration uy
 | 07A | PDA + RDS Contract Readiness | Tamamlandı |
 | 07B | Flutter PDA Application | Tamamlandı |
 | 08A | Live RDS Connectivity + WorkSite Mapping | Tamamlandı |
-| 08B | RDS Task Dispatch + Reconciliation | Uygulandı / draft PR; live task definition bekleniyor |
+| 08B | RDS Task Dispatch + Reconciliation | Tamamlandı |
+| 08C | RDS Wind Task Commissioning + Simulator E2E | Tamamlandı |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
 | 10 | System Integration & Tests | Planlandı |
 | 11 | PLC Integration | Gelecek aşama |
@@ -213,9 +214,18 @@ Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA
 - `SENT_TO_RDS/RUNNING` iptali stop request sonrasında callback/query kanıtı bekler.
 - Terminal task kanıtı ilgili navigation profile WorkSite aynasını tazeler; callback önce terminalleştirirse başarılı-refresh audit'i oluşana kadar kalıcı worker sorgusu bu işi yeniden seçer. Unknown `content` slot EMPTY/FULL anlamına çevrilmez.
 - PLC olmadığı için `EMPTY↔FULL` değişimi ayrı device-bound load-state operasyonudur; occupancy değişmez.
-- Yerel scene'de `sim_01` ve `sim_02` simulator robotları var, fiziksel robot yok. Ancak Wind Task listesi boştur; label/input/route uydurulmadığı için controlled simulator dispatch yapılmamıştır.
-- RDS `boot.js` script artifact'i kuruldu ve non-motion validation canlı geçti: invalid key reddedildi; doğru key/random UUID/sentinel label `TASK_LABEL_NOT_FOUND`, `taskRecordExists=false` ve query count 0 verdi. Gerçek label bulunmadığından create kapısı kapalıdır.
+- Yerel scene'de `sim_01` ve `sim_02` simulator robotları var, fiziksel robot yok. Phase 08C'de development-only `TKG_SIM_MOVE` task'ı sabit `sim_01`, AP15→AP20 ve iki `Wait` bloğuyla doğrulandı.
+- RDS `boot.js` script artifact'i kuruldu; authenticated validation, create, callback, polling reconciliation ve aynı `taskRecordId` retry canlı geçti.
 
-## 9. Sonraki aşama sınırı
+## 9. Phase 08C simulator commissioning baseline'ı
 
-İlk live simulator kabulü için RDS'te gerçek Wind Task definition, exact input variable'lar ve açık test WorkSite çifti sağlanmalıdır. SEER map/profile/route, PLC, SAP ve robot koordinatı henüz başlamamıştır.
+- Manuel RDS UI koşusu `30e7f8aa-3d5e-4f59-bb84-0b998f879d5d` ile `sim_01` üzerinde `Finished/1003` oldu.
+- Tek TKG TransportRequest `4cd854a5-924c-464c-9fa9-644034f87146`, RDS'de aynı `taskRecordId` ile tam bir kez oluştu.
+- TKG `QUEUED → RUNNING → COMPLETED`, RDS `1000 → 1003`; authenticated `taskDone` callback audit'i kaydedildi.
+- Aynı RDS identity retry'ı `IDEMPOTENT_REPLAY` döndürdü ve instance sayısı 1 kaldı.
+- 22 WorkSite'ın `filled/content/locked/disabled/syncFailed` digest'i önce/sonra aynı kaldı.
+- `TKG_SIM_MOVE` production `BRING_EMPTY/REMOVE_FULL/REMOVE_EMPTY` değildir; fixed AP/Wait görevi WorkSite, LOAD/UNLOAD, fork/jack veya PLC kullanmaz.
+
+## 10. Sonraki aşama sınırı
+
+Sonraki ayrı çalışma, gerçek mapped physical RDS WorkSite'ları ve robot-modeline özgü aksiyonlarla production `BRING_EMPTY`, `REMOVE_FULL` ve `REMOVE_EMPTY` Wind Task'larını tasarlamalıdır. SEER map/profile/route, PLC, SAP ve robot koordinatı henüz başlamamıştır.

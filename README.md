@@ -2,7 +2,7 @@
 
 TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi, React Admin Web'i ve Android Flutter PDA uygulamasını içerir.
 
-> Baseline durumu: Phase 01–08A tamamlandı. **Phase 08B — RDS execution integration uygulanmıştır; canlı simulator dispatch'i gerçek Wind Task definition bulunmadığı için güvenlik kapısında durmuştur.** SEER map-route, PLC, SAP ve robot koordinatları başlamamıştır.
+> Baseline durumu: Phase 01–08C tamamlandı. **Phase 08B execution integration, development-only `TKG_SIM_MOVE` ile canlı simulator E2E üzerinde doğrulandı.** Üretim forklift task'ları, SEER map-route, PLC, SAP ve robot koordinatları başlamamıştır.
 
 ## Mevcut baseline
 
@@ -19,7 +19,8 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 | Phase 07A — PDA + RDS Contract Readiness | Tamamlandı | PDA operational context, available-actions ve persisted RDS execution/readiness projeksiyonu |
 | Phase 07B — Flutter PDA Application | Tamamlandı | Device-bound Android istemci, normalize layout, server-authoritative transport ve güvenli offline/idempotency UX |
 | Phase 08A — Live RDS Readiness | Uygulandı | Salt-okunur RDS client, WorkSite mirror, explicit admin mapping ve readiness projection |
-| Phase 08B — RDS Execution Integration | Uygulandı / draft PR | Script non-motion validation canlı geçti; dispatch/reconciliation/callback/cancel/load-state hazır, live task definition bekleniyor |
+| Phase 08B — RDS Execution Integration | Tamamlandı | Server-side dispatch, callback, reconciliation, stop boundary ve load-state entegrasyonu |
+| Phase 08C — RDS Simulator Commissioning | Tamamlandı | `TKG_SIM_MOVE`, tek TKG UUID, canlı `sim_01`, callback ve duplicate-safe retry kanıtlandı |
 
 Phase 02B'deki 183 `master.layout_slots` kaydının 172'si lojistik pozisyon, 11'i `slot_role = 'MACHINE'` olan makine/hücre bölgesidir. Bu 11 bölge yalnızca fiziksel ve ekran yerleşim referansıdır; taşıma isteğinin `source_slot_id` veya `destination_slot_id` değeri olamaz. Şema ayrımı mevcut `slot_role` alanıyla yapabiliyor; Phase 03 workflow engine bu invariant'ı uygular ve Phase 04 API bütün mutasyonları aynı service sınırından geçirir.
 
@@ -40,6 +41,7 @@ src/TkgPda.Api/                Authenticated ASP.NET Core HTTP boundary
 src/TkgPda.AdminWeb/           React + TypeScript + Vite administration client
 src/TkgPda.Pda/                Flutter Android industrial PDA client
 rds/scripts/                   Version-controlled RDS Script artifact'i ve Node contract testleri
+rds/tasks/commissioning/       Development-only RDS simulator task artifact'i
 TKG.Pda.slnx                   .NET 10 solution
 ```
 
@@ -79,6 +81,8 @@ pwsh tests/phase_07a/run_postgres_pda_rds_integration.ps1
 pwsh tests/phase_07b/run_real_api_contract.ps1
 pwsh tests/phase_08a/run_postgres_rds_readiness_integration.ps1
 pwsh tests/phase_08b/run_postgres_rds_execution_integration.ps1
+# Explicit live opt-in + loopback simulator scene only:
+pwsh tests/phase_08c/run_live_rds_simulator_e2e.ps1
 node --test rds/scripts/test/tkg_integration.test.js
 
 cd src/TkgPda.AdminWeb
@@ -114,6 +118,7 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 - [Phase 07B Flutter PDA Application](docs/PHASE_07B_FLUTTER_PDA.md)
 - [Phase 08A Live RDS Readiness](docs/PHASE_08A_LIVE_RDS_READINESS.md)
 - [Phase 08B RDS Execution Integration](docs/PHASE_08B_RDS_EXECUTION_INTEGRATION.md)
+- [Phase 08C RDS Simulator Commissioning](docs/PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md)
 - [Normative RDS/PDA entegrasyon sözleşmesi](docs/RDS_PDA_INTEGRATION_SPEC.md)
 - [Database specification v0.1](docs/TKG_PDA_DATABASE_SPEC_v0.1.md)
 

@@ -1,6 +1,6 @@
 # TKG PDA Dokümantasyon İndeksi
 
-Bu dizin, tamamlanmış Phase 01–08A baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 08B güvenli RDS execution sınırını uygular; canlı simulator dispatch gerçek Wind Task definition/input sözleşmesi sağlanana kadar kapalıdır.
+Bu dizin, tamamlanmış Phase 01–08C baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 08B güvenli RDS execution sınırını uygular; Phase 08C bu sınırı development-only `TKG_SIM_MOVE` ile canlı simulator üzerinde doğrular.
 
 ## Başlangıç noktaları
 
@@ -21,6 +21,7 @@ Bu dizin, tamamlanmış Phase 01–08A baseline'ının mimari kararlarını, ver
 - [PHASE_07B_FLUTTER_PDA.md](PHASE_07B_FLUTTER_PDA.md) — device-bound Flutter PDA mimarisi, operatör akışları, idempotency/offline güvenliği ve kabul kanıtı
 - [PHASE_08A_LIVE_RDS_READINESS.md](PHASE_08A_LIVE_RDS_READINESS.md) — canlı salt-okunur RDS kanıtı, WorkSite aynası, admin mapping ve readiness
 - [PHASE_08B_RDS_EXECUTION_INTEGRATION.md](PHASE_08B_RDS_EXECUTION_INTEGRATION.md) — script güvenliği, dispatch/reconciliation/callback/cancel, load-state ve canlı gate sonucu
+- [PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md](PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md) — Wind Task doğrulaması, manuel simulator koşusu ve tek TKG UUID ile canlı E2E/idempotency kanıtı
 - [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) — Phase 08 için normative TKG/RDS/PDA sorumluluk ve entegrasyon sözleşmesi
 - [Seed workflow](../db/seeds/README.md) — deterministik seed üretme ve DB'ye uygulama sırası
 

@@ -112,6 +112,136 @@ public sealed class PostgresTransportWorkflowTests
     }
 
     [PostgresFact]
+    public async Task Load_state_reporting_changes_only_load_state_and_is_idempotent()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slotId = await LogisticsSlotAsync(context.LayoutId, requireContainer: false);
+        var actorId = await EnsureActorAsync();
+        await SetSlotAsync(slotId, OccupancyState.Occupied, LoadState.Empty);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+        var service = new TransportWorkflowService(store);
+
+        var first = await service.UpdateLoadStateAsync(new(context.MachineId, slotId, LoadState.Full, actorId));
+        var replay = await service.UpdateLoadStateAsync(new(context.MachineId, slotId, LoadState.Full, actorId));
+        var state = await ReadFullSlotStateAsync(slotId);
+
+        Assert.False(first.WasIdempotentReplay);
+        Assert.True(replay.WasIdempotentReplay);
+        Assert.Equal(first.RowVersion, replay.RowVersion);
+        Assert.Equal(OccupancyState.Occupied, state.Occupancy);
+        Assert.Equal(LoadState.Full, state.Load);
+    }
+
+    [PostgresFact]
+    public async Task Load_state_reporting_rejects_vacant_machine_and_busy_slots()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var actorId = await EnsureActorAsync();
+        var logistics = await LogisticsSlotsAsync(context.LayoutId, 2);
+        var machineRegion = await ScalarAsync<Guid>(
+            "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND slot_role = 'MACHINE' LIMIT 1",
+            ("layout_id", context.LayoutId));
+        await SetSlotAsync(logistics[0], OccupancyState.Vacant, LoadState.Unknown);
+        await SetSlotAsync(logistics[1], OccupancyState.Occupied, LoadState.Empty);
+        await SetSlotAsync(machineRegion, OccupancyState.Occupied, LoadState.Empty);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+        var service = new TransportWorkflowService(store);
+
+        var vacant = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            service.UpdateLoadStateAsync(new(context.MachineId, logistics[0], LoadState.Full, actorId)));
+        var machine = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            service.UpdateLoadStateAsync(new(context.MachineId, machineRegion, LoadState.Full, actorId)));
+        _ = await service.CreateAsync(Command(context, TransportTaskType.RemoveEmpty, "load-state-busy", source: logistics[1]));
+        var busy = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            service.UpdateLoadStateAsync(new(context.MachineId, logistics[1], LoadState.Full, actorId)));
+
+        Assert.Equal("OCCUPIED_SLOT_REQUIRED", vacant.Code);
+        Assert.Equal("MACHINE_REGION_FORBIDDEN", machine.Code);
+        Assert.Equal("SLOT_BUSY", busy.Code);
+    }
+
+    [PostgresFact]
+    public async Task Rds_task_identity_is_precreated_exactly_once_with_request_uuid()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slotId = await LogisticsSlotAsync(context.LayoutId, requireContainer: false);
+        await SetSlotAsync(slotId, OccupancyState.Vacant, LoadState.Unknown);
+        await using var workflowStore = new PostgresTransportWorkflowStore(_connectionString);
+        var request = await workflowStore.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "rds-task-identity", destination: slotId));
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var rdsStore = new PostgresRdsExecutionStore(dataSource);
+        var payload = System.Text.Json.JsonSerializer.SerializeToElement(new { requestId = request.Request.Id });
+
+        await rdsStore.EnsureTaskRecordAsync(request.Request.Id, request.Request.Id.ToString(), "SIM_TASK", payload);
+        await rdsStore.EnsureTaskRecordAsync(request.Request.Id, request.Request.Id.ToString(), "SIM_TASK", payload);
+
+        Assert.Equal(1, await ScalarAsync<long>("SELECT count(*) FROM integration.rds_tasks WHERE transport_request_id = @id", ("id", request.Request.Id)));
+        Assert.Equal(request.Request.Id.ToString(), await ScalarAsync<string>("SELECT rds_task_record_id FROM integration.rds_tasks WHERE transport_request_id = @id", ("id", request.Request.Id)));
+
+        var navigationProfileId = await ScalarAsync<Guid>(
+            "INSERT INTO master.navigation_profiles (machine_id, code, name) VALUES (@machine_id, 'P08B-REFRESH', 'Phase 08B refresh evidence') RETURNING id",
+            ("machine_id", context.MachineId));
+        await ExecuteAsync(
+            "UPDATE ops.transport_requests SET navigation_id = @navigation_id, status = 'COMPLETED' WHERE id = @id; UPDATE integration.rds_tasks SET rds_status = 1003 WHERE transport_request_id = @id",
+            ("navigation_id", navigationProfileId),
+            ("id", request.Request.Id));
+        Assert.Contains(request.Request.Id, await rdsStore.ListPendingWorkSiteRefreshRequestIdsAsync(10));
+        await rdsStore.WriteExecutionAuditAsync(request.Request.Id, "RDS_WORKSITE_REFRESHED", "PASS", "refreshed", Guid.NewGuid());
+        Assert.DoesNotContain(request.Request.Id, await rdsStore.ListPendingWorkSiteRefreshRequestIdsAsync(10));
+    }
+
+    [PostgresFact]
+    public async Task Rds_dispatch_context_resolves_explicit_template_binding_and_physical_mapping()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slotId = await LogisticsSlotAsync(context.LayoutId, requireContainer: false);
+        await SetSlotAsync(slotId, OccupancyState.Occupied, LoadState.Empty);
+        await ExecuteAsync(
+            """
+            INSERT INTO master.task_templates (
+                variant_id, task_type_id, rds_task_label, priority, config_json, is_active)
+            SELECT @variant_id, id, 'PHASE08B_SIM_TASK', 17,
+                   '{"testScope":"P08B","rdsInputBindings":[{"param":"fromSite","source":"SOURCE_RDS_SITE_ID","required":true}]}'::jsonb,
+                   true
+            FROM master.task_types WHERE code = 'REMOVE_EMPTY'
+            """,
+            ("variant_id", context.VariantId));
+        var workSiteId = await ScalarAsync<Guid>(
+            """
+            INSERT INTO integration.rds_worksites (
+                rds_site_id, rds_type, last_filled, last_locked, last_disabled,
+                last_sync_failed, last_sync_at, raw_state_json)
+            VALUES ('P08B-PHYSICAL-01', 1, 1, 0, 0, 0, now(), '{"siteId":"P08B-PHYSICAL-01"}'::jsonb)
+            RETURNING id
+            """);
+        await ExecuteAsync(
+            "INSERT INTO integration.layout_slot_rds_mapping (layout_slot_id, rds_worksite_id) VALUES (@slot_id, @worksite_id)",
+            ("slot_id", slotId),
+            ("worksite_id", workSiteId));
+        await using var workflowStore = new PostgresTransportWorkflowStore(_connectionString);
+        var request = await workflowStore.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveEmpty, "rds-context", source: slotId));
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var executionStore = new PostgresRdsExecutionStore(dataSource);
+
+        var dispatch = await executionStore.GetDispatchContextAsync(request.Request.Id);
+
+        Assert.NotNull(dispatch);
+        Assert.Equal("PHASE08B_SIM_TASK", dispatch.RdsTaskLabel);
+        Assert.Equal(17, dispatch.TemplatePriority);
+        Assert.Equal("P08B-PHYSICAL-01", dispatch.Source.SiteId);
+        Assert.True(dispatch.Source.IsMapped);
+        Assert.Equal(1, dispatch.Source.Type);
+        Assert.Equal(slotId, dispatch.Source.SlotId);
+        Assert.Contains(
+            await executionStore.ListTaskTemplatesAsync(),
+            template => template.Id == dispatch.TaskTemplateId && template.RdsTaskLabel == "PHASE08B_SIM_TASK");
+    }
+
+    [PostgresFact]
     public async Task Machine_region_is_rejected()
     {
         await ResetAsync();
@@ -412,8 +542,22 @@ public sealed class PostgresTransportWorkflowTests
     private async Task ResetAsync()
     {
         await ExecuteAsync(
-            "TRUNCATE integration.rds_tasks, ops.transport_request_events, ops.transport_requests, ops.slot_runtime_state, ops.machine_runtime_state RESTART IDENTITY CASCADE");
+            """
+            TRUNCATE integration.rds_tasks, ops.transport_request_events, ops.transport_requests, ops.slot_runtime_state, ops.machine_runtime_state RESTART IDENTITY CASCADE;
+            DELETE FROM integration.layout_slot_rds_mapping
+            WHERE rds_worksite_id IN (SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%');
+            DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%';
+            DELETE FROM master.task_templates WHERE config_json ->> 'testScope' = 'P08B';
+            """);
     }
+
+    private Task<Guid> EnsureActorAsync() => ScalarAsync<Guid>(
+        """
+        INSERT INTO auth.users (username, password_hash, full_name)
+        VALUES ('phase08b-operator', 'test-only-hash', 'Phase 08B Operator')
+        ON CONFLICT (username) DO UPDATE SET full_name = EXCLUDED.full_name
+        RETURNING id
+        """);
 
     private async Task<LayoutContext> ConfigureAsync(string machineCode, string variantCode)
     {

@@ -232,8 +232,8 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         Assert.Equal("OUT-P07A-42", request.Execution.OutOrderNo);
         Assert.Equal("AGV-42", request.Execution.AgvId);
         Assert.Equal(1000, request.Execution.RdsStatus);
-        Assert.False(request.CanCancel);
-        Assert.Equal("CANCELLATION_AFTER_EXECUTION_DEFERRED", request.CancelDisabledCode);
+        Assert.True(request.CanCancel);
+        Assert.Null(request.CancelDisabledCode);
     }
 
     private static async Task<OperationalContextRecord> GetContextAsync(HttpClient client, Guid machineId)

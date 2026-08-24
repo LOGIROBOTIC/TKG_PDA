@@ -71,6 +71,8 @@ public static class AdminEndpoints
         admin.MapGet("/rds/slot-mappings", (Guid? layoutId, RdsIntegrationService service, CancellationToken ct) => service.ListSlotMappingsAsync(layoutId, ct));
         admin.MapPut("/layout-slots/{slotId:guid}/rds-mapping", SetRdsMappingAsync);
         admin.MapDelete("/layout-slots/{slotId:guid}/rds-mapping", RemoveRdsMappingAsync);
+        admin.MapGet("/rds/task-templates", (IRdsExecutionStore store, CancellationToken ct) => store.ListTaskTemplatesAsync(ct));
+        admin.MapPost("/rds/task-templates/validate", ValidateRdsTaskTemplateAsync);
 
         return endpoints;
     }
@@ -115,6 +117,44 @@ public static class AdminEndpoints
     {
         await service.RemoveSlotMappingAsync(slotId, MutationContext(context), ct);
         return Results.NoContent();
+    }
+
+    private static async Task<RdsValidationResult> ValidateRdsTaskTemplateAsync(
+        ValidateRdsTaskTemplateRequest request,
+        HttpContext context,
+        IRdsExecutionStore store,
+        IRdsExecutionClient client,
+        CancellationToken cancellationToken)
+    {
+        var template = (await store.ListTaskTemplatesAsync(cancellationToken))
+            .SingleOrDefault(item => item.Id == request.TaskTemplateId)
+            ?? throw new ApiException(StatusCodes.Status404NotFound, "TASK_TEMPLATE_NOT_FOUND", "The task template does not exist.");
+        if (string.IsNullOrWhiteSpace(template.RdsTaskLabel))
+        {
+            throw new ApiException(StatusCodes.Status409Conflict, "RDS_TASK_LABEL_REQUIRED", "The task template has no RDS task label.");
+        }
+
+        var preview = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (template.Config.ValueKind == JsonValueKind.Object
+            && template.Config.TryGetProperty("rdsInputBindings", out var bindings)
+            && bindings.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var binding in bindings.EnumerateArray())
+            {
+                if (binding.ValueKind == JsonValueKind.Object
+                    && binding.TryGetProperty("param", out var param)
+                    && param.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(param.GetString()))
+                {
+                    preview[param.GetString()!] = "TKG_VALIDATION_ONLY";
+                }
+            }
+        }
+
+        return await client.ValidateTransportAsync(
+            new(Guid.NewGuid().ToString(), template.RdsTaskLabel, preview),
+            CorrelationId(context),
+            cancellationToken);
     }
 
     private static async Task<IResult> LoginAsync(

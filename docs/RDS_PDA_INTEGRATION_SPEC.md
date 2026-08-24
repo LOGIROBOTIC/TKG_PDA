@@ -1,12 +1,12 @@
 # TKG PDA — RDS/PDA Entegrasyon Sözleşmesi
 
-**Durum:** Phase 08A read-only connectivity baseline
+**Durum:** Phase 08B execution integration implemented; controlled live task blocked by missing RDS Wind Task definition
 
-**Canlı entegrasyon:** WorkSite ve Wind Task sorgusu salt okunur olarak kanıtlandı; dispatch/mutation/callback Phase 08B'ye ertelendi
+**Canlı entegrasyon:** WorkSite/Wind Task read kanıtlandı; `sim_01`/`sim_02` mevcut, fiziksel robot yok. RDS script kurulumu ve non-motion validation auth/parse/identity sınırı canlı geçti. Wind Task definition listesi boş olduğundan create/stop/callback canlı yürütülmedi.
 
 **Şema kaynağı:** `db/migrations/001_initial_schema.sql`
 
-Bu belge Flutter PDA ile SEER RDS entegrasyonu arasındaki sorumlulukları sabitler. Phase 08A server-side read client, WorkSite aynası ve açık admin mapping'i uygular; Flutter RDS'e bağlanmaz ve RDS'e mutation gönderilmez.
+Bu belge Flutter PDA ile SEER RDS entegrasyonu arasındaki sorumlulukları sabitler. Phase 08B server-side script/dispatch/reconciliation/callback/cancel ve load-state sınırını uygular; Flutter RDS'e bağlanmaz ve doğrudan RDS mutation göndermez.
 
 ## 1. Kaynak gerçekleri ve güven sınırı
 
@@ -63,7 +63,7 @@ RDS WorkSite sözleşmesinin `filled`, `locked`, `lockedBy`, `disabled`, `syncFa
 | `OCCUPIED` | `filled = 1` |
 | `UNKNOWN` | kesin eşleme yapılmaz |
 
-`EMPTY/FULL` TKG'nin iş semantiğidir. Phase 08'de RDS WorkSite `content` veya desteklenen extended field ile eşitlenebilir; gerçek müşteri RDS projesinde doğrulanmadan `EmptyTray`, `FullTray` gibi tutorial string'leri wire contract olarak dondurulamaz. Eşlemeler konfigürasyonla yönetilmelidir.
+`EMPTY/FULL` TKG'nin iş semantiğidir. Phase 08B yalnız exact `Rds:EmptyContentValue` / `Rds:FullContentValue` sağlandığında RDS WorkSite `content` alanını eşitler; tracked defaultların ikisi de boştur. `EmptyTray`, `FullTray` gibi tutorial string'leri wire contract değildir. Helper hiçbir zaman `filled` değiştirmez; EMPTY ve FULL durumunda da fiziksel nesne WorkSite'ı işgal eder.
 
 `locked` veya aktif TKG talebi slotun meşgul/rezerve olmasını gösterebilir. Bunun için `ops.slot_runtime_state.occupancy_state` alanına `RESERVED` eklenmez. Mevcut izinli değerler yalnız `VACANT`, `OCCUPIED`, `UNKNOWN` olarak kalır.
 
@@ -71,7 +71,7 @@ RDS WorkSite sözleşmesinin `filled`, `locked`, `lockedBy`, `disabled`, `syncFa
 
 ## 3. Wind Task dispatch stratejisi
 
-Phase 08B için amaçlanan dispatch yönü:
+Uygulanan Phase 08B dispatch yönü:
 
 ```mermaid
 sequenceDiagram
@@ -79,27 +79,28 @@ sequenceDiagram
     participant A as RdsAdapter
     participant R as Protected RDS script endpoint
     T->>A: validated TransportRequest + TaskTemplate
-    A->>R: jj.createWindTask(...)
-    R-->>A: HTTP response + body code/msg
-    A-->>T: persisted dispatch evidence
+    A->>R: create-transport / jj.createWindTask
+    R-->>A: asynchronous acceptance
+    A->>R: queryWindTask(same UUID)
+    A-->>T: SENT_TO_RDS only after query proof
 ```
 
 - Tek bir global Wind Task label hard-code edilmez. `master.task_templates`, `variant_id + product_group_id + task_type_id` bağlamında `rds_task_label`, source/destination slot group, priority ve `config_json` sağlar.
 - Uygun aktif template veya `rds_task_label` yoksa bu gerçek `RdsTaskLabelConfigured=false` olarak görünür; label tahmin edilmez ve Phase 08 dispatch readiness kuralı görevi durdurmalıdır.
-- Phase 07A yalnız aktif variant'ın template kayıtlarını okur; Wind Task oluşturmaz.
-- Amaçlanan correlation, canlı doğrulamaya tabi olmak üzere `ops.transport_requests.id ↔ RDS taskRecordId` ilişkisidir.
+- Phase 08B worker template input'larını strict `rdsInputBindings` whitelist'iyle çözer; required değer yoksa dispatch yapmaz.
+- Kanonik correlation `ops.transport_requests.id ↔ integration.rds_tasks.rds_task_record_id ↔ RDS taskRecordId` olarak uygulanmıştır.
 - `request_no`, uygun RDS projelerinde `outOrderNo` ile ilişkilendirilir. Kanonik UUID correlation'ın yerine tek başına kullanılmaz.
 - HTTP 200 iş başarısı anlamına gelmez. `RdsAdapter` response body içindeki `code/msg` alanlarını doğrulamadan dispatch, query, stop veya WorkSite update işlemini başarılı sayamaz.
 
 ## 4. Task sorgu, iptal ve reconciliation
 
-Phase 08B execution entegrasyonunda kullanılacak RDS operasyonları:
+Phase 08B execution entegrasyonunda kullanılan RDS operasyonları:
 
 - Task sorgu: `/api/queryWindTask` (Phase 08A client parsing'i salt okunur olarak kanıtlandı)
 - Task durdurma: `/api/stop-task`
 - Task oluşturma: korumalı özel RDS script endpoint'i üzerinden `jj.createWindTask(...)`
 
-`SENT_TO_RDS` ve `RUNNING` talepler PDA'nın mevcut cancel endpoint'iyle iptal edilmez; `CANCELLATION_AFTER_EXECUTION_DEFERRED` koduyla reddedilir. Phase 08, `/api/stop-task` sonucu ile TKG slot state reconciliation kuralını ayrıca tanımlamalıdır. HTTP cevabı gelmeden veya callback/poll kanıtı oluşmadan TKG fiziksel gerçeği varsayımla değiştirilmez.
+`SENT_TO_RDS` ve `RUNNING` talepler mevcut cancel endpoint'inden backend RDS cancellation boundary'sine gider. `/api/stop-task` body `releaseSite=1` ve aynı UUID `taskRecordId` taşır. HTTP cevabı iptal kanıtı değildir; query `1001` veya authenticated `taskStopped` gelene kadar response `rdsCancellationPending=true` taşır ve TKG fiziksel gerçeği varsayımla değiştirilmez.
 
 Birincil event yolu:
 
@@ -120,7 +121,11 @@ TKG reconciliation worker
 → idempotent reconciliation
 ```
 
-Callback kimlik doğrulama, replay koruması, imza/IP policy, retry ve dead-letter davranışı Phase 08'de tanımlanacaktır.
+Callback `X-TKG-RDS-Key` ile doğrulanır; unknown identity mutation yapmaz, duplicate terminal event zararsızdır. Polling reconciliation zorunlu safety net olarak kalır. Production reverse proxy/network allow-list ve operasyonel dead-letter/alerting dağıtım konfigürasyonudur.
+
+RDS custom HTTP handler'ları tutorial'da doğrulanan statik top-level fonksiyon adlarıyla kaydedilir ve `{ code, body }` zarfı döndürür. Request execution boot closure state'ine güvenmez; global `jj` ve explicit script config'i stateless olarak handler'a verilir.
+
+Terminal polling kanıtından sonra request'in navigation profile'ı için WorkSite aynası tazelenir. Callback terminal durumu polling'den önce uygularsa mevcut `rds_tasks` terminal kanıtı ve başarılı-refresh audit yokluğu, işi sonraki worker turunda kalıcı olarak yeniden seçer. Refresh hatası terminal workflow sonucunu geri almaz; audit edilir ve tekrar denenebilir. RDS `filled/content` fiziksel kanıtı bu adımda slot runtime satırına doğrudan yazılmaz: yalnız workflow completion semantiği occupancy değiştirir, `content` ise ancak konfigüre edilmiş exact EMPTY/FULL değerlerinden biriyle eşleşirse anlam taşır.
 
 ## 5. PDA execution projeksiyonu
 
@@ -161,12 +166,12 @@ Public RDS API düzeyinde map/profile switching henüz kanıtlanmamıştır. End
 
 ## 8. Phase sınırları
 
-Phase 08A'da kesinlikle bulunmaz:
+Phase 08B'de kesinlikle bulunmaz:
 
-- RDS credential, production IP veya WebSocket;
-- Wind Task create/stop/dispatch (yalnız read query parser'ı vardır);
-- WorkSite yazma, callback kaydı veya alarm ingestion;
+- tracked RDS credential, production IP veya secret;
 - Flutter'dan direct RDS bağlantısı;
-- robot/map koordinatı veya SEER navigation davranışı.
+- task label/input variable tahmini;
+- robot/map koordinatı, route/stitch veya SEER navigation-profile switching;
+- PLC veya SAP entegrasyonu.
 
-Canlı read davranışları `RdsApi_en.md`, kurulu yerel RDS ve opt-in testlerle kanıtlanmıştır. Dispatch, stop/cancel reconciliation ve callback davranışı Phase 08B'de ayrıca kanıtlanmadan production contract sayılmaz.
+Script/dispatch/callback/cancel otomatik ve fresh PostgreSQL testlerinde kanıtlanmıştır. Canlı RDS'te gerçek Wind Task definition bulunmadığı için custom script installation/validation ve simulator execution henüz canlı kabul kanıtı değildir. Ayrıntı [PHASE_08B_RDS_EXECUTION_INTEGRATION.md](PHASE_08B_RDS_EXECUTION_INTEGRATION.md) belgesindedir.

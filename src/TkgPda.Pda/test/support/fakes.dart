@@ -172,6 +172,9 @@ class FakePdaRepository implements PdaDataSource {
   int createCount = 0;
   int cancelCount = 0;
   int switchCount = 0;
+  int loadStateCount = 0;
+  int contextCount = 0;
+  String? lastLoadState;
   String? lastIdempotencyKey;
   TransportCommand? lastCommand;
   Completer<TransportResult>? createCompleter;
@@ -196,6 +199,7 @@ class FakePdaRepository implements PdaDataSource {
 
   @override
   Future<OperationalContext> operationalContext(String machineId) async {
+    contextCount++;
     if (contextError case final error?) throw error;
     return contextValue;
   }
@@ -251,6 +255,16 @@ class FakePdaRepository implements PdaDataSource {
       operation: 'BRING_EMPTY',
       idempotentReplay: false,
     );
+  }
+
+  @override
+  Future<void> updateLoadState({
+    required String machineId,
+    required String slotId,
+    required String loadState,
+  }) async {
+    loadStateCount++;
+    lastLoadState = loadState;
   }
 }
 
@@ -319,6 +333,7 @@ const _machineSlot = {
       'disabledMessage': 'Makine alanı taşıma dışıdır.',
     },
   ],
+  'loadStateActions': [],
 };
 
 const _vacantSlot = {
@@ -364,6 +379,7 @@ const _vacantSlot = {
       'disabledMessage': 'Konum durumu uygun değil.',
     },
   ],
+  'loadStateActions': [],
 };
 
 const _emptySlot = {
@@ -409,6 +425,20 @@ const _emptySlot = {
       'disabledMessage': null,
     },
   ],
+  'loadStateActions': [
+    {
+      'action': 'MARK_FULL',
+      'enabled': true,
+      'disabledCode': null,
+      'disabledMessage': null,
+    },
+    {
+      'action': 'MARK_EMPTY',
+      'enabled': false,
+      'disabledCode': 'LOAD_STATE_ALREADY_REPORTED',
+      'disabledMessage': 'Kasa zaten bu yük durumundadır.',
+    },
+  ],
 };
 
 const _fullSlot = {
@@ -452,6 +482,20 @@ const _fullSlot = {
       'enabled': false,
       'disabledCode': 'SLOT_STATE_MISMATCH',
       'disabledMessage': 'Konum durumu uygun değil.',
+    },
+  ],
+  'loadStateActions': [
+    {
+      'action': 'MARK_FULL',
+      'enabled': false,
+      'disabledCode': 'LOAD_STATE_ALREADY_REPORTED',
+      'disabledMessage': 'Kasa zaten bu yük durumundadır.',
+    },
+    {
+      'action': 'MARK_EMPTY',
+      'enabled': true,
+      'disabledCode': null,
+      'disabledMessage': null,
     },
   ],
 };

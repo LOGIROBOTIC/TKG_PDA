@@ -30,7 +30,8 @@ public sealed record RdsWindTaskSnapshot(
     int? Status,
     string? AgvId,
     string? OutOrderNo,
-    JsonElement RawState);
+    JsonElement RawState,
+    string? EndedReason = null);
 
 public sealed record RdsWindTaskPage(
     int TotalCount,
@@ -166,7 +167,15 @@ public interface IRdsIntegrationStore
     Task RemoveSlotMappingAsync(Guid slotId, AdminMutationContext context, CancellationToken cancellationToken = default);
 }
 
-public sealed class RdsIntegrationService(IRdsReadClient client, IRdsIntegrationStore store, TimeProvider timeProvider)
+public interface IRdsWorkSiteReconciler
+{
+    Task<RdsWorkSiteSyncRecord> SyncWorkSitesAsync(
+        Guid navigationProfileId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class RdsIntegrationService(IRdsReadClient client, IRdsIntegrationStore store, TimeProvider timeProvider) : IRdsWorkSiteReconciler
 {
     private readonly SemaphoreSlim syncGate = new(1, 1);
 

@@ -37,6 +37,7 @@ builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<IApiDataStore, PostgresApiDataStore>();
 builder.Services.AddSingleton<IAdminConfigurationStore, PostgresAdminConfigurationStore>();
 builder.Services.AddSingleton<IRdsIntegrationStore, PostgresRdsIntegrationStore>();
+builder.Services.AddSingleton<IRdsExecutionStore, PostgresRdsExecutionStore>();
 builder.Services.AddHttpClient("RdsReadOnly", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);
@@ -51,13 +52,36 @@ builder.Services.AddHttpClient("RdsReadOnly", client =>
     AllowAutoRedirect = false
 });
 builder.Services.AddSingleton<IRdsReadClient, RdsReadClient>();
+builder.Services.AddHttpClient("RdsMutation", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);
+    if (rdsOptions.BaseAddress is { } baseAddress)
+    {
+        client.BaseAddress = baseAddress;
+    }
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    UseCookies = false,
+    AllowAutoRedirect = false
+});
+builder.Services.AddSingleton<IRdsExecutionClient, RdsExecutionClient>();
 builder.Services.AddSingleton<RdsIntegrationService>();
+builder.Services.AddSingleton<IRdsWorkSiteReconciler>(services =>
+    services.GetRequiredService<RdsIntegrationService>());
 builder.Services.AddSingleton<AdminConfigurationService>();
 builder.Services.AddSingleton<ITransportWorkflowStore>(services =>
     new PostgresTransportWorkflowStore(services.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddSingleton<TransportWorkflowService>();
 builder.Services.AddSingleton<MachineAccessService>();
 builder.Services.AddSingleton<PdaOperationalContextService>();
+builder.Services.AddSingleton(new RdsExecutionSettings(
+    rdsOptions.DispatchEnabled,
+    TimeSpan.FromSeconds(rdsOptions.WorkSiteFreshnessSeconds),
+    rdsOptions.EmptyContentValue,
+    rdsOptions.FullContentValue));
+builder.Services.AddSingleton<RdsExecutionCoordinator>();
+builder.Services.AddHostedService<RdsExecutionWorker>();
 
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 builder.Services
@@ -157,6 +181,7 @@ app.MapGet("/health/ready", async (IApiDataStore store, CancellationToken cancel
 }).AllowAnonymous();
 app.MapTkgPdaApi();
 app.MapTkgPdaAdminApi();
+app.MapTkgPdaRdsIntegrationApi();
 
 app.Run();
 

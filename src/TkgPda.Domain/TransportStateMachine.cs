@@ -8,8 +8,8 @@ public static class TransportStateMachine
             [TransportRequestStatus.Created] = Set(TransportRequestStatus.Validating, TransportRequestStatus.Cancelled),
             [TransportRequestStatus.Validating] = Set(TransportRequestStatus.Queued, TransportRequestStatus.Failed, TransportRequestStatus.Cancelled),
             [TransportRequestStatus.Queued] = Set(TransportRequestStatus.SentToRds, TransportRequestStatus.Cancelled),
-            [TransportRequestStatus.SentToRds] = Set(TransportRequestStatus.Running, TransportRequestStatus.Failed),
-            [TransportRequestStatus.Running] = Set(TransportRequestStatus.Completed, TransportRequestStatus.Failed),
+            [TransportRequestStatus.SentToRds] = Set(TransportRequestStatus.Running, TransportRequestStatus.Failed, TransportRequestStatus.Cancelled),
+            [TransportRequestStatus.Running] = Set(TransportRequestStatus.Completed, TransportRequestStatus.Failed, TransportRequestStatus.Cancelled),
             [TransportRequestStatus.Completed] = Set(),
             [TransportRequestStatus.Failed] = Set(),
             [TransportRequestStatus.Cancelled] = Set()

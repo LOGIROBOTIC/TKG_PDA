@@ -13,5 +13,14 @@ public interface ITransportWorkflowStore
         TransportRequestStatus nextStatus,
         CancellationToken cancellationToken = default);
 
+    Task<TransportRequestSnapshot> RecordExecutionOutcomeAsync(
+        Guid requestId,
+        ExecutionOutcome outcome,
+        CancellationToken cancellationToken = default);
+
+    Task<LoadStateUpdateResult> UpdateLoadStateAsync(
+        LoadStateUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
     Task SwitchVariantAsync(VariantSelection selection, CancellationToken cancellationToken = default);
 }

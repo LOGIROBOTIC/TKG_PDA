@@ -18,6 +18,11 @@ abstract interface class PdaDataSource {
   );
   Future<TransportResult> transport(String requestId);
   Future<TransportResult> cancel(String requestId);
+  Future<void> updateLoadState({
+    required String machineId,
+    required String slotId,
+    required String loadState,
+  });
 }
 
 class PdaRepository implements PdaDataSource {
@@ -101,6 +106,18 @@ class PdaRepository implements PdaDataSource {
       '/api/v1/transport-requests/$requestId/cancel',
     );
     return TransportResult.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<void> updateLoadState({
+    required String machineId,
+    required String slotId,
+    required String loadState,
+  }) async {
+    await _api.put(
+      '/api/v1/machines/$machineId/slots/$slotId/load-state',
+      body: {'loadState': loadState},
+    );
   }
 
   static JsonMap _json(Object? body) =>

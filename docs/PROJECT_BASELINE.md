@@ -1,8 +1,8 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–07B tamamlanması ve Phase 08A canlı salt-okunur RDS readiness entegrasyonu sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08A mevcut şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–08A tamamlanması ve Phase 08B RDS execution integration uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08B mevcut şemayı migration değiştirmeden kullanır.
 
-> Phase 07B PR #6 `main`e merge edilmiştir. Phase 08A ayrıntıları için [PHASE_08A_LIVE_RDS_READINESS.md](PHASE_08A_LIVE_RDS_READINESS.md) belgesine bakın.
+> Phase 08A PR #7 `main`e merge edilmiştir. Phase 08B ayrıntıları ve canlı gate sonucu için [PHASE_08B_RDS_EXECUTION_INTEGRATION.md](PHASE_08B_RDS_EXECUTION_INTEGRATION.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -18,8 +18,8 @@ Bu belge, Phase 01–07B tamamlanması ve Phase 08A canlı salt-okunur RDS readi
 | 06 | Admin Web | Tamamlandı |
 | 07A | PDA + RDS Contract Readiness | Tamamlandı |
 | 07B | Flutter PDA Application | Tamamlandı |
-| 08A | Live RDS Connectivity + WorkSite Mapping | Uygulandı / draft PR |
-| 08B | RDS Task Dispatch + Reconciliation | Planlandı |
+| 08A | Live RDS Connectivity + WorkSite Mapping | Tamamlandı |
+| 08B | RDS Task Dispatch + Reconciliation | Uygulandı / draft PR; live task definition bekleniyor |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
 | 10 | System Integration & Tests | Planlandı |
 | 11 | PLC Integration | Gelecek aşama |
@@ -181,7 +181,7 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 - `WAREHOUSE_OPERATOR` yalnız `BRING_EMPTY`; `ADMIN_WEB` ise hiçbir PDA transport capability almaz.
 - Aktif talep bir slotu meşgul ettiğinde ikinci action `SLOT_BUSY` olur; `occupancy_state` değerlerine `RESERVED` eklenmez.
 - RDS WorkSite ve task alanları yalnız `integration` şemasındaki persisted kanıttan okunur. Mapping veya template yokluğu açık/nullable kalır; WorkSite ID veya task label üretilmez.
-- PDA execution state, TKG business status ile kalıcı RDS task kanıtının kararlı projeksiyonudur. PDA request'i canlı RDS çağrısı yapmaz; Phase 08A sync'i ayrı ADMIN_WEB boundary'sindedir ve RDS status mutation yoktur.
+- PDA execution state, TKG business status ile kalıcı RDS task kanıtının kararlı projeksiyonudur. PDA canlı RDS çağrısı yapmaz; Phase 08B dispatch/cancel/reconciliation yalnız backend integration boundary'sindedir.
 - Normalize layout geometri robot/RDS/map koordinatı değildir.
 
 Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) belgesindedir.
@@ -194,17 +194,28 @@ Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA
 - Aynı maddi transport retry'ı aynı idempotency key'i kullanır; çift dokunma tek in-flight submission ile sınırlanır.
 - Offline command queue yoktur. Ağ kaybında bütün mutation'lar kapanır ve context yeniden doğrulanmadan açılmaz.
 - Flutter yalnız TKG API'ye bağlanır; canlı RDS, PLC, SAP veya robot API çağrısı içermez.
-- Phase 07B kabulü 14 unit, 26 widget ve fresh PostgreSQL/gerçek API üzerinde 20 HTTP contract testiyle doğrulanmıştır.
+- Güncel Flutter kabulü 14 unit, 28 widget ve fresh PostgreSQL/gerçek API üzerinde 20 HTTP contract testiyle doğrulanmıştır.
 
-### 7.4 Phase 08A salt-okunur RDS sınırı
+### 7.4 Phase 08A salt-okunur RDS baseline'ı
 
 - Yerel RDS `http://127.0.0.1:8080` üzerinde doğrulandı; 22 physical WorkSite (3 filled, 19 unfilled) ve 0 mevcut Wind Task gözlendi.
 - Server-side `RdsReadClient` yalnız WorkSite ve Wind Task query endpoint'lerini çağırır; HTTP ile birlikte body `code/msg` doğrulanır.
 - Admin, mevcut RDS sahnesini temsil eden navigation profile'ı açıkça seçer. Ad/kod benzerliğinden profil veya slot mapping türetilmez.
 - WorkSite aynası `integration.rds_worksites`, açık slot mapping'i mevcut `integration.layout_slot_rds_mapping` tablosunu kullanır; migration yoktur.
 - `MACHINE` region ve logical WorkSite mapping reddedilir. Disabled/locked/syncFailed physical kimlik eşlenebilir fakat execution readiness false kalır.
-- Flutter'a RDS configuration verilmez. Wind Task create/stop, callback, RDS mutation ve robot hareketi yoktur.
+- Bu maddeler Phase 08A'nın kabul sınırını kaydeder. Phase 08B backend-only execution capability eklemiştir; Flutter'a RDS configuration hâlâ verilmez.
 
-## 8. Sonraki aşama sınırı
+## 8. Phase 08B execution baseline'ı
 
-Phase 08B, gerçek RDS task dispatch/stop/callback ve failure reconciliation aşamasıdır. SEER map/profile, PLC, SAP ve robot koordinatı henüz başlamamıştır. Phase 08A yalnız read/query ve TKG mirror/mapping kapsamındadır.
+- RDS mutation yalnız server-side worker ve authenticated callback boundary'sindedir; Flutter doğrudan RDS'e erişmez.
+- `taskRecordId`, TKG TransportRequest UUID'sidir. RDS task kaydı network öncesi tekil yazılır; create response kaybında aynı identity query/retry edilir.
+- Task template input'ları whitelist binding ile çözülür; global label/input adı hard-code edilmez.
+- `SENT_TO_RDS/RUNNING` iptali stop request sonrasında callback/query kanıtı bekler.
+- Terminal task kanıtı ilgili navigation profile WorkSite aynasını tazeler; callback önce terminalleştirirse başarılı-refresh audit'i oluşana kadar kalıcı worker sorgusu bu işi yeniden seçer. Unknown `content` slot EMPTY/FULL anlamına çevrilmez.
+- PLC olmadığı için `EMPTY↔FULL` değişimi ayrı device-bound load-state operasyonudur; occupancy değişmez.
+- Yerel scene'de `sim_01` ve `sim_02` simulator robotları var, fiziksel robot yok. Ancak Wind Task listesi boştur; label/input/route uydurulmadığı için controlled simulator dispatch yapılmamıştır.
+- RDS `boot.js` script artifact'i kuruldu ve non-motion validation canlı geçti: invalid key reddedildi; doğru key/random UUID/sentinel label `TASK_LABEL_NOT_FOUND`, `taskRecordExists=false` ve query count 0 verdi. Gerçek label bulunmadığından create kapısı kapalıdır.
+
+## 9. Sonraki aşama sınırı
+
+İlk live simulator kabulü için RDS'te gerçek Wind Task definition, exact input variable'lar ve açık test WorkSite çifti sağlanmalıdır. SEER map/profile/route, PLC, SAP ve robot koordinatı henüz başlamamıştır.

@@ -4,14 +4,35 @@ using TkgPda.Application;
 
 namespace TkgPda.Api;
 
-public sealed record RdsOptions(bool Enabled, string? BaseUrl, int TimeoutSeconds)
+public sealed record RdsOptions(
+    bool Enabled,
+    string? BaseUrl,
+    int TimeoutSeconds,
+    bool DispatchEnabled = false,
+    string? IntegrationKey = null,
+    string? CallbackUrl = null,
+    string? CallbackKey = null,
+    string? EmptyContentValue = null,
+    string? FullContentValue = null,
+    bool AllowInsecureRemoteHttp = false,
+    int WorkerIntervalSeconds = 3,
+    int WorkSiteFreshnessSeconds = 300)
 {
     public static RdsOptions FromConfiguration(IConfiguration configuration)
     {
         var options = new RdsOptions(
             configuration.GetValue("Rds:Enabled", false),
             configuration["Rds:BaseUrl"],
-            configuration.GetValue("Rds:TimeoutSeconds", 5));
+            configuration.GetValue("Rds:TimeoutSeconds", 5),
+            configuration.GetValue("Rds:DispatchEnabled", false),
+            configuration["Rds:IntegrationKey"],
+            configuration["Rds:CallbackUrl"],
+            configuration["Rds:CallbackKey"],
+            configuration["Rds:EmptyContentValue"],
+            configuration["Rds:FullContentValue"],
+            configuration.GetValue("Rds:AllowInsecureRemoteHttp", false),
+            configuration.GetValue("Rds:WorkerIntervalSeconds", 3),
+            configuration.GetValue("Rds:WorkSiteFreshnessSeconds", 300));
         options.Validate();
         return options;
     }
@@ -25,8 +46,17 @@ public sealed record RdsOptions(bool Enabled, string? BaseUrl, int TimeoutSecond
             throw new InvalidOperationException("Rds:TimeoutSeconds must be between 1 and 60.");
         }
 
+        if (WorkerIntervalSeconds is < 1 or > 300 || WorkSiteFreshnessSeconds is < 10 or > 86400)
+        {
+            throw new InvalidOperationException("RDS worker interval/freshness settings are outside the supported bounds.");
+        }
+
         if (!Enabled)
         {
+            if (DispatchEnabled)
+            {
+                throw new InvalidOperationException("Rds:DispatchEnabled requires Rds:Enabled.");
+            }
             return;
         }
 
@@ -35,6 +65,34 @@ public sealed record RdsOptions(bool Enabled, string? BaseUrl, int TimeoutSecond
             || !string.IsNullOrEmpty(uri.UserInfo))
         {
             throw new InvalidOperationException("Enabled RDS integration requires an absolute HTTP(S) BaseUrl without embedded credentials.");
+        }
+
+
+        if (!DispatchEnabled)
+        {
+            return;
+        }
+
+        if (IntegrationKey?.Length is < 32 or > 512 || CallbackKey?.Length is < 32 or > 512)
+        {
+            throw new InvalidOperationException("RDS dispatch requires 32-512 character IntegrationKey and CallbackKey values from environment variables or user-secrets.");
+        }
+
+        if (!Uri.TryCreate(CallbackUrl, UriKind.Absolute, out var callbackUri)
+            || (callbackUri.Scheme != Uri.UriSchemeHttp && callbackUri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(callbackUri.UserInfo))
+        {
+            throw new InvalidOperationException("RDS dispatch requires an absolute callback HTTP(S) URL without embedded credentials.");
+        }
+
+        if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback && !AllowInsecureRemoteHttp)
+        {
+            throw new InvalidOperationException("RDS dispatch refuses insecure non-loopback HTTP unless the explicit unsafe-development override is enabled.");
+        }
+
+        if (callbackUri.Scheme == Uri.UriSchemeHttp && !callbackUri.IsLoopback && !AllowInsecureRemoteHttp)
+        {
+            throw new InvalidOperationException("RDS callbacks refuse insecure non-loopback HTTP unless the explicit unsafe-development override is enabled.");
         }
     }
 }
@@ -136,12 +194,13 @@ public sealed class RdsReadClient(
             foreach (var item in pageList.EnumerateArray())
             {
                 tasks.Add(new RdsWindTaskSnapshot(
-                    Text(item, "taskRecordId"),
-                    Text(item, "taskLabel"),
+                    Text(item, "taskRecordId") ?? Text(item, "id"),
+                    Text(item, "taskLabel") ?? Text(item, "defLabel"),
                     Number(item, "status"),
                     Text(item, "agvId"),
                     Text(item, "outOrderNo"),
-                    item.Clone()));
+                    item.Clone(),
+                    Text(item, "endedReason", preserveEmpty: true)));
             }
         }
         else if (data.TryGetProperty("pageList", out pageList) && pageList.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)

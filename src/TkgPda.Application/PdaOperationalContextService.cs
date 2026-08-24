@@ -117,7 +117,72 @@ public static class PdaOperationalContextPolicy
             slot.RuntimeUpdatedAt,
             slot.RdsWorkSite,
             readiness,
-            EvaluateActions(slot, actor, canOperate, hasActiveRequest));
+            EvaluateActions(slot, actor, canOperate, hasActiveRequest),
+            EvaluateLoadStateActions(slot, actor, canOperate, hasActiveRequest));
+    }
+
+    public static IReadOnlyList<PdaAvailableActionRecord> EvaluateLoadStateActions(
+        SlotContextDataRecord slot,
+        PdaActorContext actor,
+        bool canOperate,
+        bool hasActiveRequest) =>
+        [
+            EvaluateLoadStateAction(slot, actor, canOperate, hasActiveRequest, LoadState.Full),
+            EvaluateLoadStateAction(slot, actor, canOperate, hasActiveRequest, LoadState.Empty)
+        ];
+
+    private static PdaAvailableActionRecord EvaluateLoadStateAction(
+        SlotContextDataRecord slot,
+        PdaActorContext actor,
+        bool canOperate,
+        bool hasActiveRequest,
+        LoadState target)
+    {
+        var action = target == LoadState.Full ? "MARK_FULL" : "MARK_EMPTY";
+        if (!actor.IsDeviceBound)
+        {
+            return Disabled(action, "PDA_DEVICE_REQUIRED", "Bu işlem yalnız cihaz bağlı PDA oturumunda kullanılabilir.");
+        }
+
+        var roleAllowed = actor.Roles.Contains(KnownRoleCodes.Admin)
+            || actor.Roles.Contains(KnownRoleCodes.Supervisor)
+            || actor.Roles.Contains(KnownRoleCodes.LineOperator);
+        if (!roleAllowed)
+        {
+            return Disabled(action, "OPERATION_NOT_ALLOWED_FOR_ROLE", "Rolünüz kasa yük durumunu değiştirmeye yetkili değildir.");
+        }
+
+        if (!canOperate)
+        {
+            return Disabled(action, "MACHINE_OPERATION_NOT_PERMITTED", "Bu makinede operasyon yetkiniz bulunmuyor.");
+        }
+
+        if (slot.Role == "MACHINE")
+        {
+            return Disabled(action, "MACHINE_REGION_FORBIDDEN", "Makine/hücre bölgelerinde kasa yük durumu değiştirilemez.");
+        }
+
+        if (!slot.IsEnabled)
+        {
+            return Disabled(action, "SLOT_DISABLED", "Bu lojistik konumu aktif değildir.");
+        }
+
+        if (hasActiveRequest)
+        {
+            return Disabled(action, "SLOT_BUSY", "Bu lojistik konumunu kullanan aktif bir taşıma talebi bulunuyor.");
+        }
+
+        if (slot.OccupancyState != "OCCUPIED")
+        {
+            return Disabled(action, "OCCUPIED_SLOT_REQUIRED", "Yük durumu yalnız dolu bir konum için bildirilebilir.");
+        }
+
+        if (slot.LoadState == target.ToDatabase())
+        {
+            return Disabled(action, "LOAD_STATE_ALREADY_REPORTED", "Kasa zaten bu yük durumundadır.");
+        }
+
+        return new(action, true, null, null);
     }
 
     private static PdaExecutionReadinessRecord ExecutionReadiness(RdsWorkSiteProjectionRecord workSite)
@@ -264,7 +329,9 @@ public static class PdaOperationalContextPolicy
             return Disabled("CANCEL", "CANCELLATION_NOT_ALLOWED_FOR_ROLE", "Bu talebi iptal etme yetkiniz bulunmuyor.");
         }
 
-        return TransportStateMachine.CanCancelBeforeExecution(request.Status)
+        return request.Status is TransportRequestStatus.SentToRds or TransportRequestStatus.Running
+            ? new PdaAvailableActionRecord("CANCEL", true, null, null)
+            : TransportStateMachine.CanCancelBeforeExecution(request.Status)
             ? new PdaAvailableActionRecord("CANCEL", true, null, null)
             : Disabled(
                 "CANCEL",

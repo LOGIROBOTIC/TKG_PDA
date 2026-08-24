@@ -20,6 +20,8 @@ import type {
   RdsSlotMapping,
   RdsSyncResult,
   RdsWorkSite,
+  RdsTaskTemplate,
+  RdsTaskTemplateValidation,
   Slot,
   SlotDraft,
   UserDraft,
@@ -198,6 +200,10 @@ export const createAdminApi = (token: string) => ({
     (await request<RdsSlotMapping>(`/api/v1/admin/layout-slots/${slotId}/rds-mapping`, { method: 'PUT', token, body: { rdsWorksiteId } })).data,
   removeRdsSlotMapping: async (slotId: string) =>
     (await request<void>(`/api/v1/admin/layout-slots/${slotId}/rds-mapping`, { method: 'DELETE', token })).data,
+  rdsTaskTemplates: async (signal?: AbortSignal) =>
+    (await request<RdsTaskTemplate[]>('/api/v1/admin/rds/task-templates', { token, signal })).data,
+  validateRdsTaskTemplate: async (taskTemplateId: string) =>
+    (await request<RdsTaskTemplateValidation>('/api/v1/admin/rds/task-templates/validate', { method: 'POST', token, body: { taskTemplateId } })).data,
 })
 
 export type AdminApi = ReturnType<typeof createAdminApi>

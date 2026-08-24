@@ -14,6 +14,7 @@ public sealed class WorkflowRuleException : InvalidOperationException
 public static class WorkflowErrorCodes
 {
     public const string CancellationAfterExecutionDeferred = "CANCELLATION_AFTER_EXECUTION_DEFERRED";
+    public const string RdsCancellationPending = "RDS_CANCELLATION_PENDING";
 }
 
 public sealed record SlotState(
@@ -100,6 +101,26 @@ public sealed record TransportRequestSnapshot(
 public sealed record CreateTransportResult(TransportRequestSnapshot Request, bool WasIdempotentReplay);
 
 public sealed record CancelTransportResult(TransportRequestSnapshot Request, bool WasAlreadyCancelled);
+
+public sealed record LoadStateUpdateRequest(
+    Guid MachineId,
+    Guid SlotId,
+    LoadState TargetLoadState,
+    Guid ActorUserId);
+
+public sealed record LoadStateUpdateResult(
+    Guid MachineId,
+    Guid SlotId,
+    OccupancyState OccupancyState,
+    LoadState LoadState,
+    long RowVersion,
+    bool WasIdempotentReplay);
+
+public sealed record ExecutionOutcome(
+    TransportRequestStatus Status,
+    string? FailureCode = null,
+    string? FailureMessage = null,
+    string? EvidenceType = null);
 
 public sealed record VariantSelection(
     Guid MachineId,

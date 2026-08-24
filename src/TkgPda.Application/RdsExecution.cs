@@ -1,0 +1,715 @@
+using System.Text.Json;
+using TkgPda.Domain;
+
+namespace TkgPda.Application;
+
+public sealed record RdsExecutionSettings(
+    bool DispatchEnabled,
+    TimeSpan WorkSiteFreshness,
+    string? EmptyContentValue,
+    string? FullContentValue);
+
+public sealed record RdsDispatchEndpoint(
+    Guid? SlotId,
+    string? SlotCode,
+    string? SlotGroupCode,
+    string? SlotRole,
+    string? SiteId,
+    int? Type,
+    int? Filled,
+    int? Locked,
+    int? Disabled,
+    int? SyncFailed,
+    DateTimeOffset? LastSyncAt,
+    bool IsMapped);
+
+public sealed record RdsDispatchContext(
+    TransportRequestSnapshot Request,
+    string MachineCode,
+    string VariantCode,
+    string? ProductGroupCode,
+    string? PartCode,
+    string? ContainerCode,
+    Guid TaskTemplateId,
+    string? RdsTaskLabel,
+    int TemplatePriority,
+    JsonElement TemplateConfig,
+    RdsDispatchEndpoint Source,
+    RdsDispatchEndpoint Destination);
+
+public sealed record RdsTaskProjection(
+    Guid TransportRequestId,
+    string TaskRecordId,
+    string? TaskLabel,
+    int? Status,
+    string? AgvId,
+    string? OutOrderNo,
+    string? EndedReason,
+    JsonElement RequestPayload,
+    JsonElement ResponsePayload,
+    JsonElement LastStatus,
+    bool CancellationRequested,
+    TransportRequestStatus RequestStatus);
+
+public sealed record RdsTaskTemplateSummary(
+    Guid Id,
+    Guid VariantId,
+    string VariantCode,
+    Guid? ProductGroupId,
+    string? ProductGroupCode,
+    string Operation,
+    string? RdsTaskLabel,
+    int Priority,
+    JsonElement Config,
+    bool IsActive);
+
+public sealed record RdsMappedWorkSite(
+    Guid SlotId,
+    Guid WorkSiteId,
+    string SiteId,
+    int? Type,
+    int? Disabled,
+    int? SyncFailed,
+    DateTimeOffset? LastSyncAt);
+
+public interface IRdsExecutionLease : IAsyncDisposable;
+
+public interface IRdsExecutionStore
+{
+    Task<IReadOnlyList<Guid>> ListQueuedRequestIdsAsync(int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RdsTaskProjection>> ListActiveTasksAsync(int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> ListPendingWorkSiteRefreshRequestIdsAsync(int limit, CancellationToken cancellationToken = default);
+    Task<IRdsExecutionLease?> TryAcquireRequestLeaseAsync(Guid requestId, CancellationToken cancellationToken = default);
+    Task<RdsDispatchContext?> GetDispatchContextAsync(Guid requestId, CancellationToken cancellationToken = default);
+    Task<TransportRequestSnapshot?> FindRequestAsync(Guid requestId, CancellationToken cancellationToken = default);
+    Task<RdsTaskProjection?> FindTaskByRequestAsync(Guid requestId, CancellationToken cancellationToken = default);
+    Task<RdsTaskProjection?> FindTaskByRecordIdAsync(string taskRecordId, CancellationToken cancellationToken = default);
+    Task EnsureTaskRecordAsync(Guid requestId, string taskRecordId, string taskLabel, JsonElement requestPayload, CancellationToken cancellationToken = default);
+    Task RecordDispatchResponseAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset syncedAt, CancellationToken cancellationToken = default);
+    Task RecordTaskStatusAsync(Guid requestId, RdsWindTaskSnapshot task, DateTimeOffset syncedAt, CancellationToken cancellationToken = default);
+    Task MarkCancellationRequestedAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset requestedAt, CancellationToken cancellationToken = default);
+    Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed record RdsValidateTransportRequest(
+    string TaskRecordId,
+    string TaskLabel,
+    IReadOnlyDictionary<string, object?> InputParams);
+
+public sealed record RdsValidationResult(
+    bool Validated,
+    bool TaskLabelExists,
+    bool TaskRecordExists,
+    int Code,
+    string Message,
+    JsonElement RawResponse);
+
+public sealed record RdsCreateTransportRequest(
+    string TaskRecordId,
+    string TaskLabel,
+    int Priority,
+    IReadOnlyDictionary<string, object?> InputParams);
+
+public sealed record RdsCreateTransportResult(
+    bool Accepted,
+    bool IdempotentReplay,
+    int Code,
+    string Message,
+    JsonElement RawResponse);
+
+public sealed record RdsStopTaskResult(int Code, string Message, JsonElement RawResponse);
+
+public sealed record RdsContentUpdateResult(int Code, string Message, JsonElement RawResponse);
+
+public interface IRdsExecutionClient
+{
+    bool DispatchEnabled { get; }
+    Task<RdsValidationResult> ValidateTransportAsync(RdsValidateTransportRequest request, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCreateTransportResult> CreateTransportAsync(RdsCreateTransportRequest request, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsStopTaskResult> StopTaskAsync(string taskRecordId, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsContentUpdateResult> UpdateContentAsync(string siteId, string content, Guid correlationId, CancellationToken cancellationToken = default);
+}
+
+public sealed class RdsExecutionException(string code, string message, Exception? innerException = null) : InvalidOperationException(message, innerException)
+{
+    public string Code { get; } = code;
+}
+
+public sealed record RdsDispatchAttemptResult(
+    Guid RequestId,
+    string TaskRecordId,
+    bool Dispatched,
+    bool IdempotentReplay,
+    string Code,
+    string Message);
+
+public sealed record RdsCancellationResult(
+    TransportRequestSnapshot Request,
+    bool PendingRdsConfirmation,
+    bool WasIdempotentReplay);
+
+public sealed record RdsLoadContentSyncResult(
+    string Status,
+    string? SiteId,
+    string? ConfiguredContentValue,
+    string? Message);
+
+public sealed record RdsCallbackEvent(string EventType, JsonElement RawPayload, DateTimeOffset? EventTimestamp);
+
+public sealed record RdsCallbackResult(bool Accepted, bool Mutated, string Code, string Message, string? TaskRecordId);
+
+public static class RdsTaskInputBinder
+{
+    private static readonly HashSet<string> SupportedSources = new(StringComparer.Ordinal)
+    {
+        "SOURCE_RDS_SITE_ID",
+        "DESTINATION_RDS_SITE_ID",
+        "SOURCE_SLOT_GROUP_CODE",
+        "DESTINATION_SLOT_GROUP_CODE",
+        "MACHINE_CODE",
+        "VARIANT_CODE",
+        "PRODUCT_GROUP_CODE",
+        "PART_CODE",
+        "CONTAINER_CODE",
+        "REQUEST_ID",
+        "REQUEST_NO",
+        "TASK_TYPE",
+        "LITERAL"
+    };
+
+    public static IReadOnlyDictionary<string, object?> Bind(RdsDispatchContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (context.TemplateConfig.ValueKind != JsonValueKind.Object
+            || !context.TemplateConfig.TryGetProperty("rdsInputBindings", out var bindings)
+            || bindings.ValueKind != JsonValueKind.Array)
+        {
+            throw new RdsExecutionException("RDS_TASK_BINDINGS_REQUIRED", "The task template must define an rdsInputBindings array.");
+        }
+
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var binding in bindings.EnumerateArray())
+        {
+            if (binding.ValueKind != JsonValueKind.Object)
+            {
+                throw new RdsExecutionException("RDS_TASK_BINDING_INVALID", "Every RDS input binding must be an object.");
+            }
+
+            var param = Text(binding, "param");
+            var source = Text(binding, "source");
+            var required = binding.TryGetProperty("required", out var requiredElement)
+                && requiredElement.ValueKind == JsonValueKind.True;
+            if (string.IsNullOrWhiteSpace(param) || param.Length > 200 || string.IsNullOrWhiteSpace(source) || !SupportedSources.Contains(source))
+            {
+                throw new RdsExecutionException("RDS_TASK_BINDING_INVALID", "An RDS input binding contains an invalid param or unsupported source.");
+            }
+
+            if (!values.TryAdd(param, Resolve(context, binding, source)))
+            {
+                throw new RdsExecutionException("RDS_TASK_BINDING_DUPLICATE", $"RDS input parameter '{param}' is configured more than once.");
+            }
+
+            if (required && IsMissing(values[param]))
+            {
+                throw new RdsExecutionException("RDS_TASK_INPUT_UNRESOLVED", $"Required RDS input '{param}' could not be resolved from {source}.");
+            }
+        }
+
+        if (values.Count == 0)
+        {
+            throw new RdsExecutionException("RDS_TASK_BINDINGS_REQUIRED", "At least one explicit RDS input binding is required.");
+        }
+
+        return values;
+    }
+
+    private static object? Resolve(RdsDispatchContext context, JsonElement binding, string source) => source switch
+    {
+        "SOURCE_RDS_SITE_ID" => context.Source.SiteId,
+        "DESTINATION_RDS_SITE_ID" => context.Destination.SiteId,
+        "SOURCE_SLOT_GROUP_CODE" => context.Source.SlotGroupCode,
+        "DESTINATION_SLOT_GROUP_CODE" => context.Destination.SlotGroupCode,
+        "MACHINE_CODE" => context.MachineCode,
+        "VARIANT_CODE" => context.VariantCode,
+        "PRODUCT_GROUP_CODE" => context.ProductGroupCode,
+        "PART_CODE" => context.PartCode,
+        "CONTAINER_CODE" => context.ContainerCode,
+        "REQUEST_ID" => context.Request.Id.ToString(),
+        "REQUEST_NO" => context.Request.RequestNo,
+        "TASK_TYPE" => context.Request.TaskType.ToDatabase(),
+        "LITERAL" => binding.TryGetProperty("value", out var literal) ? JsonLiteral(literal) : null,
+        _ => null
+    };
+
+    private static object? JsonLiteral(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => value.GetString(),
+        JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
+        JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Null => null,
+        _ => throw new RdsExecutionException("RDS_TASK_BINDING_INVALID", "LITERAL supports only scalar JSON values.")
+    };
+
+    private static bool IsMissing(object? value) => value is null || value is string text && string.IsNullOrWhiteSpace(text);
+
+    private static string? Text(JsonElement value, string name) =>
+        value.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()?.Trim()
+            : null;
+}
+
+public sealed class RdsExecutionCoordinator(
+    IRdsExecutionStore store,
+    IRdsExecutionClient executionClient,
+    IRdsReadClient readClient,
+    IRdsWorkSiteReconciler workSiteReconciler,
+    TransportWorkflowService workflow,
+    RdsExecutionSettings settings,
+    TimeProvider timeProvider)
+{
+    public async Task<IReadOnlyList<RdsDispatchAttemptResult>> DispatchQueuedAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        if (!settings.DispatchEnabled || !executionClient.DispatchEnabled)
+        {
+            return [];
+        }
+
+        var ids = await store.ListQueuedRequestIdsAsync(Math.Clamp(limit, 1, 100), cancellationToken);
+        var results = new List<RdsDispatchAttemptResult>();
+        foreach (var id in ids)
+        {
+            var correlationId = Guid.NewGuid();
+            try
+            {
+                var result = await DispatchOneAsync(id, correlationId, cancellationToken);
+                if (result is not null)
+                {
+                    results.Add(result);
+                }
+            }
+            catch (RdsExecutionException error)
+            {
+                await store.WriteExecutionAuditAsync(id, "RDS_DISPATCH_BLOCKED", error.Code, error.Message, correlationId, cancellationToken);
+                results.Add(new(id, id.ToString(), false, false, error.Code, error.Message));
+            }
+            catch (RdsReadException error)
+            {
+                await store.WriteExecutionAuditAsync(id, "RDS_DISPATCH_DEFERRED", error.Code, error.Message, correlationId, cancellationToken);
+                results.Add(new(id, id.ToString(), false, false, error.Code, "RDS read evidence is unavailable; the request remains queued."));
+            }
+        }
+
+        return results;
+    }
+
+    public async Task<RdsDispatchAttemptResult?> DispatchOneAsync(Guid requestId, Guid correlationId, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await store.TryAcquireRequestLeaseAsync(requestId, cancellationToken);
+        if (lease is null)
+        {
+            return null;
+        }
+
+        var context = await store.GetDispatchContextAsync(requestId, cancellationToken)
+            ?? throw new RdsExecutionException("RDS_DISPATCH_CONTEXT_NOT_FOUND", "The queued transport request no longer has a dispatch context.");
+        if (context.Request.Status != TransportRequestStatus.Queued)
+        {
+            return new(requestId, requestId.ToString(), false, false, "REQUEST_NOT_QUEUED", "The request is no longer queued.");
+        }
+
+        var taskLabel = context.RdsTaskLabel?.Trim();
+        if (string.IsNullOrWhiteSpace(taskLabel))
+        {
+            return new(requestId, requestId.ToString(), false, false, "RDS_TASK_TEMPLATE_NOT_READY", "The matching task template has no RDS task label.");
+        }
+
+        var inputParams = RdsTaskInputBinder.Bind(context);
+        ValidateReferencedEndpoints(context, inputParams);
+        var taskRecordId = requestId.ToString();
+        var createRequest = new RdsCreateTransportRequest(taskRecordId, taskLabel, context.TemplatePriority, inputParams);
+        var requestPayload = JsonSerializer.SerializeToElement(createRequest);
+        await store.EnsureTaskRecordAsync(requestId, taskRecordId, taskLabel, requestPayload, cancellationToken);
+        await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_ATTEMPTED", "RDS_CREATE_REQUEST", "Dispatch was attempted with the immutable TKG request identity.", correlationId, cancellationToken);
+
+        RdsCreateTransportResult? createResult = null;
+        try
+        {
+            createResult = await executionClient.CreateTransportAsync(createRequest, correlationId, cancellationToken);
+            await store.RecordDispatchResponseAsync(requestId, createResult.RawResponse, timeProvider.GetUtcNow(), cancellationToken);
+        }
+        catch (RdsExecutionException)
+        {
+            // A lost HTTP response is ambiguous. Query the same taskRecordId before deciding whether to retry.
+        }
+
+        var query = await readClient.QueryWindTasksAsync(new(1, 100, TaskRecordId: taskRecordId), correlationId, cancellationToken);
+        var exact = query.Data.Tasks.Where(task => string.Equals(task.TaskRecordId, taskRecordId, StringComparison.Ordinal)).ToArray();
+        if (exact.Length > 1 || query.Data.TotalCount > 1)
+        {
+            throw new RdsExecutionException("RDS_DUPLICATE_TASK_IDENTITY", "RDS returned more than one task for the immutable TKG taskRecordId.");
+        }
+
+        if (exact.Length == 0)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_UNCONFIRMED", "RDS_TASK_NOT_YET_OBSERVED", "The create response was not treated as execution proof; the request remains queued.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, createResult?.IdempotentReplay ?? false, "RDS_TASK_NOT_YET_OBSERVED", "Create was not treated as execution proof; reconciliation will retry the same identity.");
+        }
+
+        await store.RecordTaskStatusAsync(requestId, exact[0], query.ReadAt, cancellationToken);
+        await workflow.RecordExecutionTransitionAsync(requestId, TransportRequestStatus.SentToRds, cancellationToken);
+        await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_CONFIRMED", "RDS_TASK_OBSERVED", "RDS task existence was proven by taskRecordId.", correlationId, cancellationToken);
+        return new(requestId, taskRecordId, true, createResult?.IdempotentReplay ?? true, "RDS_TASK_OBSERVED", "RDS task existence was proven by taskRecordId.");
+    }
+
+    public async Task ReconcileAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        var boundedLimit = Math.Clamp(limit, 1, 500);
+        var tasks = await store.ListActiveTasksAsync(boundedLimit, cancellationToken);
+        foreach (var projection in tasks)
+        {
+            await using var lease = await store.TryAcquireRequestLeaseAsync(projection.TransportRequestId, cancellationToken);
+            if (lease is null)
+            {
+                continue;
+            }
+
+            var correlationId = Guid.NewGuid();
+            try
+            {
+                var query = await readClient.QueryWindTasksAsync(new(1, 100, TaskRecordId: projection.TaskRecordId), correlationId, cancellationToken);
+                var exact = query.Data.Tasks.Where(task => string.Equals(task.TaskRecordId, projection.TaskRecordId, StringComparison.Ordinal)).ToArray();
+                if (exact.Length == 1)
+                {
+                    await ApplyTaskStatusAsync(projection, exact[0], query.ReadAt, "RECONCILIATION", cancellationToken);
+                    if (IsTerminalRdsStatus(exact[0].Status))
+                    {
+                        await RefreshRelevantWorkSitesAsync(projection.TransportRequestId, correlationId, cancellationToken);
+                    }
+                }
+                else if (exact.Length > 1 || query.Data.TotalCount > 1)
+                {
+                    throw new RdsExecutionException("RDS_DUPLICATE_TASK_IDENTITY", "RDS returned duplicate task instances for one taskRecordId.");
+                }
+            }
+            catch (RdsExecutionException error)
+            {
+                await store.WriteExecutionAuditAsync(projection.TransportRequestId, "RDS_RECONCILIATION_BLOCKED", error.Code, error.Message, correlationId, cancellationToken);
+            }
+            catch (RdsReadException error)
+            {
+                await store.WriteExecutionAuditAsync(projection.TransportRequestId, "RDS_RECONCILIATION_DEFERRED", error.Code, error.Message, correlationId, cancellationToken);
+            }
+        }
+
+        var pendingRefreshes = await store.ListPendingWorkSiteRefreshRequestIdsAsync(boundedLimit, cancellationToken);
+        foreach (var requestId in pendingRefreshes)
+        {
+            await using var lease = await store.TryAcquireRequestLeaseAsync(requestId, cancellationToken);
+            if (lease is null)
+            {
+                continue;
+            }
+
+            await RefreshRelevantWorkSitesAsync(requestId, Guid.NewGuid(), cancellationToken);
+        }
+    }
+
+    public async Task<RdsCancellationResult> CancelAsync(Guid requestId, Guid? actorUserId, Guid correlationId, CancellationToken cancellationToken = default)
+    {
+        var request = await store.FindRequestAsync(requestId, cancellationToken)
+            ?? throw new WorkflowRuleException("REQUEST_NOT_FOUND", "The transport request does not exist.");
+        if (TransportStateMachine.CanCancelBeforeExecution(request.Status) || request.Status == TransportRequestStatus.Cancelled)
+        {
+            var local = await workflow.CancelAsync(requestId, actorUserId, cancellationToken);
+            return new(local.Request, false, local.WasAlreadyCancelled);
+        }
+
+        if (request.Status is not (TransportRequestStatus.SentToRds or TransportRequestStatus.Running))
+        {
+            throw new WorkflowRuleException("CANCELLATION_NOT_ALLOWED", "The transport request cannot be cancelled from its current state.");
+        }
+
+        await using var lease = await store.TryAcquireRequestLeaseAsync(requestId, cancellationToken);
+        if (lease is null)
+        {
+            return new(request, true, true);
+        }
+
+        var task = await store.FindTaskByRequestAsync(requestId, cancellationToken)
+            ?? throw new RdsExecutionException("RDS_TASK_NOT_FOUND", "The dispatched request has no persisted RDS task identity.");
+        RdsStopTaskResult? stopResult = null;
+        try
+        {
+            stopResult = await executionClient.StopTaskAsync(task.TaskRecordId, correlationId, cancellationToken);
+        }
+        catch (RdsExecutionException)
+        {
+            // The stop outcome is ambiguous. Persist intent and let reconciliation prove the physical result.
+        }
+
+        await store.MarkCancellationRequestedAsync(
+            requestId,
+            stopResult?.RawResponse ?? JsonSerializer.SerializeToElement(new { code = "AMBIGUOUS_STOP_RESPONSE" }),
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+
+        var query = await readClient.QueryWindTasksAsync(new(1, 100, TaskRecordId: task.TaskRecordId), correlationId, cancellationToken);
+        var exact = query.Data.Tasks.SingleOrDefault(candidate => string.Equals(candidate.TaskRecordId, task.TaskRecordId, StringComparison.Ordinal));
+        if (exact?.Status == 1001)
+        {
+            await store.RecordTaskStatusAsync(requestId, exact, query.ReadAt, cancellationToken);
+            var cancelled = await workflow.RecordExecutionOutcomeAsync(
+                requestId,
+                new(TransportRequestStatus.Cancelled, EvidenceType: "RDS_QUERY_AFTER_STOP"),
+                cancellationToken);
+            return new(cancelled, false, false);
+        }
+
+        return new(request, true, stopResult is null);
+    }
+
+    public async Task<RdsCallbackResult> ProcessCallbackAsync(RdsCallbackEvent callback, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        var eventType = callback.EventType.Trim();
+        if (eventType is not ("taskDone" or "taskFailed" or "taskStopped" or "workSiteChanged"))
+        {
+            return new(true, false, "RDS_EVENT_IGNORED", "Unknown callback events do not mutate domain state.", null);
+        }
+
+        if (eventType == "workSiteChanged")
+        {
+            return new(true, false, "RDS_WORKSITE_EVENT_ACCEPTED", "WorkSite evidence will be refreshed by the read-side synchronization path.", null);
+        }
+
+        var taskRecordId = FindText(callback.RawPayload, "taskRecordId") ?? FindText(callback.RawPayload, "id");
+        if (string.IsNullOrWhiteSpace(taskRecordId))
+        {
+            return new(true, false, "RDS_TASK_ID_UNRESOLVED", "The callback did not expose a taskRecordId.", null);
+        }
+
+        var projection = await store.FindTaskByRecordIdAsync(taskRecordId, cancellationToken);
+        if (projection is null)
+        {
+            return new(true, false, "RDS_TASK_UNKNOWN", "The callback identity is not owned by TKG.", taskRecordId);
+        }
+
+        var status = eventType switch
+        {
+            "taskDone" => 1003,
+            "taskFailed" => Number(callback.RawPayload, "status") is 1004 or 1005 or 1006 ? Number(callback.RawPayload, "status")!.Value : 1004,
+            "taskStopped" => 1001,
+            _ => (int?)null
+        };
+        var task = new RdsWindTaskSnapshot(
+            taskRecordId,
+            FindText(callback.RawPayload, "taskLabel") ?? projection.TaskLabel,
+            status,
+            FindText(callback.RawPayload, "agvId"),
+            FindText(callback.RawPayload, "outOrderNo"),
+            callback.RawPayload.Clone(),
+            FindText(callback.RawPayload, "endedReason"));
+        await ApplyTaskStatusAsync(projection, task, timeProvider.GetUtcNow(), $"CALLBACK_{eventType}", cancellationToken);
+        await store.WriteExecutionAuditAsync(
+            projection.TransportRequestId,
+            "RDS_CALLBACK_APPLIED",
+            eventType,
+            "Authenticated RDS callback evidence was applied idempotently.",
+            Guid.NewGuid(),
+            cancellationToken);
+        return new(true, true, "RDS_EVENT_APPLIED", "The callback was applied idempotently.", taskRecordId);
+    }
+
+    public async Task<RdsLoadContentSyncResult> SynchronizeLoadContentAsync(Guid slotId, LoadState loadState, Guid correlationId, CancellationToken cancellationToken = default)
+    {
+        var configured = loadState switch
+        {
+            LoadState.Empty => settings.EmptyContentValue,
+            LoadState.Full => settings.FullContentValue,
+            _ => null
+        };
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return new("NOT_CONFIGURED", null, null, "TKG load state was updated; RDS content semantics are not configured.");
+        }
+
+        var site = await store.FindMappedWorkSiteAsync(slotId, cancellationToken);
+        if (site is null)
+        {
+            return new("NOT_MAPPED", null, configured, "TKG load state was updated; this slot has no RDS WorkSite mapping.");
+        }
+
+        if (site.Type != 1 || site.Disabled == 1 || site.SyncFailed == 1)
+        {
+            return new("NOT_READY", site.SiteId, configured, "TKG load state was updated; the mapped physical WorkSite is not execution-ready.");
+        }
+
+        await executionClient.UpdateContentAsync(site.SiteId, configured, correlationId, cancellationToken);
+        return new("SYNCHRONIZED", site.SiteId, configured, "Only RDS content was changed; filled was not modified.");
+    }
+
+    private async Task ApplyTaskStatusAsync(
+        RdsTaskProjection projection,
+        RdsWindTaskSnapshot task,
+        DateTimeOffset syncedAt,
+        string evidence,
+        CancellationToken cancellationToken)
+    {
+        await store.RecordTaskStatusAsync(projection.TransportRequestId, task, syncedAt, cancellationToken);
+        switch (task.Status)
+        {
+            case 1000:
+                if (projection.RequestStatus == TransportRequestStatus.SentToRds)
+                {
+                    await workflow.RecordExecutionTransitionAsync(projection.TransportRequestId, TransportRequestStatus.Running, cancellationToken);
+                }
+                break;
+            case 1002:
+                break;
+            case 1003:
+                if (projection.RequestStatus == TransportRequestStatus.SentToRds)
+                {
+                    await workflow.RecordExecutionTransitionAsync(projection.TransportRequestId, TransportRequestStatus.Running, cancellationToken);
+                }
+                if (projection.RequestStatus is TransportRequestStatus.SentToRds or TransportRequestStatus.Running)
+                {
+                    await workflow.RecordExecutionTransitionAsync(projection.TransportRequestId, TransportRequestStatus.Completed, cancellationToken);
+                }
+                break;
+            case 1001:
+                await workflow.RecordExecutionOutcomeAsync(
+                    projection.TransportRequestId,
+                    projection.CancellationRequested
+                        ? new(TransportRequestStatus.Cancelled, EvidenceType: evidence)
+                        : new(TransportRequestStatus.Failed, "RDS_TASK_TERMINATED", task.EndedReason, evidence),
+                    cancellationToken);
+                break;
+            case 1004:
+            case 1005:
+            case 1006:
+                await workflow.RecordExecutionOutcomeAsync(
+                    projection.TransportRequestId,
+                    new(TransportRequestStatus.Failed, $"RDS_TASK_STATUS_{task.Status}", task.EndedReason, evidence),
+                    cancellationToken);
+                break;
+        }
+    }
+
+    private async Task RefreshRelevantWorkSitesAsync(
+        Guid requestId,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        var request = await store.FindRequestAsync(requestId, cancellationToken);
+        if (request?.NavigationProfileId is not Guid navigationProfileId)
+        {
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_WORKSITE_REFRESH_SKIPPED",
+                "NAVIGATION_PROFILE_NOT_CONFIGURED",
+                "Terminal task evidence was applied, but the request has no navigation profile to refresh.",
+                correlationId,
+                cancellationToken);
+            return;
+        }
+
+        try
+        {
+            await workSiteReconciler.SyncWorkSitesAsync(navigationProfileId, correlationId, cancellationToken);
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_WORKSITE_REFRESHED",
+                "RDS_WORKSITE_EVIDENCE_REFRESHED",
+                "Relevant RDS WorkSite evidence was refreshed after a terminal task status.",
+                correlationId,
+                cancellationToken);
+        }
+        catch (RdsReadException error)
+        {
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_WORKSITE_REFRESH_DEFERRED",
+                error.Code,
+                "Terminal workflow evidence was retained; WorkSite refresh will retry without guessing physical state.",
+                correlationId,
+                cancellationToken);
+        }
+        catch (RdsIntegrationRuleException error)
+        {
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_WORKSITE_REFRESH_DEFERRED",
+                error.Code,
+                "Terminal workflow evidence was retained; WorkSite refresh will retry without guessing physical state.",
+                correlationId,
+                cancellationToken);
+        }
+    }
+
+    private static bool IsTerminalRdsStatus(int? status) => status is 1001 or 1003 or 1004 or 1005 or 1006;
+
+    private void ValidateReferencedEndpoints(RdsDispatchContext context, IReadOnlyDictionary<string, object?> inputParams)
+    {
+        if (context.Source.SlotRole == "MACHINE" || context.Destination.SlotRole == "MACHINE")
+        {
+            throw new RdsExecutionException("MACHINE_REGION_FORBIDDEN", "Display-only MACHINE regions can never reach RDS dispatch.");
+        }
+
+        var raw = context.TemplateConfig.GetProperty("rdsInputBindings");
+        foreach (var binding in raw.EnumerateArray())
+        {
+            var source = binding.GetProperty("source").GetString();
+            if (source == "SOURCE_RDS_SITE_ID") ValidateEndpoint(context.Source, "source");
+            if (source == "DESTINATION_RDS_SITE_ID") ValidateEndpoint(context.Destination, "destination");
+        }
+
+        _ = inputParams;
+    }
+
+    private void ValidateEndpoint(RdsDispatchEndpoint endpoint, string name)
+    {
+        if (endpoint.SlotRole == "MACHINE") throw new RdsExecutionException("MACHINE_REGION_FORBIDDEN", $"The {name} endpoint is a display-only MACHINE region.");
+        if (!endpoint.IsMapped || string.IsNullOrWhiteSpace(endpoint.SiteId)) throw new RdsExecutionException("RDS_WORKSITE_NOT_MAPPED", $"The {name} endpoint has no explicit WorkSite mapping.");
+        if (endpoint.Type != 1) throw new RdsExecutionException("RDS_WORKSITE_NOT_PHYSICAL", $"The {name} WorkSite is not physical.");
+        if (endpoint.Disabled == 1) throw new RdsExecutionException("RDS_WORKSITE_DISABLED", $"The {name} WorkSite is disabled.");
+        if (endpoint.SyncFailed == 1) throw new RdsExecutionException("RDS_WORKSITE_SYNC_FAILED", $"The {name} WorkSite reports syncFailed.");
+        if (endpoint.Locked == 1) throw new RdsExecutionException("RDS_WORKSITE_LOCKED", $"The {name} WorkSite is locked.");
+        if (!endpoint.LastSyncAt.HasValue || timeProvider.GetUtcNow() - endpoint.LastSyncAt.Value > settings.WorkSiteFreshness)
+            throw new RdsExecutionException("RDS_WORKSITE_STALE", $"The {name} WorkSite evidence is stale.");
+    }
+
+    private static string? FindText(JsonElement value, string name)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in value.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() : property.Value.ToString();
+                }
+                var nested = FindText(property.Value, name);
+                if (!string.IsNullOrWhiteSpace(nested)) return nested;
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                var nested = FindText(item, name);
+                if (!string.IsNullOrWhiteSpace(nested)) return nested;
+            }
+        }
+        return null;
+    }
+
+    private static int? Number(JsonElement value, string name)
+    {
+        var text = FindText(value, name);
+        return int.TryParse(text, out var number) ? number : null;
+    }
+}

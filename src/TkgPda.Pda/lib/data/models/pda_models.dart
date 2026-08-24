@@ -195,16 +195,19 @@ class RdsWorkSiteProjection {
 class ExecutionReadiness {
   const ExecutionReadiness({
     required this.rdsWorkSiteMapped,
+    required this.isExecutionReady,
     required this.readinessCode,
     required this.readinessMessage,
   });
 
   final bool rdsWorkSiteMapped;
+  final bool isExecutionReady;
   final String? readinessCode;
   final String? readinessMessage;
 
   factory ExecutionReadiness.fromJson(JsonMap json) => ExecutionReadiness(
     rdsWorkSiteMapped: json['rdsWorkSiteMapped'] as bool? ?? false,
+    isExecutionReady: json['isExecutionReady'] as bool? ?? false,
     readinessCode: json['readinessCode'] as String?,
     readinessMessage: json['readinessMessage'] as String?,
   );

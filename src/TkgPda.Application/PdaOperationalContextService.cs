@@ -92,12 +92,7 @@ public static class PdaOperationalContextPolicy
         bool canOperate,
         bool hasActiveRequest)
     {
-        var readiness = slot.RdsWorkSite.IsMapped
-            ? new PdaExecutionReadinessRecord(true, null, null)
-            : new PdaExecutionReadinessRecord(
-                false,
-                "RDS_WORKSITE_NOT_MAPPED",
-                "Bu lojistik konumu henüz bir RDS WorkSite ile eşleştirilmemiştir.");
+        var readiness = ExecutionReadiness(slot.RdsWorkSite);
         return new SlotContextRecord(
             slot.Id,
             slot.Code,
@@ -123,6 +118,41 @@ public static class PdaOperationalContextPolicy
             slot.RdsWorkSite,
             readiness,
             EvaluateActions(slot, actor, canOperate, hasActiveRequest));
+    }
+
+    private static PdaExecutionReadinessRecord ExecutionReadiness(RdsWorkSiteProjectionRecord workSite)
+    {
+        if (!workSite.IsMapped)
+        {
+            return new(false, false, "RDS_WORKSITE_NOT_MAPPED", "Bu lojistik konumu henüz bir RDS WorkSite ile eşleştirilmemiştir.");
+        }
+
+        if (workSite.Type != 1)
+        {
+            return new(true, false, "RDS_WORKSITE_NOT_PHYSICAL", "Eşlenen RDS WorkSite fiziksel bir taşıma noktası değildir.");
+        }
+
+        if (!workSite.LastSyncAt.HasValue)
+        {
+            return new(true, false, "RDS_WORKSITE_STALE", "Eşlenen RDS WorkSite için başarılı senkronizasyon kanıtı yoktur.");
+        }
+
+        if (workSite.Disabled == 1)
+        {
+            return new(true, false, "RDS_WORKSITE_DISABLED", "Eşlenen RDS WorkSite devre dışıdır.");
+        }
+
+        if (workSite.SyncFailed == 1)
+        {
+            return new(true, false, "RDS_WORKSITE_SYNC_FAILED", "RDS WorkSite senkronizasyon hatası bildiriyor.");
+        }
+
+        if (workSite.Locked == 1)
+        {
+            return new(true, false, "RDS_WORKSITE_LOCKED", "RDS WorkSite şu anda kilitli veya meşguldür.");
+        }
+
+        return new(true, true, null, null);
     }
 
     private static PdaAvailableActionRecord EvaluateAction(

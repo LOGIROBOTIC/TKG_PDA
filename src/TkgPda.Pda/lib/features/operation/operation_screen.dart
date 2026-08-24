@@ -365,19 +365,10 @@ class _RdsReadiness extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final messages = <String>[];
-    if (!slot.rdsWorkSite.isMapped) {
+    if (!slot.executionReadiness.isExecutionReady) {
       messages.add(readinessLabel(slot.executionReadiness.readinessCode));
     }
-    if (slot.rdsWorkSite.hasSyncProblem) {
-      messages.add('Robot noktası senkronize değil.');
-    }
-    if (slot.rdsWorkSite.isDisabled) {
-      messages.add('Robot noktası kullanım dışı.');
-    }
-    if (slot.rdsWorkSite.isLocked) {
-      messages.add('Konum şu anda kullanımda.');
-    }
-    if (messages.isEmpty) {
+    if (messages.isEmpty && slot.executionReadiness.isExecutionReady) {
       messages.add('Robot noktası eşleme bilgisi hazır.');
     }
     return Column(
@@ -389,7 +380,8 @@ class _RdsReadiness extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  messages.length == 1 && slot.rdsWorkSite.isMapped
+                  messages.length == 1 &&
+                          slot.executionReadiness.isExecutionReady
                       ? Icons.check_circle
                       : Icons.info_outline,
                   size: 18,

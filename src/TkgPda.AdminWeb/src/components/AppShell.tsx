@@ -8,6 +8,7 @@ import {
   Menu,
   PackageOpen,
   ShieldCheck,
+  RadioTower,
   Smartphone,
   Users,
   X,
@@ -26,6 +27,7 @@ const links = [
   { to: '/containers', label: 'Kasalar', icon: PackageOpen },
   { to: '/data-quality', label: 'Veri Kalitesi', icon: ShieldCheck },
   { to: '/audit', label: 'Audit Geçmişi', icon: ClipboardList },
+  { to: '/rds', label: 'RDS Entegrasyonu', icon: RadioTower },
 ]
 
 export function AppShell({ children }: PropsWithChildren) {

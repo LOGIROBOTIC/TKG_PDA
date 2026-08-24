@@ -218,3 +218,71 @@ export interface SlotDraft {
   isEnabled: boolean
   metadata: JsonObject
 }
+
+export interface RdsConnectionStatus {
+  enabled: boolean
+  reachable: boolean
+  stale: boolean
+  lastSuccessfulRead: string | null
+  baseAddressDisplaySafe: string | null
+  businessStatus: number | null
+  businessMessage: string | null
+  errorCode: string | null
+  errorMessage: string | null
+}
+
+export interface RdsNavigationProfile {
+  id: string
+  machineId: string
+  machineCode: string
+  code: string
+  name: string
+  version: number
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+}
+
+export interface RdsWorkSite {
+  id: string
+  navigationProfileId: string
+  siteId: string
+  area: string | null
+  groupName: string | null
+  type: number | null
+  filled: number | null
+  locked: number | null
+  disabled: number | null
+  syncFailed: number | null
+  content: string | null
+  agvId: string | null
+  lastSyncAt: string | null
+  executionReady: boolean
+}
+
+export interface RdsSlotMapping {
+  slotId: string
+  layoutId: string
+  slotCode: string
+  slotDisplayName: string
+  slotRole: SlotRole
+  machineId: string
+  rdsWorkSiteId: string | null
+  rdsSiteId: string | null
+  navigationProfileId: string | null
+  rdsType: number | null
+  filled: number | null
+  locked: number | null
+  disabled: number | null
+  syncFailed: number | null
+  lastSyncAt: string | null
+  executionReady: boolean
+}
+
+export interface RdsSyncResult {
+  navigationProfileId: string
+  received: number
+  created: number
+  updated: number
+  syncedAt: string
+  businessCode: number
+  businessMessage: string
+}

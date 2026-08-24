@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent
 import { Link, useParams } from 'react-router-dom'
 import { useAdminApi } from '../api/ApiContext'
 import { ApiProblem } from '../api/client'
-import type { Slot, SlotDraft, SlotRole } from '../api/types'
+import type { RdsNavigationProfile, RdsSlotMapping, RdsWorkSite, Slot, SlotDraft, SlotRole } from '../api/types'
 import { useToast } from '../components/Toast'
 import { Button, Check, Definition, EmptyState, ErrorState, Field, LoadingState, Modal, Panel, SelectInput, StatusPill, TextInput } from '../components/ui'
 
@@ -25,6 +25,8 @@ export function LayoutEditorPage() {
   const slots = useQuery({ queryKey: ['slots', layoutId], queryFn: ({ signal }) => api.slots(layoutId, signal), enabled: !!layoutId })
   const machines = useQuery({ queryKey: ['machines'], queryFn: ({ signal }) => api.machines(signal) })
   const containers = useQuery({ queryKey: ['containers'], queryFn: ({ signal }) => api.containers(signal) })
+  const rdsProfiles = useQuery({ queryKey: ['rds-navigation-profiles'], queryFn: ({ signal }) => api.rdsNavigationProfiles(signal) })
+  const rdsMappings = useQuery({ queryKey: ['rds-mappings', layoutId], queryFn: ({ signal }) => api.rdsSlotMappings(layoutId, signal), enabled: !!layoutId })
   const layout = layouts.data?.find((item) => item.id === layoutId)
   const machine = machines.data?.find((item) => item.id === layout?.machineId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -34,10 +36,15 @@ export function LayoutEditorPage() {
   const [zoom, setZoom] = useState(1)
   const [busy, setBusy] = useState(false)
   const [conflict, setConflict] = useState<ApiProblem | null>(null)
+  const [mappingProfileId, setMappingProfileId] = useState('')
+  const [mappingWorkSiteId, setMappingWorkSiteId] = useState('')
+  const [mappingBusy, setMappingBusy] = useState(false)
   const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const selectedSlot = slots.data?.find((item) => item.id === selectedId) ?? null
   const editable = layout?.status === 'DRAFT'
+  const selectedMapping = rdsMappings.data?.find((item) => item.slotId === selectedId) ?? null
+  const rdsWorkSites = useQuery({ queryKey: ['rds-worksites', mappingProfileId], queryFn: ({ signal }) => api.rdsWorkSites({ navigationProfileId: mappingProfileId, type: 1 }, signal), enabled: !!mappingProfileId })
 
   const displaySlots = useMemo(() => (slots.data ?? []).map((slot) => slot.id === selectedId && working ? { ...slot, ...working } : slot), [selectedId, slots.data, working])
   const overlapIds = useMemo(() => {
@@ -67,6 +74,12 @@ export function LayoutEditorPage() {
     window.addEventListener('pointerup', up)
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
   }, [grid])
+
+  useEffect(() => {
+    const preferred = selectedMapping?.navigationProfileId ?? rdsProfiles.data?.find((item) => item.status === 'PUBLISHED')?.id ?? rdsProfiles.data?.[0]?.id ?? ''
+    setMappingProfileId(preferred)
+    setMappingWorkSiteId(selectedMapping?.rdsWorkSiteId ?? '')
+  }, [selectedMapping?.navigationProfileId, selectedMapping?.rdsWorkSiteId, rdsProfiles.data])
 
   const choose = (slot: Slot) => { setConflict(null); setSelectedId(slot.id); setWorking(toDraft(slot)) }
   const startDrag = (slot: Slot, mode: DragState['mode'], event: ReactPointerEvent) => {
@@ -110,6 +123,16 @@ export function LayoutEditorPage() {
     setBusy(true)
     try { const result = await api.createSlot(layout, draft); await refresh(); toast.success('Slot oluşturuldu'); setCreateOpen(false); setSelectedId(result.id); setWorking({ ...draft, isEnabled: true }) } catch (error) { toast.error(error); await refresh() } finally { setBusy(false) }
   }
+  const setMapping = async () => {
+    if (!selectedSlot || !mappingWorkSiteId) return
+    setMappingBusy(true)
+    try { await api.setRdsSlotMapping(selectedSlot.id, mappingWorkSiteId); await client.invalidateQueries({ queryKey: ['rds-mappings', layoutId] }); toast.success('RDS WorkSite eşlendi', 'Eşleme TKG içinde audit kaydıyla saklandı; RDS değiştirilmedi.') } catch (error) { toast.error(error, 'RDS eşlemesi kaydedilemedi') } finally { setMappingBusy(false) }
+  }
+  const removeMapping = async () => {
+    if (!selectedSlot) return
+    setMappingBusy(true)
+    try { await api.removeRdsSlotMapping(selectedSlot.id); await client.invalidateQueries({ queryKey: ['rds-mappings', layoutId] }); setMappingWorkSiteId(''); toast.success('RDS WorkSite eşlemesi kaldırıldı') } catch (error) { toast.error(error, 'RDS eşlemesi kaldırılamadı') } finally { setMappingBusy(false) }
+  }
 
   const all = [layouts, slots, machines, containers]
   if (all.some((query) => query.isLoading)) return <LoadingState label="Normalize layout editörü hazırlanıyor…" />
@@ -132,12 +155,16 @@ export function LayoutEditorPage() {
         {!displaySlots.some(placed) && <div className="canvas-empty"><BoxSelect /><strong>Yerleştirilmiş slot yok</strong><span>NULL geometrili bir slot seçip “Canvas’a yerleştir” kullanın.</span></div>}
       </div></div><div className="canvas-legend">{roles.map((role) => <span key={role}><i className={`legend-dot legend-dot--${role.toLowerCase()}`} /> {role}</span>)}</div></Panel>
       <Panel className="inspector"><div className="inspector__head"><div><span className="eyebrow">Slot inspector</span><h2>{selectedSlot?.code ?? 'Slot seçin'}</h2></div>{selectedSlot && <StatusPill value={selectedSlot.isEnabled ? 'ACTIVE' : 'INACTIVE'} />}</div>
-        {selectedSlot && working ? <><div className="definition-grid"><Definition label="Concurrency" value={selectedSlot.concurrencyToken} /><Definition label="Layout ETag" value={layout.concurrencyToken} /></div><div className="inspector-form"><Field label="Görünen ad"><TextInput disabled={!editable} value={working.displayName} onChange={(event) => setWorking({ ...working, displayName: event.target.value })} /></Field><Field label="Slot rolü"><SelectInput disabled={!editable} value={working.role} onChange={(event) => setWorking({ ...working, role: event.target.value as SlotRole })}>{roles.map((role) => <option key={role}>{role}</option>)}</SelectInput></Field><Field label="Default kasa"><SelectInput disabled={!editable} value={working.defaultContainerTypeId ?? ''} onChange={(event) => setWorking({ ...working, defaultContainerTypeId: event.target.value || null })}><option value="">Bilinmiyor / yok</option>{containers.data?.map((item) => <option value={item.id} key={item.id}>{item.code} · {item.name}</option>)}</SelectInput></Field><Field label="Görünüm sırası"><TextInput disabled={!editable} type="number" value={working.displayOrder} onChange={(event) => setWorking({ ...working, displayOrder: Number(event.target.value) })} /></Field><div className="geometry-grid">{(['x', 'y', 'width', 'height'] as const).map((key) => <Field label={key.toUpperCase()} key={key}><TextInput disabled={!editable} type="number" min={0} max={1} step={grid} value={working[key] ?? ''} onChange={(event) => setWorking({ ...working, [key]: event.target.value === '' ? null : Number(event.target.value) })} /></Field>)}</div><div className="check-stack"><Check disabled={!editable} label="Boş yük kabul eder" checked={working.allowsEmptyLoad} onChange={(value) => setWorking({ ...working, allowsEmptyLoad: value })} /><Check disabled={!editable} label="Dolu yük kabul eder" checked={working.allowsFullLoad} onChange={(value) => setWorking({ ...working, allowsFullLoad: value })} /><Check disabled={!editable} label="Aktif slot" checked={working.isEnabled} onChange={(value) => setWorking({ ...working, isEnabled: value })} /></div>{!placed(working) && editable && <Button variant="secondary" onClick={() => setWorking({ ...working, x: 0.1, y: 0.1, width: 0.16, height: 0.12 })}><MousePointer2 size={16} /> Canvas’a yerleştir</Button>}</div></> : <EmptyState title="Slot seçilmedi" description="Canvas veya yerleşmemiş slot listesinden bir kayıt seçin." />}
+        {selectedSlot && working ? <><div className="definition-grid"><Definition label="Concurrency" value={selectedSlot.concurrencyToken} /><Definition label="Layout ETag" value={layout.concurrencyToken} /></div><div className="inspector-form"><Field label="Görünen ad"><TextInput disabled={!editable} value={working.displayName} onChange={(event) => setWorking({ ...working, displayName: event.target.value })} /></Field><Field label="Slot rolü"><SelectInput disabled={!editable} value={working.role} onChange={(event) => setWorking({ ...working, role: event.target.value as SlotRole })}>{roles.map((role) => <option key={role}>{role}</option>)}</SelectInput></Field><Field label="Default kasa"><SelectInput disabled={!editable} value={working.defaultContainerTypeId ?? ''} onChange={(event) => setWorking({ ...working, defaultContainerTypeId: event.target.value || null })}><option value="">Bilinmiyor / yok</option>{containers.data?.map((item) => <option value={item.id} key={item.id}>{item.code} · {item.name}</option>)}</SelectInput></Field><Field label="Görünüm sırası"><TextInput disabled={!editable} type="number" value={working.displayOrder} onChange={(event) => setWorking({ ...working, displayOrder: Number(event.target.value) })} /></Field><div className="geometry-grid">{(['x', 'y', 'width', 'height'] as const).map((key) => <Field label={key.toUpperCase()} key={key}><TextInput disabled={!editable} type="number" min={0} max={1} step={grid} value={working[key] ?? ''} onChange={(event) => setWorking({ ...working, [key]: event.target.value === '' ? null : Number(event.target.value) })} /></Field>)}</div><div className="check-stack"><Check disabled={!editable} label="Boş yük kabul eder" checked={working.allowsEmptyLoad} onChange={(value) => setWorking({ ...working, allowsEmptyLoad: value })} /><Check disabled={!editable} label="Dolu yük kabul eder" checked={working.allowsFullLoad} onChange={(value) => setWorking({ ...working, allowsFullLoad: value })} /><Check disabled={!editable} label="Aktif slot" checked={working.isEnabled} onChange={(value) => setWorking({ ...working, isEnabled: value })} /></div>{!placed(working) && editable && <Button variant="secondary" onClick={() => setWorking({ ...working, x: 0.1, y: 0.1, width: 0.16, height: 0.12 })}><MousePointer2 size={16} /> Canvas’a yerleştir</Button>}</div><RdsMappingInspector slot={selectedSlot} mapping={selectedMapping} profiles={rdsProfiles.data ?? []} workSites={rdsWorkSites.data ?? []} profileId={mappingProfileId} workSiteId={mappingWorkSiteId} busy={mappingBusy} loading={rdsProfiles.isLoading || rdsMappings.isLoading || rdsWorkSites.isLoading} error={rdsProfiles.error ?? rdsMappings.error ?? rdsWorkSites.error} onProfileChange={(value) => { setMappingProfileId(value); setMappingWorkSiteId('') }} onWorkSiteChange={setMappingWorkSiteId} onSave={() => void setMapping()} onRemove={() => void removeMapping()} /></> : <EmptyState title="Slot seçilmedi" description="Canvas veya yerleşmemiş slot listesinden bir kayıt seçin." />}
       </Panel>
     </div>
     {unplaced.length > 0 && <Panel><div className="panel-header"><div><h2>Geometrisi olmayan slotlar</h2><p>Bu kayıtlar korunur; fiziksel kanıt olmadan koordinat tahmin edilmez.</p></div><StatusPill value={`${unplaced.length} NULL`} tone="warning" /></div><div className="unplaced-list">{unplaced.map((slot) => <button key={slot.id} onClick={() => choose(slot)}><Minus /><span><strong>{slot.code}</strong><small>{slot.displayName} · {slot.role}</small></span></button>)}</div></Panel>}
     {createOpen && <CreateSlotDialog open busy={busy} containers={containers.data ?? []} onClose={() => setCreateOpen(false)} onSave={create} />}
   </div>
+}
+
+function RdsMappingInspector({ slot, mapping, profiles, workSites, profileId, workSiteId, busy, loading, error, onProfileChange, onWorkSiteChange, onSave, onRemove }: { slot: Slot; mapping: RdsSlotMapping | null; profiles: RdsNavigationProfile[]; workSites: RdsWorkSite[]; profileId: string; workSiteId: string; busy: boolean; loading: boolean; error: unknown; onProfileChange: (value: string) => void; onWorkSiteChange: (value: string) => void; onSave: () => void; onRemove: () => void }) {
+  return <div className="rds-mapping-inspector"><span className="eyebrow">RDS WorkSite</span>{slot.role === 'MACHINE' ? <div className="mapping-forbidden"><LockKeyhole size={16} /><span><strong>Makine alanı — RDS taşıma noktası eşlenemez</strong><small>Bu bölge yalnız fiziksel/ekran yerleşim referansıdır.</small></span></div> : <>{mapping?.rdsSiteId && <div className="mapping-current"><span>Mevcut eşleme</span><strong>{mapping.rdsSiteId}</strong><StatusPill value={mapping.executionReady ? 'READY' : 'NOT READY'} tone={mapping.executionReady ? 'success' : 'warning'} /></div>}{error ? <ErrorState error={error} /> : <div className="mapping-fields"><Field label="Navigation profile"><SelectInput disabled={busy || loading} value={profileId} onChange={(event) => onProfileChange(event.target.value)}><option value="">Profil seçin</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.machineCode} · {profile.code} v{profile.version}</option>)}</SelectInput></Field><Field label="Physical WorkSite"><SelectInput disabled={!profileId || busy || loading} value={workSiteId} onChange={(event) => onWorkSiteChange(event.target.value)}><option value="">Eşleme seçin</option>{workSites.map((site) => <option key={site.id} value={site.id}>{site.siteId}{site.executionReady ? '' : ' · NOT READY'}</option>)}</SelectInput></Field><div className="row-actions"><Button size="sm" disabled={!workSiteId || busy} onClick={onSave}>{mapping ? 'Eşlemeyi değiştir' : 'Eşle'}</Button>{mapping && <Button size="sm" variant="danger" disabled={busy} onClick={onRemove}>Eşlemeyi kaldır</Button>}</div><small>Ad benzerliği otomatik eşleme oluşturmaz. Seçim TKG audit kaydıyla saklanır ve RDS'e yazılmaz.</small></div>}</>}</div>
 }
 
 function CreateSlotDialog({ open, busy, containers, onClose, onSave }: { open: boolean; busy: boolean; containers: { id: string; code: string; name: string }[]; onClose: () => void; onSave: (draft: Omit<SlotDraft, 'isEnabled'>) => void }) {

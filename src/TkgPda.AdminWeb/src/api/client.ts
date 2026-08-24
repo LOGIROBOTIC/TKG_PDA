@@ -15,6 +15,11 @@ import type {
   ProductGroup,
   Role,
   RoleCode,
+  RdsConnectionStatus,
+  RdsNavigationProfile,
+  RdsSlotMapping,
+  RdsSyncResult,
+  RdsWorkSite,
   Slot,
   SlotDraft,
   UserDraft,
@@ -177,6 +182,22 @@ export const createAdminApi = (token: string) => ({
     if (filters?.entityType) search.set('entityType', filters.entityType)
     return (await request<AuditRecord[]>(`/api/v1/admin/audit-logs?${search}`, { token, signal })).data
   },
+
+  rdsStatus: async (signal?: AbortSignal) => (await request<RdsConnectionStatus>('/api/v1/admin/rds/status', { token, signal })).data,
+  rdsNavigationProfiles: async (signal?: AbortSignal) => (await request<RdsNavigationProfile[]>('/api/v1/admin/rds/navigation-profiles', { token, signal })).data,
+  syncRdsWorkSites: async (navigationProfileId: string) =>
+    (await request<RdsSyncResult>('/api/v1/admin/rds/worksites/sync', { method: 'POST', token, body: { navigationProfileId } })).data,
+  rdsWorkSites: async (filters: { navigationProfileId: string; siteId?: string; area?: string; group?: string; type?: number; filled?: number; locked?: number; disabled?: number; syncFailed?: number }, signal?: AbortSignal) => {
+    const search = new URLSearchParams({ navigationProfileId: filters.navigationProfileId })
+    for (const [key, value] of Object.entries(filters)) if (key !== 'navigationProfileId' && value !== undefined && value !== '') search.set(key, String(value))
+    return (await request<RdsWorkSite[]>(`/api/v1/admin/rds/worksites?${search}`, { token, signal })).data
+  },
+  rdsSlotMappings: async (layoutId?: string, signal?: AbortSignal) =>
+    (await request<RdsSlotMapping[]>(`/api/v1/admin/rds/slot-mappings${layoutId ? `?layoutId=${layoutId}` : ''}`, { token, signal })).data,
+  setRdsSlotMapping: async (slotId: string, rdsWorksiteId: string) =>
+    (await request<RdsSlotMapping>(`/api/v1/admin/layout-slots/${slotId}/rds-mapping`, { method: 'PUT', token, body: { rdsWorksiteId } })).data,
+  removeRdsSlotMapping: async (slotId: string) =>
+    (await request<void>(`/api/v1/admin/layout-slots/${slotId}/rds-mapping`, { method: 'DELETE', token })).data,
 })
 
 export type AdminApi = ReturnType<typeof createAdminApi>

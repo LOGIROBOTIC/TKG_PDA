@@ -2,7 +2,7 @@
 
 TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi, React Admin Web'i ve Android Flutter PDA uygulamasını içerir.
 
-> Baseline durumu: Phase 01–07A tamamlandı; Phase 07A PR #5 `main` dalına merge edildi. **Phase 07B — Flutter PDA Application uygulanmıştır ve draft PR incelemesindedir.** Canlı RDS/SEER, PLC, SAP, robot koordinatları ve execution callback entegrasyonu başlamamıştır.
+> Baseline durumu: Phase 01–07B tamamlandı; Phase 07B PR #6 `main` dalına merge edildi. **Phase 08A — canlı RDS salt-okunur readiness entegrasyonu uygulanmıştır ve draft PR incelemesindedir.** RDS mutation/dispatch/callback, SEER map-route, PLC, SAP ve robot koordinatları başlamamıştır.
 
 ## Mevcut baseline
 
@@ -17,7 +17,8 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 | Phase 05 — Admin Configuration API | Tamamlandı | Admin Web auth boundary, provisioning, draft/publish/versioning, ETag ve audit |
 | Phase 06 — Admin Web | Tamamlandı | React/TypeScript yönetim ekranları ve normalize fiziksel layout editörü |
 | Phase 07A — PDA + RDS Contract Readiness | Tamamlandı | PDA operational context, available-actions ve persisted RDS execution/readiness projeksiyonu |
-| Phase 07B — Flutter PDA Application | Uygulandı | Device-bound Android istemci, normalize layout, server-authoritative transport ve güvenli offline/idempotency UX |
+| Phase 07B — Flutter PDA Application | Tamamlandı | Device-bound Android istemci, normalize layout, server-authoritative transport ve güvenli offline/idempotency UX |
+| Phase 08A — Live RDS Readiness | Uygulandı | Salt-okunur RDS client, WorkSite mirror, explicit admin mapping ve readiness projection |
 
 Phase 02B'deki 183 `master.layout_slots` kaydının 172'si lojistik pozisyon, 11'i `slot_role = 'MACHINE'` olan makine/hücre bölgesidir. Bu 11 bölge yalnızca fiziksel ve ekran yerleşim referansıdır; taşıma isteğinin `source_slot_id` veya `destination_slot_id` değeri olamaz. Şema ayrımı mevcut `slot_role` alanıyla yapabiliyor; Phase 03 workflow engine bu invariant'ı uygular ve Phase 04 API bütün mutasyonları aynı service sınırından geçirir.
 
@@ -74,6 +75,7 @@ pwsh tests/phase_04/run_postgres_api_integration.ps1
 pwsh tests/phase_05/run_postgres_admin_integration.ps1
 pwsh tests/phase_07a/run_postgres_pda_rds_integration.ps1
 pwsh tests/phase_07b/run_real_api_contract.ps1
+pwsh tests/phase_08a/run_postgres_rds_readiness_integration.ps1
 
 cd src/TkgPda.AdminWeb
 npm ci
@@ -106,6 +108,7 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 - [Phase 06 Admin Web](docs/PHASE_06_ADMIN_WEB.md)
 - [Phase 07A PDA + RDS Contract Readiness](docs/PHASE_07A_PDA_RDS_CONTRACT_READINESS.md)
 - [Phase 07B Flutter PDA Application](docs/PHASE_07B_FLUTTER_PDA.md)
+- [Phase 08A Live RDS Readiness](docs/PHASE_08A_LIVE_RDS_READINESS.md)
 - [Normative RDS/PDA entegrasyon sözleşmesi](docs/RDS_PDA_INTEGRATION_SPEC.md)
 - [Database specification v0.1](docs/TKG_PDA_DATABASE_SPEC_v0.1.md)
 

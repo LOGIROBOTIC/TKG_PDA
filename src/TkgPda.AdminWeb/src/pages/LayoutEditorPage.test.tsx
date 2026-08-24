@@ -68,4 +68,11 @@ describe('Normalized layout editor', () => {
     expect(await screen.findByText('Salt okunur')).toBeVisible()
     expect(screen.getByRole('button', { name: /Slot ekle/ })).toBeDisabled()
   })
+
+  it('never offers an RDS transport mapping action for MACHINE regions', async () => {
+    mockEditorApi(layouts, [{ ...slots[0], role: 'MACHINE' }])
+    await userEvent.click(await screen.findByTestId('slot-SLOT-01'))
+    expect(screen.getByText('Makine alanı — RDS taşıma noktası eşlenemez')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Eşle' })).not.toBeInTheDocument()
+  })
 })

@@ -340,6 +340,23 @@ textarea.input { resize: vertical; }
 .login-error { padding: 11px 12px; border: 1px solid #edc1c1; border-radius: 8px; color: #a43d3d; background: #fff0f0; font-size: 11px; }
 .security-note { display: flex; align-items: center; justify-content: center; margin-top: 16px; color: #8490a1; font-size: 10px; gap: 6px; }
 
+.rds-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rds-card-body { display: flex; flex-direction: column; padding: 16px 18px 18px; color: #687588; gap: 7px; }
+.rds-card-body code { width: fit-content; padding: 5px 8px; border-radius: 5px; color: #35445a; background: #f0f3f7; }
+.rds-card-body strong { color: #28364a; font-size: 18px; }
+.rds-card-body small { line-height: 1.45; }
+.rds-sync-controls { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(260px, 1fr); align-items: center; padding: 16px 18px 18px; gap: 14px; }
+.rds-sync-controls > span { display: flex; align-items: center; color: #778496; font-size: 11px; gap: 7px; }
+.danger-text { color: #a34141; }
+.rds-mapping-inspector { display: flex; flex-direction: column; margin: 16px 17px 18px; padding-top: 16px; border-top: 1px solid #e3e8ef; gap: 10px; }
+.mapping-forbidden { display: flex; padding: 11px; border-radius: 8px; color: #785c1d; background: #fff7df; gap: 9px; }
+.mapping-forbidden span { display: flex; flex-direction: column; gap: 3px; }
+.mapping-forbidden small { color: #8c7a51; }
+.mapping-current { display: grid; grid-template-columns: 1fr auto; align-items: center; padding: 10px; border: 1px solid #dce5ee; border-radius: 8px; background: #f8fafc; gap: 3px 10px; }
+.mapping-current > span { grid-column: 1 / -1; color: #7d8999; font-size: 9px; text-transform: uppercase; }
+.mapping-fields { display: flex; flex-direction: column; gap: 10px; }
+.mapping-fields > small { color: #818c9c; font-size: 9px; line-height: 1.45; }
+
 @media (max-width: 1180px) {
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .issue-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -359,6 +376,7 @@ textarea.input { resize: vertical; }
   .topbar__scope { margin-left: auto; }
   .workspace > main { padding: 22px 18px 45px; }
   .dashboard-grid { grid-template-columns: 1fr; }
+  .rds-summary, .rds-sync-controls { grid-template-columns: 1fr; }
   .login-page { grid-template-columns: 1fr; }
   .login-story { display: none; }
   .login-form-wrap { min-height: 100vh; }

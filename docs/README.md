@@ -1,6 +1,6 @@
 # TKG PDA Dokümantasyon İndeksi
 
-Bu dizin, tamamlanmış Phase 01–07A baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 07B, frozen backend sözleşmesini kullanan Android Flutter PDA uygulamasını canlı RDS bağlantısı olmadan sağlar.
+Bu dizin, tamamlanmış Phase 01–07B baseline'ının mimari kararlarını, veri üretim zincirini ve doğrulama kanıtlarını içerir. Phase 08A, canlı RDS'i yalnız okuyan ve TKG PostgreSQL aynası/açık admin mapping'i sağlayan güncel aşamadır.
 
 ## Başlangıç noktaları
 
@@ -19,6 +19,7 @@ Bu dizin, tamamlanmış Phase 01–07A baseline'ının mimari kararlarını, ver
 - [PHASE_06_ADMIN_WEB.md](PHASE_06_ADMIN_WEB.md) — React UI mimarisi, normalize layout editörü, hata UX'i ve frontend testleri
 - [PHASE_07A_PDA_RDS_CONTRACT_READINESS.md](PHASE_07A_PDA_RDS_CONTRACT_READINESS.md) — PDA operational context, action ve persisted execution projection kabulü
 - [PHASE_07B_FLUTTER_PDA.md](PHASE_07B_FLUTTER_PDA.md) — device-bound Flutter PDA mimarisi, operatör akışları, idempotency/offline güvenliği ve kabul kanıtı
+- [PHASE_08A_LIVE_RDS_READINESS.md](PHASE_08A_LIVE_RDS_READINESS.md) — canlı salt-okunur RDS kanıtı, WorkSite aynası, admin mapping ve readiness
 - [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) — Phase 08 için normative TKG/RDS/PDA sorumluluk ve entegrasyon sözleşmesi
 - [Seed workflow](../db/seeds/README.md) — deterministik seed üretme ve DB'ye uygulama sırası
 

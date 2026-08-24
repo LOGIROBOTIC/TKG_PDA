@@ -29,6 +29,18 @@ venv/
 # Node/tool caches
 node_modules/
 
+# Flutter/Dart generated output
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+coverage/
+build/
+*.apk
+
+# Machine-specific ASP.NET Core launch profile
+/src/TkgPda.Api/Properties/launchSettings.json
+
 # .NET build and test output
 bin/
 obj/

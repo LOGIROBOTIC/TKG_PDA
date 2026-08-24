@@ -1,8 +1,8 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–06 tamamlanması ve Phase 07A backend contract uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 07A mevcut API ve şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–07A tamamlanması ve Phase 07B Flutter PDA uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 07B mevcut API ve şemayı migration değiştirmeden kullanır.
 
-> Phase 06 PR #4 `main`e merge edilmiştir. Phase 07A ayrıntıları için [PHASE_07A_PDA_RDS_CONTRACT_READINESS.md](PHASE_07A_PDA_RDS_CONTRACT_READINESS.md) belgesine bakın.
+> Phase 07A PR #5 `main`e merge edilmiştir. Phase 07B ayrıntıları için [PHASE_07B_FLUTTER_PDA.md](PHASE_07B_FLUTTER_PDA.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -16,8 +16,8 @@ Bu belge, Phase 01–06 tamamlanması ve Phase 07A backend contract uygulaması 
 | 04 | Backend API + Authentication/RBAC | Kabul edildi |
 | 05 | Admin Configuration API | Kabul edildi |
 | 06 | Admin Web | Tamamlandı |
-| 07A | PDA + RDS Contract Readiness | Uygulandı |
-| 07B | Flutter PDA Application | Planlandı |
+| 07A | PDA + RDS Contract Readiness | Tamamlandı |
+| 07B | Flutter PDA Application | Uygulandı / draft PR |
 | 08 | RDS Task Integration | Planlandı |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
 | 10 | System Integration & Tests | Planlandı |
@@ -185,6 +185,16 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 
 Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) belgesindedir.
 
+### 7.3 Flutter PDA sınırı
+
+- Android Flutter istemcisi Device Code'u secure storage'da; JWT'yi yalnız process belleğinde tutar. Parola ve operational state persist edilmez.
+- Makine listesi, variant capability, `availableActions`, cancellation ve execution state tamamen backend projection'ından gelir; Flutter iş kuralı veya canonical makine listesi üretmez.
+- Normalize layout yalnız ekran geometrisidir. `MACHINE` bölgeleri görünür ama transport seçilemez.
+- Aynı maddi transport retry'ı aynı idempotency key'i kullanır; çift dokunma tek in-flight submission ile sınırlanır.
+- Offline command queue yoktur. Ağ kaybında bütün mutation'lar kapanır ve context yeniden doğrulanmadan açılmaz.
+- Flutter yalnız TKG API'ye bağlanır; canlı RDS, PLC, SAP veya robot API çağrısı içermez.
+- Phase 07B kabulü 14 unit, 26 widget ve fresh PostgreSQL/gerçek API üzerinde 20 HTTP contract testiyle doğrulanmıştır.
+
 ## 8. Sonraki aşama sınırı
 
-Phase 07B Flutter PDA uygulamasıdır. Canlı RDS task/WorkSite/callback/alarm entegrasyonu Phase 08'e aittir. SEER map/profile, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır.
+Phase 08 canlı RDS task/WorkSite/callback/alarm entegrasyonudur. SEER map/profile, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır. Phase 07B hiçbir Phase 08 işi başlatmamıştır.

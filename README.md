@@ -1,8 +1,8 @@
 # TKG PDA
 
-TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi ve React Admin Web uygulamasını içerir.
+TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi, React Admin Web'i ve Android Flutter PDA uygulamasını içerir.
 
-> Baseline durumu: Phase 01–06 tamamlandı; Phase 06 PR #4 `main` dalına merge edildi. **Phase 07A — PDA + RDS Contract Readiness uygulanmıştır.** Flutter PDA, canlı RDS/SEER, PLC, SAP, robot koordinatları ve execution callback entegrasyonu henüz başlamamıştır.
+> Baseline durumu: Phase 01–07A tamamlandı; Phase 07A PR #5 `main` dalına merge edildi. **Phase 07B — Flutter PDA Application uygulanmıştır ve draft PR incelemesindedir.** Canlı RDS/SEER, PLC, SAP, robot koordinatları ve execution callback entegrasyonu başlamamıştır.
 
 ## Mevcut baseline
 
@@ -16,7 +16,8 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 | Phase 04 — Backend API + Auth | Tamamlandı | JWT, RBAC, device binding, machine permission ve workflow HTTP boundary |
 | Phase 05 — Admin Configuration API | Tamamlandı | Admin Web auth boundary, provisioning, draft/publish/versioning, ETag ve audit |
 | Phase 06 — Admin Web | Tamamlandı | React/TypeScript yönetim ekranları ve normalize fiziksel layout editörü |
-| Phase 07A — PDA + RDS Contract Readiness | Uygulandı | PDA operational context, available-actions ve persisted RDS execution/readiness projeksiyonu |
+| Phase 07A — PDA + RDS Contract Readiness | Tamamlandı | PDA operational context, available-actions ve persisted RDS execution/readiness projeksiyonu |
+| Phase 07B — Flutter PDA Application | Uygulandı | Device-bound Android istemci, normalize layout, server-authoritative transport ve güvenli offline/idempotency UX |
 
 Phase 02B'deki 183 `master.layout_slots` kaydının 172'si lojistik pozisyon, 11'i `slot_role = 'MACHINE'` olan makine/hücre bölgesidir. Bu 11 bölge yalnızca fiziksel ve ekran yerleşim referansıdır; taşıma isteğinin `source_slot_id` veya `destination_slot_id` değeri olamaz. Şema ayrımı mevcut `slot_role` alanıyla yapabiliyor; Phase 03 workflow engine bu invariant'ı uygular ve Phase 04 API bütün mutasyonları aynı service sınırından geçirir.
 
@@ -35,6 +36,7 @@ src/TkgPda.Application/        API'den bağımsız application service/port tan�
 src/TkgPda.Infrastructure.../  Transactional PostgreSQL workflow store
 src/TkgPda.Api/                Authenticated ASP.NET Core HTTP boundary
 src/TkgPda.AdminWeb/           React + TypeScript + Vite administration client
+src/TkgPda.Pda/                Flutter Android industrial PDA client
 TKG.Pda.slnx                   .NET 10 solution
 ```
 
@@ -71,6 +73,7 @@ pwsh tests/phase_03/run_postgres_integration.ps1
 pwsh tests/phase_04/run_postgres_api_integration.ps1
 pwsh tests/phase_05/run_postgres_admin_integration.ps1
 pwsh tests/phase_07a/run_postgres_pda_rds_integration.ps1
+pwsh tests/phase_07b/run_real_api_contract.ps1
 
 cd src/TkgPda.AdminWeb
 npm ci
@@ -79,6 +82,12 @@ npm run lint
 npm run test:run
 npm run test:e2e
 npm run build
+
+cd ../TkgPda.Pda
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test
+flutter build apk --debug --dart-define=TKG_API_BASE_URL=https://api.example.invalid
 ```
 
 Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretmez. `ui_x`, `ui_y`, `ui_width`, `ui_height` yalnızca PDA ekranında kullanılacak 0–1 normalize gösterim geometrisidir.
@@ -96,6 +105,7 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 - [Phase 05 Admin Configuration API](docs/PHASE_05_ADMIN_CONFIGURATION_API.md)
 - [Phase 06 Admin Web](docs/PHASE_06_ADMIN_WEB.md)
 - [Phase 07A PDA + RDS Contract Readiness](docs/PHASE_07A_PDA_RDS_CONTRACT_READINESS.md)
+- [Phase 07B Flutter PDA Application](docs/PHASE_07B_FLUTTER_PDA.md)
 - [Normative RDS/PDA entegrasyon sözleşmesi](docs/RDS_PDA_INTEGRATION_SPEC.md)
 - [Database specification v0.1](docs/TKG_PDA_DATABASE_SPEC_v0.1.md)
 

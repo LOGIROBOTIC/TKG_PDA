@@ -1,6 +1,6 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–08C tamamlanması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08B/08C mevcut şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–09 tamamlanması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08B/08C ve multi-platform operator Phase 09 mevcut şemayı migration değiştirmeden kullanır.
 
 > Phase 08B PR #8 `main`e merge edilmiştir. Canlı simulator kabulü için [PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md](PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md) belgesine bakın.
 
@@ -21,7 +21,7 @@ Bu belge, Phase 01–08C tamamlanması sonrasındaki güncel sistemi özetler. D
 | 08A | Live RDS Connectivity + WorkSite Mapping | Tamamlandı |
 | 08B | RDS Task Dispatch + Reconciliation | Tamamlandı |
 | 08C | RDS Wind Task Commissioning + Simulator E2E | Tamamlandı |
-| 09 | SEER Map/Route/Profile Integration | Planlandı |
+| 09 | Multi-Platform Operator Client — Android + Web/PWA | Tamamlandı |
 | 10 | System Integration & Tests | Planlandı |
 | 11 | PLC Integration | Gelecek aşama |
 
@@ -189,7 +189,7 @@ Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA
 
 ### 7.3 Flutter PDA sınırı
 
-- Android Flutter istemcisi Device Code'u secure storage'da; JWT'yi yalnız process belleğinde tutar. Parola ve operational state persist edilmez.
+- Aynı Flutter operator istemcisi Android endüstriyel PDA ve Windows Edge/Chrome Web/PWA hedeflerini destekler. Android Device Code secure storage'da, Web Device Code yalnız `tkg.pda.device-code` origin-local key'inde tutulur; JWT her iki platformda yalnız process/tab belleğindedir. Parola ve operational state persist edilmez.
 - Makine listesi, variant capability, `availableActions`, cancellation ve execution state tamamen backend projection'ından gelir; Flutter iş kuralı veya canonical makine listesi üretmez.
 - Normalize layout yalnız ekran geometrisidir. `MACHINE` bölgeleri görünür ama transport seçilemez.
 - Aynı maddi transport retry'ı aynı idempotency key'i kullanır; çift dokunma tek in-flight submission ile sınırlanır.
@@ -226,6 +226,23 @@ Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA
 - 22 WorkSite'ın `filled/content/locked/disabled/syncFailed` digest'i önce/sonra aynı kaldı.
 - `TKG_SIM_MOVE` production `BRING_EMPTY/REMOVE_FULL/REMOVE_EMPTY` değildir; fixed AP/Wait görevi WorkSite, LOAD/UNLOAD, fork/jack veya PLC kullanmaz.
 
-## 10. Sonraki aşama sınırı
+## 10. Phase 09 multi-platform operator baseline'ı
+
+Donmuş ürün şartı:
+
+> TKG Operator Client must support both Android industrial PDAs and Windows-based production-line touch terminals through Web/PWA. Both platforms use the same Flutter codebase, TKG API contracts, device-bound security model, and server-authoritative workflow rules.
+
+- Windows production client, Edge/Chrome içinde Flutter Web/PWA'dır; native Windows `.exe` ve ikinci React operator uygulaması yoktur.
+- React Admin Web ayrı `ADMIN_WEB`; Flutter Web ayrı device-bound operator flow'udur.
+- Web Device Code origin-scoped persistent storage'da kalır. JWT, password, user, permission, context ve command persist edilmez; refresh/restart login'e döner.
+- Same-origin deployment önerilir. Ayrı origin gerektiğinde exact configured CORS kullanılır; wildcard/cookie credentials yoktur.
+- `/operator/` production build'i CanvasKit/WASM, ikon ve gerekli fallback fontlarını yerelden sunar; public CDN/Internet runtime bağımlılığı yoktur.
+- Service worker yalnız static shell/asset cache'idir. API mutation cache, Background Sync veya offline replay queue yoktur.
+- 1024×600, 1280×720, 1366×768 ve 1920×1080 touch yerleşimleri test edilmiştir. `MACHINE` region noninteractive kalır.
+- Chrome ve gerçek Edge browser E2E, fresh PostgreSQL 18.3 ve gerçek API ile çalışır. RDS browser'dan erişilmez ve Phase 09'da canlı robot hareketi yapılmaz.
+
+Ayrıntılar [PHASE_09_MULTIPLATFORM_OPERATOR.md](PHASE_09_MULTIPLATFORM_OPERATOR.md) ve [OPERATOR_WEB_DEPLOYMENT.md](OPERATOR_WEB_DEPLOYMENT.md) belgelerindedir.
+
+## 11. Sonraki aşama sınırı
 
 Sonraki ayrı çalışma, gerçek mapped physical RDS WorkSite'ları ve robot-modeline özgü aksiyonlarla production `BRING_EMPTY`, `REMOVE_FULL` ve `REMOVE_EMPTY` Wind Task'larını tasarlamalıdır. SEER map/profile/route, PLC, SAP ve robot koordinatı henüz başlamamıştır.

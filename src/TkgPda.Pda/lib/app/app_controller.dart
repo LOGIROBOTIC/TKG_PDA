@@ -42,6 +42,7 @@ class AppController extends ChangeNotifier {
   bool _contextLoading = false;
   bool _offline = false;
   bool _foreground = true;
+  bool _resumeValidationPending = false;
   ApiProblem? _problem;
   String? _notice;
   Timer? _pollTimer;
@@ -62,7 +63,13 @@ class AppController extends ChangeNotifier {
   ApiProblem? get problem => _problem;
   String? get notice => _notice;
   bool get hasAmbiguousSubmission => _submission.hasAmbiguousRequest;
-  bool get mutationEnabled => !_offline && !_busy && _session.isAuthenticated;
+  bool get mutationEnabled =>
+      !_offline &&
+      !_busy &&
+      !_resumeValidationPending &&
+      _session.isAuthenticated;
+  bool get pollingActive => _pollTimer?.isActive ?? false;
+  bool get resumeValidationPending => _resumeValidationPending;
 
   Future<void> initialize() async {
     _deviceCode = await _deviceCodeStore.read();
@@ -71,13 +78,14 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> saveDeviceCode(String value) async {
-    if (_session.isAuthenticated) {
-      throw StateError('Cihaz kodunu değiştirmek için önce çıkış yapın.');
-    }
     final normalized = value.trim();
     if (normalized.isEmpty || normalized.length > 120) {
       throw const FormatException('Geçerli bir cihaz kodu girin.');
     }
+    _session.clear();
+    _clearOperationalState();
+    _submission.clear();
+    _ambiguousCommand = null;
     await _deviceCodeStore.write(normalized);
     _deviceCode = normalized;
     _stage = AppStage.login;
@@ -86,9 +94,10 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> beginDeviceCodeChange() async {
-    if (_session.isAuthenticated) {
-      await logout();
-    }
+    _session.clear();
+    _clearOperationalState();
+    _submission.clear();
+    _ambiguousCommand = null;
     _stage = AppStage.deviceSetup;
     _clearFeedback();
     notifyListeners();
@@ -418,8 +427,12 @@ class AppController extends ChangeNotifier {
   Future<void> onResumed() async {
     _foreground = true;
     if (!_session.isAuthenticated) {
+      _resumeValidationPending = false;
+      notifyListeners();
       return;
     }
+    _resumeValidationPending = true;
+    notifyListeners();
     try {
       await _repository.me();
       if (_selectedMachine != null) {
@@ -430,16 +443,20 @@ class AppController extends ChangeNotifier {
     } on ConnectivityException {
       _offline = true;
       _notice = 'Bağlantı yok — bilgiler güncel olmayabilir.';
-      notifyListeners();
     } on ApiProblem catch (problem) {
       _problem = problem;
+    } finally {
+      _resumeValidationPending = false;
+      if (!_offline && _selectedMachine != null) _schedulePolling();
       notifyListeners();
     }
   }
 
   void onPaused() {
     _foreground = false;
+    _resumeValidationPending = _session.isAuthenticated;
     _stopPolling();
+    notifyListeners();
   }
 
   Future<void> _loadMachines() async {
@@ -496,6 +513,7 @@ class AppController extends ChangeNotifier {
     _selectedPart = null;
     _selectedSlot = null;
     _offline = false;
+    _resumeValidationPending = false;
   }
 
   void _clearFeedback() {

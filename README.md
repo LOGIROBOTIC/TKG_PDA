@@ -1,8 +1,10 @@
 # TKG PDA
 
-TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi, React Admin Web'i ve Android Flutter PDA uygulamasını içerir.
+TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi, React Admin Web'i ve Android + Web/PWA Flutter Operator uygulamasını içerir.
 
-> Baseline durumu: Phase 01–08C tamamlandı. **Phase 08B execution integration, development-only `TKG_SIM_MOVE` ile canlı simulator E2E üzerinde doğrulandı.** Üretim forklift task'ları, SEER map-route, PLC, SAP ve robot koordinatları başlamamıştır.
+> Baseline durumu: Phase 01–09 tamamlandı. **Phase 08B execution integration, development-only `TKG_SIM_MOVE` ile canlı simulator E2E üzerinde doğrulandı; Phase 09 aynı Flutter operator istemcisini Android ve Windows Edge/Chrome Web/PWA hedeflerine taşır.** Üretim forklift task'ları, SEER map-route, PLC, SAP ve robot koordinatları başlamamıştır.
+
+> **Donmuş ürün şartı:** TKG Operator Client must support both Android industrial PDAs and Windows-based production-line touch terminals through Web/PWA. Both platforms use the same Flutter codebase, TKG API contracts, device-bound security model, and server-authoritative workflow rules.
 
 ## Mevcut baseline
 
@@ -21,6 +23,7 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 | Phase 08A — Live RDS Readiness | Uygulandı | Salt-okunur RDS client, WorkSite mirror, explicit admin mapping ve readiness projection |
 | Phase 08B — RDS Execution Integration | Tamamlandı | Server-side dispatch, callback, reconciliation, stop boundary ve load-state entegrasyonu |
 | Phase 08C — RDS Simulator Commissioning | Tamamlandı | `TKG_SIM_MOVE`, tek TKG UUID, canlı `sim_01`, callback ve duplicate-safe retry kanıtlandı |
+| Phase 09 — Multi-Platform Operator Client | Tamamlandı | Aynı Flutter kodundan Android + Edge/Chrome Web/PWA, responsive touch UI ve static-only PWA cache |
 
 Phase 02B'deki 183 `master.layout_slots` kaydının 172'si lojistik pozisyon, 11'i `slot_role = 'MACHINE'` olan makine/hücre bölgesidir. Bu 11 bölge yalnızca fiziksel ve ekran yerleşim referansıdır; taşıma isteğinin `source_slot_id` veya `destination_slot_id` değeri olamaz. Şema ayrımı mevcut `slot_role` alanıyla yapabiliyor; Phase 03 workflow engine bu invariant'ı uygular ve Phase 04 API bütün mutasyonları aynı service sınırından geçirir.
 
@@ -39,7 +42,7 @@ src/TkgPda.Application/        API'den bağımsız application service/port tan�
 src/TkgPda.Infrastructure.../  Transactional PostgreSQL workflow store
 src/TkgPda.Api/                Authenticated ASP.NET Core HTTP boundary
 src/TkgPda.AdminWeb/           React + TypeScript + Vite administration client
-src/TkgPda.Pda/                Flutter Android industrial PDA client
+src/TkgPda.Pda/                Flutter Android + Web/PWA industrial operator client
 rds/scripts/                   Version-controlled RDS Script artifact'i ve Node contract testleri
 rds/tasks/commissioning/       Development-only RDS simulator task artifact'i
 TKG.Pda.slnx                   .NET 10 solution
@@ -98,6 +101,11 @@ dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
 flutter build apk --debug --dart-define=TKG_API_BASE_URL=https://api.example.invalid
+flutter build web --release --no-web-resources-cdn --base-href /operator/
+
+cd ../..
+node --test tests/phase_09/web_contract.test.mjs
+pwsh tests/phase_09/run_web_operator_e2e.ps1
 ```
 
 Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretmez. `ui_x`, `ui_y`, `ui_width`, `ui_height` yalnızca PDA ekranında kullanılacak 0–1 normalize gösterim geometrisidir.
@@ -119,6 +127,8 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 - [Phase 08A Live RDS Readiness](docs/PHASE_08A_LIVE_RDS_READINESS.md)
 - [Phase 08B RDS Execution Integration](docs/PHASE_08B_RDS_EXECUTION_INTEGRATION.md)
 - [Phase 08C RDS Simulator Commissioning](docs/PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md)
+- [Phase 09 Android + Web/PWA Operator](docs/PHASE_09_MULTIPLATFORM_OPERATOR.md)
+- [Operator Web/PWA deployment](docs/OPERATOR_WEB_DEPLOYMENT.md)
 - [Normative RDS/PDA entegrasyon sözleşmesi](docs/RDS_PDA_INTEGRATION_SPEC.md)
 - [Database specification v0.1](docs/TKG_PDA_DATABASE_SPEC_v0.1.md)
 

@@ -20,6 +20,27 @@ var jwtOptions = new JwtOptions(
     builder.Configuration.GetValue("Authentication:Jwt:ClockSkewSeconds", 30));
 jwtOptions.Validate();
 var rdsOptions = RdsOptions.FromConfiguration(builder.Configuration);
+var operatorWebOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()?
+    .Select(value => value.Trim())
+    .Where(value => value.Length > 0)
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray() ?? [];
+foreach (var origin in operatorWebOrigins)
+{
+    if (origin.Contains('*', StringComparison.Ordinal)
+        || !Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+        || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+        || uri.UserInfo.Length > 0
+        || uri.Query.Length > 0
+        || uri.Fragment.Length > 0
+        || uri.AbsolutePath != "/")
+    {
+        throw new InvalidOperationException(
+            $"Cors:AllowedOrigins contains an invalid exact HTTP(S) origin: {origin}");
+    }
+}
 
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
 builder.Services.Configure<JsonOptions>(options =>
@@ -82,6 +103,23 @@ builder.Services.AddSingleton(new RdsExecutionSettings(
     rdsOptions.FullContentValue));
 builder.Services.AddSingleton<RdsExecutionCoordinator>();
 builder.Services.AddHostedService<RdsExecutionWorker>();
+builder.Services.AddCors(options => options.AddPolicy("OperatorWeb", policy =>
+{
+    if (operatorWebOrigins.Length > 0)
+    {
+        policy.WithOrigins(operatorWebOrigins);
+    }
+    policy
+        .WithMethods("GET", "POST", "PUT", "OPTIONS")
+        .WithHeaders(
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            ApiHeaders.DeviceCode,
+            ApiHeaders.IdempotencyKey,
+            ApiHeaders.CorrelationId)
+        .WithExposedHeaders(ApiHeaders.CorrelationId);
+}));
 
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 builder.Services
@@ -166,6 +204,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     await next();
 });
+app.UseCors("OperatorWeb");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<DeviceContextMiddleware>();

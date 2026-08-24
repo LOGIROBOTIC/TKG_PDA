@@ -1,31 +1,37 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 abstract interface class DeviceCodeStore {
+  static const persistentKey = 'tkg.pda.device-code';
+
   Future<String?> read();
   Future<void> write(String deviceCode);
   Future<void> clear();
 }
 
-class SecureDeviceCodeStore implements DeviceCodeStore {
-  SecureDeviceCodeStore({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+abstract interface class StringKeyValueStore {
+  String? read(String key);
+  void write(String key, String value);
+  void remove(String key);
+}
 
-  static const _key = 'tkg.pda.device-code';
-  final FlutterSecureStorage _storage;
+class PersistentDeviceCodeStore implements DeviceCodeStore {
+  PersistentDeviceCodeStore(this._storage);
+
+  final StringKeyValueStore _storage;
 
   @override
   Future<String?> read() async {
-    final value = await _storage.read(key: _key);
-    final normalized = value?.trim();
+    final normalized = _storage.read(DeviceCodeStore.persistentKey)?.trim();
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
   @override
-  Future<void> write(String deviceCode) =>
-      _storage.write(key: _key, value: deviceCode.trim());
+  Future<void> write(String deviceCode) async {
+    _storage.write(DeviceCodeStore.persistentKey, deviceCode.trim());
+  }
 
   @override
-  Future<void> clear() => _storage.delete(key: _key);
+  Future<void> clear() async {
+    _storage.remove(DeviceCodeStore.persistentKey);
+  }
 }
 
 class MemoryDeviceCodeStore implements DeviceCodeStore {

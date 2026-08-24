@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
@@ -104,11 +103,6 @@ class ApiClient {
       }
       throw const ConnectivityException();
     } on http.ClientException catch (_) {
-      if (mutation) {
-        throw AmbiguousMutationException(idempotencyKey: idempotencyKey ?? '');
-      }
-      throw const ConnectivityException();
-    } on SocketException catch (_) {
       if (mutation) {
         throw AmbiguousMutationException(idempotencyKey: idempotencyKey ?? '');
       }

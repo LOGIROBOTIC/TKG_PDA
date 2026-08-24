@@ -174,10 +174,12 @@ class FakePdaRepository implements PdaDataSource {
   int switchCount = 0;
   int loadStateCount = 0;
   int contextCount = 0;
+  int meCount = 0;
   String? lastLoadState;
   String? lastIdempotencyKey;
   TransportCommand? lastCommand;
   Completer<TransportResult>? createCompleter;
+  Completer<AuthenticatedUser>? meCompleter;
 
   @override
   Future<LoginSession> login(String username, String password) async {
@@ -192,7 +194,11 @@ class FakePdaRepository implements PdaDataSource {
   }
 
   @override
-  Future<AuthenticatedUser> me() async => testUser;
+  Future<AuthenticatedUser> me() async {
+    meCount++;
+    if (meCompleter case final completer?) return completer.future;
+    return testUser;
+  }
 
   @override
   Future<List<MachineSummary>> machines() async => machineValues;

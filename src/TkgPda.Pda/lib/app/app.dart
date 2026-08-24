@@ -44,7 +44,7 @@ class _TkgPdaAppState extends State<TkgPdaApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => MaterialApp.router(
-    title: 'TKG PDA',
+    title: 'TKG Operator',
     debugShowCheckedModeBanner: false,
     theme: buildPdaTheme(),
     routerConfig: _router,

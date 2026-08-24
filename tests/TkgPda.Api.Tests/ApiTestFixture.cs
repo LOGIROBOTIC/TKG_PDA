@@ -24,6 +24,7 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("Rds:CallbackKey", CallbackKey);
+        builder.UseSetting("Cors:AllowedOrigins:0", "https://operator.example.test");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<IRdsReadClient>();

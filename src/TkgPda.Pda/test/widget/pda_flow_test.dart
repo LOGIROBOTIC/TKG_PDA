@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tkg_pda/app/app.dart';
@@ -13,7 +15,7 @@ void main() {
   testWidgets('first run opens Device Setup', (tester) async {
     final harness = await _harness(tester, deviceCode: null);
 
-    expect(find.text('TKG PDA Cihaz Kurulumu'), findsOneWidget);
+    expect(find.text('TKG Operator · Cihaz Kurulumu'), findsOneWidget);
     expect(find.byKey(const Key('device-code-field')), findsOneWidget);
     harness.dispose();
   });
@@ -457,6 +459,101 @@ void main() {
     expect(second.store.value, testDeviceCode);
     second.dispose();
   });
+
+  testWidgets('Device Code change clears session and operational state', (
+    tester,
+  ) async {
+    final harness = await _operationHarness(tester);
+    expect(harness.controller.isAuthenticated, isTrue);
+    expect(harness.controller.context, isNotNull);
+
+    await harness.controller.beginDeviceCodeChange();
+    await tester.pumpAndSettle();
+
+    expect(find.text('TKG Operator · Cihaz Kurulumu'), findsOneWidget);
+    expect(harness.controller.isAuthenticated, isFalse);
+    expect(harness.controller.context, isNull);
+    expect(harness.controller.machines, isEmpty);
+    await harness.controller.saveDeviceCode('SH01A-TERM01');
+    expect(harness.store.value, 'SH01A-TERM01');
+    harness.dispose();
+  });
+
+  testWidgets('resume refetch completes before mutations are re-enabled', (
+    tester,
+  ) async {
+    final repository = FakePdaRepository();
+    final harness = await _operationHarness(tester, repository: repository);
+    repository.meCompleter = Completer<AuthenticatedUser>();
+
+    harness.controller.onPaused();
+    expect(harness.controller.mutationEnabled, isFalse);
+    expect(harness.controller.pollingActive, isFalse);
+
+    final resumed = harness.controller.onResumed();
+    await tester.pump();
+    expect(harness.controller.resumeValidationPending, isTrue);
+    expect(harness.controller.mutationEnabled, isFalse);
+
+    repository.meCompleter!.complete(testUser);
+    await resumed;
+    await tester.pump();
+    expect(harness.controller.resumeValidationPending, isFalse);
+    expect(harness.controller.mutationEnabled, isTrue);
+    expect(repository.meCount, 1);
+    harness.dispose();
+  });
+
+  for (final size in const [
+    Size(1024, 600),
+    Size(1280, 720),
+    Size(1366, 768),
+    Size(1920, 1080),
+  ]) {
+    testWidgets(
+      'wide touch layout is usable at ${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPhysicalSize);
+        final repository = FakePdaRepository()
+          ..contextValue = testContext(activeRequests: [testActiveRequest]);
+        final harness = await _operationHarness(tester, repository: repository);
+
+        expect(find.byKey(const Key('operation-wide-layout')), findsOneWidget);
+        expect(
+          find.byKey(const Key('active-transport-section')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        final machine = harness.controller.context!.slots.singleWhere(
+          (slot) => slot.isMachineRegion,
+        );
+        harness.controller.selectSlot(machine);
+        expect(harness.controller.selectedSlot, isNull);
+
+        await tester.tap(find.byKey(const Key('slot-slot-vacant')));
+        await tester.pump();
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('action-BRING_EMPTY')),
+          240,
+          scrollable: find.descendant(
+            of: find.byKey(const Key('operation-wide-right')),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.getSize(find.byKey(const Key('action-BRING_EMPTY'))).height,
+          greaterThanOrEqualTo(48),
+        );
+        expect(tester.takeException(), isNull);
+        harness.dispose();
+      },
+    );
+  }
 }
 
 Future<_Harness> _harness(

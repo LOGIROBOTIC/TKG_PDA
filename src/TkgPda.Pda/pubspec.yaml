@@ -1,5 +1,5 @@
 name: tkg_pda
-description: "Device-bound Android PDA client for TKG logistics operations."
+description: "Device-bound Android and Web/PWA operator client for TKG logistics operations."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -39,9 +39,12 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   uuid: ^4.6.0
   intl: ^0.20.3
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

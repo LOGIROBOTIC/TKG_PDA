@@ -1,24 +1,36 @@
+import '../platform/platform_info.dart';
+
 class AppConfig {
-  const AppConfig({required this.apiBaseUrl});
+  const AppConfig({required this.apiBaseUri});
 
-  final String apiBaseUrl;
+  static const _buildApiBaseUrl = String.fromEnvironment('TKG_API_BASE_URL');
+  static const _androidDevelopmentApi = 'http://10.0.2.2:5000';
 
-  static const fromEnvironment = AppConfig(
-    apiBaseUrl: String.fromEnvironment(
-      'TKG_API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:5000',
-    ),
-  );
+  final Uri apiBaseUri;
 
-  Uri get apiBaseUri {
-    final uri = Uri.tryParse(apiBaseUrl);
+  static AppConfig resolve({
+    required PlatformInfo platformInfo,
+    String? runtimeApiBaseUrl,
+    String buildApiBaseUrl = _buildApiBaseUrl,
+  }) {
+    final configured = buildApiBaseUrl.trim().isNotEmpty
+        ? buildApiBaseUrl.trim()
+        : runtimeApiBaseUrl?.trim().isNotEmpty == true
+        ? runtimeApiBaseUrl!.trim()
+        : platformInfo.isWeb
+        ? platformInfo.browserOrigin?.toString() ?? ''
+        : _androidDevelopmentApi;
+    final uri = Uri.tryParse(configured);
     if (uri == null ||
         !{'http', 'https'}.contains(uri.scheme.toLowerCase()) ||
-        uri.host.isEmpty) {
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.query.isNotEmpty ||
+        uri.fragment.isNotEmpty) {
       throw StateError(
-        'TKG_API_BASE_URL geçerli bir HTTP(S) adresi olmalıdır.',
+        'TKG API adresi user-info/query/fragment içermeyen geçerli bir HTTP(S) adresi olmalıdır.',
       );
     }
-    return uri;
+    return AppConfig(apiBaseUri: uri);
   }
 }

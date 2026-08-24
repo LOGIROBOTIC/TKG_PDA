@@ -44,11 +44,12 @@ class _LoginScreenState extends State<LoginScreen> {
         actions: [
           TextButton.icon(
             key: const Key('change-device-code'),
-            onPressed: widget.controller.busy
-                ? null
-                : widget.controller.beginDeviceCodeChange,
+            onPressed: widget.controller.busy ? null : _confirmDeviceChange,
             icon: const Icon(Icons.settings, color: Colors.white),
-            label: const Text('Cihaz', style: TextStyle(color: Colors.white)),
+            label: const Text(
+              'Cihazı Değiştir',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -153,4 +154,28 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     ),
   );
+
+  Future<void> _confirmDeviceChange() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cihazı değiştir / yeniden yapılandır'),
+        content: const Text(
+          'Bu terminal kimliği değiştirilecek. Oturum ve ekrandaki operasyon durumu temizlenecek; yeni cihazın Admin Web üzerinde önceden tanımlı olması gerekir.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            key: const Key('confirm-device-code-change'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yeniden Yapılandır'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await widget.controller.beginDeviceCodeChange();
+  }
 }

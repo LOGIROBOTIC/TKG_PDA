@@ -1,12 +1,16 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:tkg_pda/core/auth/session_memory.dart';
+import 'package:tkg_pda/core/config/app_config.dart';
 import 'package:tkg_pda/core/errors/api_problem.dart';
 import 'package:tkg_pda/core/network/api_client.dart';
+import 'package:tkg_pda/core/platform/platform_info.dart';
 import 'package:tkg_pda/core/storage/device_code_store.dart';
+import 'package:tkg_pda/core/storage/device_code_store_secure.dart';
 import 'package:tkg_pda/data/models/pda_models.dart';
 
 import '../support/fakes.dart';
@@ -49,6 +53,70 @@ void main() {
       expect(store.value, testDeviceCode);
       expect(store.value, isNot(contains('operator-password')));
     });
+
+    test(
+      'persistent Web adapter writes only the frozen Device Code key',
+      () async {
+        final values = <String, String>{};
+        final storage = _MapStorage(values);
+        final store = PersistentDeviceCodeStore(storage);
+
+        await store.write(' SH01A-TERM01 ');
+
+        expect(values, {DeviceCodeStore.persistentKey: 'SH01A-TERM01'});
+        expect(values.keys, isNot(contains('jwt')));
+        expect(values.values, isNot(contains('operator-password')));
+      },
+    );
+
+    test(
+      'Android implementation retains secure-storage Device Code behavior',
+      () async {
+        FlutterSecureStorage.setMockInitialValues({});
+        final store = SecureDeviceCodeStore();
+
+        await store.write('PDA-ANDROID-01');
+
+        expect(await store.read(), 'PDA-ANDROID-01');
+        await store.clear();
+        expect(await store.read(), isNull);
+      },
+    );
+
+    test(
+      'Web configuration prefers build override then runtime then same origin',
+      () {
+        final platform = PlatformInfo(
+          isWeb: true,
+          browserOrigin: Uri(scheme: 'https', host: 'line.example.test'),
+        );
+
+        expect(
+          AppConfig.resolve(
+            platformInfo: platform,
+            runtimeApiBaseUrl: 'https://runtime.example.test',
+            buildApiBaseUrl: 'https://build.example.test',
+          ).apiBaseUri,
+          Uri.parse('https://build.example.test'),
+        );
+        expect(
+          AppConfig.resolve(
+            platformInfo: platform,
+            runtimeApiBaseUrl: 'https://runtime.example.test',
+            buildApiBaseUrl: '',
+          ).apiBaseUri,
+          Uri.parse('https://runtime.example.test'),
+        );
+        expect(
+          AppConfig.resolve(
+            platformInfo: platform,
+            runtimeApiBaseUrl: '',
+            buildApiBaseUrl: '',
+          ).apiBaseUri,
+          Uri.parse('https://line.example.test'),
+        );
+      },
+    );
   });
 
   group('HTTP security boundary', () {
@@ -161,4 +229,19 @@ void main() {
       },
     );
   });
+}
+
+class _MapStorage implements StringKeyValueStore {
+  const _MapStorage(this.values);
+
+  final Map<String, String> values;
+
+  @override
+  String? read(String key) => values[key];
+
+  @override
+  void remove(String key) => values.remove(key);
+
+  @override
+  void write(String key, String value) => values[key] = value;
 }

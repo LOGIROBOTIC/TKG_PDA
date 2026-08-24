@@ -39,6 +39,7 @@ builder.Services.AddSingleton<ITransportWorkflowStore>(services =>
     new PostgresTransportWorkflowStore(services.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddSingleton<TransportWorkflowService>();
 builder.Services.AddSingleton<MachineAccessService>();
+builder.Services.AddSingleton<PdaOperationalContextService>();
 
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 builder.Services

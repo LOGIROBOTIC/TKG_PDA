@@ -20,7 +20,7 @@ public interface IApiDataStore
         bool administrator,
         CancellationToken cancellationToken = default);
 
-    Task<OperationalContextRecord?> GetOperationalContextAsync(
+    Task<OperationalContextDataRecord?> GetOperationalContextDataAsync(
         Guid userId,
         Guid machineId,
         bool administrator,

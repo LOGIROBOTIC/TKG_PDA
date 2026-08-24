@@ -1,6 +1,6 @@
 # TKG PDA Phase 06 — Admin Web
 
-**Status:** Implemented on `agent/phase-06-admin-web` (PR #4); Phase 06.1 security & acceptance hardening applied — memory-only access token and real-browser acceptance suite
+**Status:** Complete; PR #4 merged to `main` at `bd61843824496cf2bf7dd48607ee4aa512f583e3`. Phase 06.1 security & acceptance hardening applied — memory-only access token and real-browser acceptance suite
 
 **Baseline:** Phase 05 merged to `main` at `653df183f1b4d33326ef28f9704753673b5b257a`
 
@@ -177,4 +177,4 @@ Generated `node_modules`, `dist`, coverage, Playwright reports, test results, sc
 
 ## Phase boundary
 
-Phase 06 stops at the Admin Web draft PR. Phase 07 Flutter PDA and all robot/integration phases have not started.
+Phase 06 is complete. Phase 07A extends only the backend PDA/RDS read contract; Flutter remains Phase 07B and live robot/integration work remains deferred.

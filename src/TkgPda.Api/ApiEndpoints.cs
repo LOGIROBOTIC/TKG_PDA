@@ -138,12 +138,15 @@ public static class ApiEndpoints
         Guid machineId,
         HttpContext context,
         MachineAccessService access,
-        IApiDataStore dataStore,
+        PdaOperationalContextService operationalContext,
         CancellationToken cancellationToken)
     {
         _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.View, cancellationToken);
-        var result = await dataStore.GetOperationalContextAsync(
-            context.User.UserId(),
+        var roles = context.User.FindAll(ClaimTypes.Role)
+            .Select(static claim => claim.Value)
+            .ToHashSet(StringComparer.Ordinal);
+        var result = await operationalContext.GetAsync(
+            new PdaActorContext(context.User.UserId(), roles, context.User.IsDeviceBound()),
             machineId,
             context.User.IsAdministrator(),
             cancellationToken);

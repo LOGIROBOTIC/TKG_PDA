@@ -26,6 +26,12 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
                 ops.machine_runtime_state
             RESTART IDENTITY CASCADE;
             DELETE FROM audit.audit_logs;
+            DELETE FROM integration.layout_slot_rds_mapping
+            WHERE rds_worksite_id IN (
+                SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P07A-%');
+            DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P07A-%';
+            DELETE FROM master.task_templates
+            WHERE config_json ->> 'testScope' = 'P07A';
             DELETE FROM auth.user_machine_permissions;
             DELETE FROM auth.user_roles;
             DELETE FROM auth.users;

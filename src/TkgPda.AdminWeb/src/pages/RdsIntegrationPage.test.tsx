@@ -1,0 +1,40 @@
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { RdsIntegrationPage } from './RdsIntegrationPage'
+import { jsonResponse, renderAuthenticated } from '../test/render'
+
+const profile = { id: 'np-1', machineId: 'm-1', machineCode: 'SH-01-A', code: 'NAV-A', name: 'Navigation A', version: 1, status: 'PUBLISHED' }
+const workSite = { id: 'rw-1', navigationProfileId: 'np-1', siteId: 'SITE-01', area: 'A', groupName: 'G', type: 1, filled: 0, locked: 0, disabled: 0, syncFailed: 0, content: '', agvId: null, lastSyncAt: '2026-08-24T08:00:00Z', executionReady: true }
+
+const mockRdsApi = () => {
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/rds/status')) return Promise.resolve(jsonResponse({ enabled: true, reachable: true, stale: false, lastSuccessfulRead: '2026-08-24T08:00:00Z', baseAddressDisplaySafe: 'http://rds.test:8080', businessStatus: 200, businessMessage: 'Success', errorCode: null, errorMessage: null }))
+    if (url.endsWith('/rds/navigation-profiles')) return Promise.resolve(jsonResponse([profile]))
+    if (url.includes('/rds/worksites?')) return Promise.resolve(jsonResponse([workSite]))
+    if (url.endsWith('/rds/slot-mappings')) return Promise.resolve(jsonResponse([]))
+    if (url.endsWith('/rds/worksites/sync') && init?.method === 'POST') return Promise.resolve(jsonResponse({ navigationProfileId: 'np-1', received: 1, created: 1, updated: 0, syncedAt: '2026-08-24T08:00:00Z', businessCode: 200, businessMessage: 'Success' }))
+    return Promise.resolve(jsonResponse([]))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  renderAuthenticated(<RdsIntegrationPage />)
+  return fetchMock
+}
+
+describe('RDS integration page', () => {
+  it('labels RDS data as external read evidence and does not mutate during load', async () => {
+    const fetchMock = mockRdsApi()
+    expect(await screen.findByText('RDS değerleri dış sistem kanıtıdır.')).toBeVisible()
+    expect(await screen.findByText('SITE-01')).toBeVisible()
+    expect(screen.getByText('http://rds.test:8080')).toBeVisible()
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true)
+  })
+
+  it('requires an explicit scene confirmation before read-only synchronization', async () => {
+    const fetchMock = mockRdsApi()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await userEvent.click(await screen.findByRole('button', { name: /Salt okunur senkronize et/ }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/rds/worksites/sync') && init?.method === 'POST')).toBe(true))
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('şu anda RDS'))
+  })
+})

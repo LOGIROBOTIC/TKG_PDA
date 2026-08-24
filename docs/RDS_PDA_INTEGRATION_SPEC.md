@@ -1,12 +1,12 @@
 # TKG PDA — RDS/PDA Entegrasyon Sözleşmesi
 
-**Durum:** Phase 07A normative baseline
+**Durum:** Phase 08A read-only connectivity baseline
 
-**Canlı entegrasyon:** Yok; uygulama Phase 08'e ertelenmiştir
+**Canlı entegrasyon:** WorkSite ve Wind Task sorgusu salt okunur olarak kanıtlandı; dispatch/mutation/callback Phase 08B'ye ertelendi
 
 **Şema kaynağı:** `db/migrations/001_initial_schema.sql`
 
-Bu belge gelecekteki Flutter PDA ile SEER RDS entegrasyonu arasındaki sorumlulukları sabitler. Phase 07A yalnız TKG API read model'ını ve kalıcı entegrasyon projeksiyonunu tanımlar; RDS sunucusuna ağ isteği yapmaz.
+Bu belge Flutter PDA ile SEER RDS entegrasyonu arasındaki sorumlulukları sabitler. Phase 08A server-side read client, WorkSite aynası ve açık admin mapping'i uygular; Flutter RDS'e bağlanmaz ve RDS'e mutation gönderilmez.
 
 ## 1. Kaynak gerçekleri ve güven sınırı
 
@@ -15,8 +15,8 @@ flowchart LR
     P[Flutter PDA] -->|JWT + X-Device-Code| A[TKG ASP.NET Core API]
     A --> D[Application / Domain]
     D --> DB[(TKG PostgreSQL)]
-    DB -. Phase 08 .-> R[RdsAdapter]
-    R -. korumalı özel endpoint .-> S[SEER RDS]
+    DB -->|Phase 08A WorkSite mirror| R[RdsReadClient]
+    R -->|salt okunur query| S[SEER RDS]
     S --> C[Core / CBD15]
 ```
 
@@ -53,7 +53,7 @@ Phase 07A read contract mevcut kalıcı alanları olduğu gibi projekte eder:
 | `agvId` | `last_agv_id` |
 | `lastSyncAt` | `last_sync_at` |
 
-RDS WorkSite sözleşmesinin Phase 08'de doğrulanacak yetenekleri `filled`, `locked`, `lockedBy`, `disabled`, `syncFailed`, `content`, `type` ve `groupName` alanlarıdır. Mevcut TKG şeması `lockedBy` için ayrı kolon içermez; canlı payload gerekirse önce `raw_state_json` kanıtı ve gerçek RDS cevabı incelenmelidir. Phase 07A bu alanı uydurmaz.
+RDS WorkSite sözleşmesinin `filled`, `locked`, `lockedBy`, `disabled`, `syncFailed`, `content`, `type` ve `groupName` alanları Phase 08A'da canlı cevapta doğrulanmıştır. Mevcut TKG şeması `lockedBy` için ayrı kolon içermez; exact canlı payload `raw_state_json` içinde korunur ve projection ayrı alan uydurmaz.
 
 ### 2.1 Doluluk ve yük semantiği
 
@@ -71,7 +71,7 @@ RDS WorkSite sözleşmesinin Phase 08'de doğrulanacak yetenekleri `filled`, `lo
 
 ## 3. Wind Task dispatch stratejisi
 
-Phase 08 için amaçlanan yön:
+Phase 08B için amaçlanan dispatch yönü:
 
 ```mermaid
 sequenceDiagram
@@ -93,9 +93,9 @@ sequenceDiagram
 
 ## 4. Task sorgu, iptal ve reconciliation
 
-Phase 08'de kullanılacak RDS operasyonları:
+Phase 08B execution entegrasyonunda kullanılacak RDS operasyonları:
 
-- Task sorgu: `/api/queryWindTask`
+- Task sorgu: `/api/queryWindTask` (Phase 08A client parsing'i salt okunur olarak kanıtlandı)
 - Task durdurma: `/api/stop-task`
 - Task oluşturma: korumalı özel RDS script endpoint'i üzerinden `jj.createWindTask(...)`
 
@@ -161,12 +161,12 @@ Public RDS API düzeyinde map/profile switching henüz kanıtlanmamıştır. End
 
 ## 8. Phase sınırları
 
-Phase 07A'da kesinlikle bulunmaz:
+Phase 08A'da kesinlikle bulunmaz:
 
-- canlı RDS çağrısı, credential, production IP veya WebSocket;
-- Wind Task create/query/stop;
+- RDS credential, production IP veya WebSocket;
+- Wind Task create/stop/dispatch (yalnız read query parser'ı vardır);
 - WorkSite yazma, callback kaydı veya alarm ingestion;
-- Flutter/Dart/Android/iOS projesi;
+- Flutter'dan direct RDS bağlantısı;
 - robot/map koordinatı veya SEER navigation davranışı.
 
-Bu belgedeki live davranışlar Phase 08'de gerçek `RdsApi_en.md`, kurulu müşteri RDS projesi ve ağ testleriyle doğrulanmadan production contract sayılmaz.
+Canlı read davranışları `RdsApi_en.md`, kurulu yerel RDS ve opt-in testlerle kanıtlanmıştır. Dispatch, stop/cancel reconciliation ve callback davranışı Phase 08B'de ayrıca kanıtlanmadan production contract sayılmaz.

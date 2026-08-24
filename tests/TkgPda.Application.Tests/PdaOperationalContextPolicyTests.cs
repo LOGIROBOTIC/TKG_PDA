@@ -179,6 +179,7 @@ public sealed class PdaOperationalContextPolicyTests
         Assert.False(slot.RdsWorkSite.IsMapped);
         Assert.Null(slot.RdsWorkSite.SiteId);
         Assert.False(slot.ExecutionReadiness.RdsWorkSiteMapped);
+        Assert.False(slot.ExecutionReadiness.IsExecutionReady);
         Assert.Equal("RDS_WORKSITE_NOT_MAPPED", slot.ExecutionReadiness.ReadinessCode);
     }
 
@@ -186,7 +187,7 @@ public sealed class PdaOperationalContextPolicyTests
     public void Persisted_rds_mapping_is_projected_exactly_without_invention()
     {
         var workSite = new RdsWorkSiteProjectionRecord(
-            true, "SITE-41", "A1", "GROUP-X", 3, 1, 0, 0, 1, "known-content", "AGV-9", DateTimeOffset.UtcNow);
+            true, "SITE-41", "A1", "GROUP-X", 1, 1, 0, 0, 0, "known-content", "AGV-9", DateTimeOffset.UtcNow);
         var context = PdaOperationalContextPolicy.Project(
             Data(Slot(occupancy: "OCCUPIED", load: "FULL", workSite: workSite)),
             Actor(KnownRoleCodes.Supervisor));
@@ -194,7 +195,30 @@ public sealed class PdaOperationalContextPolicyTests
 
         Assert.Same(workSite, slot.RdsWorkSite);
         Assert.True(slot.ExecutionReadiness.RdsWorkSiteMapped);
+        Assert.True(slot.ExecutionReadiness.IsExecutionReady);
         Assert.Null(slot.ExecutionReadiness.ReadinessCode);
+    }
+
+    [Theory]
+    [InlineData(0, 1, 0, "RDS_WORKSITE_DISABLED")]
+    [InlineData(0, 0, 1, "RDS_WORKSITE_SYNC_FAILED")]
+    [InlineData(1, 0, 0, "RDS_WORKSITE_LOCKED")]
+    public void Mapped_unavailable_rds_evidence_is_not_execution_ready(
+        int locked,
+        int disabled,
+        int syncFailed,
+        string expectedCode)
+    {
+        var workSite = new RdsWorkSiteProjectionRecord(
+            true, "SITE-BUSY", null, null, 1, 0, locked, disabled, syncFailed, string.Empty, null, DateTimeOffset.UtcNow);
+        var context = PdaOperationalContextPolicy.Project(
+            Data(Slot(occupancy: "VACANT", load: "UNKNOWN", workSite: workSite)),
+            Actor(KnownRoleCodes.LineOperator));
+        var readiness = Assert.Single(context.Slots).ExecutionReadiness;
+
+        Assert.True(readiness.RdsWorkSiteMapped);
+        Assert.False(readiness.IsExecutionReady);
+        Assert.Equal(expectedCode, readiness.ReadinessCode);
     }
 
     private static PdaAvailableActionRecord Action(SlotContextDataRecord slot, string role, string operation) =>

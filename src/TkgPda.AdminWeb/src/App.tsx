@@ -12,6 +12,7 @@ import { LayoutsPage } from './pages/LayoutsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MachinesPage } from './pages/MachinesPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { RdsIntegrationPage } from './pages/RdsIntegrationPage'
 import { UsersPage } from './pages/UsersPage'
 
 function ProtectedLayout() {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="containers" element={<ContainersPage />} />
         <Route path="data-quality" element={<DataQualityPage />} />
         <Route path="audit" element={<AuditPage />} />
+        <Route path="rds" element={<RdsIntegrationPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

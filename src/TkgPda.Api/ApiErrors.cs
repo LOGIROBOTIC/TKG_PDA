@@ -35,6 +35,26 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             var status = AdminHttpStatus(error.Code);
             await ApiErrorWriter.WriteAsync(context, status, error.Code, error.Message);
         }
+        catch (RdsIntegrationRuleException error)
+        {
+            var status = error.Code.EndsWith("_NOT_FOUND", StringComparison.Ordinal)
+                ? StatusCodes.Status404NotFound
+                : error.Code is "NAVIGATION_PROFILE_REQUIRED" or "ID_REQUIRED"
+                    ? StatusCodes.Status400BadRequest
+                    : error.Code is "MACHINE_REGION_MAPPING_FORBIDDEN" or "RDS_WORKSITE_NOT_PHYSICAL"
+                        ? StatusCodes.Status422UnprocessableEntity
+                        : StatusCodes.Status409Conflict;
+            await ApiErrorWriter.WriteAsync(context, status, error.Code, error.Message);
+        }
+        catch (RdsReadException error)
+        {
+            logger.LogWarning("RDS read failed with {Code} at {Endpoint} for correlation {CorrelationId}.", error.Code, error.Endpoint, error.CorrelationId);
+            await ApiErrorWriter.WriteAsync(
+                context,
+                StatusCodes.Status503ServiceUnavailable,
+                error.Code,
+                "The read-only RDS service is temporarily unavailable.");
+        }
         catch (BadHttpRequestException error)
         {
             await ApiErrorWriter.WriteAsync(context, StatusCodes.Status400BadRequest, "INVALID_HTTP_REQUEST", error.Message);

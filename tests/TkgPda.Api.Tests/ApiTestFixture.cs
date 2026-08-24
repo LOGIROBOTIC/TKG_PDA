@@ -2,20 +2,36 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using TkgPda.Api;
+using TkgPda.Application;
 
 namespace TkgPda.Api.Tests;
 
 public sealed class ApiTestFixture : WebApplicationFactory<Program>
 {
+    public TestRdsReadClient RdsClient { get; } = new();
+
     public string ConnectionString => Environment.GetEnvironmentVariable("TKG_PDA_API_TEST_CONNECTION_STRING")
         ?? throw new InvalidOperationException("TKG_PDA_API_TEST_CONNECTION_STRING is required.");
 
     public HttpClient Client() => CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IRdsReadClient>();
+            services.AddSingleton<IRdsReadClient>(RdsClient);
+        });
+    }
+
     public async Task ResetAsync()
     {
+        RdsClient.Reset();
         await ExecuteAsync(
             """
             TRUNCATE
@@ -30,6 +46,11 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             WHERE rds_worksite_id IN (
                 SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P07A-%');
             DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P07A-%';
+            DELETE FROM integration.layout_slot_rds_mapping
+            WHERE rds_worksite_id IN (
+                SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08A-%');
+            DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08A-%';
+            DELETE FROM master.navigation_profiles WHERE code LIKE 'P08A-%';
             DELETE FROM master.task_templates
             WHERE config_json ->> 'testScope' = 'P07A';
             DELETE FROM auth.user_machine_permissions;
@@ -286,3 +307,34 @@ public sealed record TestIdentity(
     Guid? MachineId);
 
 public sealed record LayoutContext(Guid MachineId, Guid VariantId, Guid LayoutId);
+
+public sealed class TestRdsReadClient : IRdsReadClient
+{
+    public bool Enabled { get; set; } = true;
+    public string? SafeBaseAddress => "http://rds.test:8080";
+    public DateTimeOffset? LastSuccessfulRead { get; private set; }
+    public List<string> Calls { get; } = [];
+    public IReadOnlyList<RdsWorkSiteSnapshot> WorkSites { get; set; } = [];
+
+    public void Reset()
+    {
+        Enabled = true;
+        LastSuccessfulRead = null;
+        Calls.Clear();
+        WorkSites = [];
+    }
+
+    public Task<RdsReadResult<IReadOnlyList<RdsWorkSiteSnapshot>>> GetWorkSitesAsync(Guid correlationId, CancellationToken cancellationToken = default)
+    {
+        Calls.Add("/api/work-sites/sites");
+        LastSuccessfulRead = DateTimeOffset.UtcNow;
+        return Task.FromResult(new RdsReadResult<IReadOnlyList<RdsWorkSiteSnapshot>>(WorkSites, 200, "Success", "/api/work-sites/sites", correlationId, LastSuccessfulRead.Value));
+    }
+
+    public Task<RdsReadResult<RdsWindTaskPage>> QueryWindTasksAsync(RdsWindTaskQuery query, Guid correlationId, CancellationToken cancellationToken = default)
+    {
+        Calls.Add("/api/queryWindTask");
+        LastSuccessfulRead = DateTimeOffset.UtcNow;
+        return Task.FromResult(new RdsReadResult<RdsWindTaskPage>(new(0, query.CurrentPage, query.PageSize, 0, []), 200, "Success", "/api/queryWindTask", correlationId, LastSuccessfulRead.Value));
+    }
+}

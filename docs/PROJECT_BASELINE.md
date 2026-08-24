@@ -1,8 +1,8 @@
 # TKG PDA — Güncel Proje Baseline'ı
 
-Bu belge, Phase 01–07A tamamlanması ve Phase 07B Flutter PDA uygulaması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 07B mevcut API ve şemayı migration değiştirmeden kullanır.
+Bu belge, Phase 01–07B tamamlanması ve Phase 08A canlı salt-okunur RDS readiness entegrasyonu sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08A mevcut şemayı migration değiştirmeden kullanır.
 
-> Phase 07A PR #5 `main`e merge edilmiştir. Phase 07B ayrıntıları için [PHASE_07B_FLUTTER_PDA.md](PHASE_07B_FLUTTER_PDA.md) belgesine bakın.
+> Phase 07B PR #6 `main`e merge edilmiştir. Phase 08A ayrıntıları için [PHASE_08A_LIVE_RDS_READINESS.md](PHASE_08A_LIVE_RDS_READINESS.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
 
@@ -17,13 +17,14 @@ Bu belge, Phase 01–07A tamamlanması ve Phase 07B Flutter PDA uygulaması sonr
 | 05 | Admin Configuration API | Kabul edildi |
 | 06 | Admin Web | Tamamlandı |
 | 07A | PDA + RDS Contract Readiness | Tamamlandı |
-| 07B | Flutter PDA Application | Uygulandı / draft PR |
-| 08 | RDS Task Integration | Planlandı |
+| 07B | Flutter PDA Application | Tamamlandı |
+| 08A | Live RDS Connectivity + WorkSite Mapping | Uygulandı / draft PR |
+| 08B | RDS Task Dispatch + Reconciliation | Planlandı |
 | 09 | SEER Map/Route/Profile Integration | Planlandı |
 | 10 | System Integration & Tests | Planlandı |
 | 11 | PLC Integration | Gelecek aşama |
 
-Baseline, müşteri kaynaklarındaki lojistik gerçeği normalize eder; robot davranışı üretmez. RDS WorkSite ID'leri, robot X/Y, SEER harita koordinatları, route/stitch ve navigation profile verileri seed edilmemiştir.
+Baseline, müşteri kaynaklarındaki lojistik gerçeği normalize eder; robot davranışı üretmez. RDS WorkSite ID'leri müşteri seed'ine eklenmemiştir; Phase 08A'da açık navigation-profile seçimiyle canlı RDS'ten TKG aynasına alınır ve admin tarafından açıkça eşlenir. Robot X/Y, SEER harita koordinatları ve route/stitch üretilmemiştir.
 
 ## 2. Database mimarisi
 
@@ -180,7 +181,7 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 - `WAREHOUSE_OPERATOR` yalnız `BRING_EMPTY`; `ADMIN_WEB` ise hiçbir PDA transport capability almaz.
 - Aktif talep bir slotu meşgul ettiğinde ikinci action `SLOT_BUSY` olur; `occupancy_state` değerlerine `RESERVED` eklenmez.
 - RDS WorkSite ve task alanları yalnız `integration` şemasındaki persisted kanıttan okunur. Mapping veya template yokluğu açık/nullable kalır; WorkSite ID veya task label üretilmez.
-- PDA execution state, TKG business status ile kalıcı RDS task kanıtının kararlı projeksiyonudur. Canlı RDS çağrısı ve status mutation yoktur.
+- PDA execution state, TKG business status ile kalıcı RDS task kanıtının kararlı projeksiyonudur. PDA request'i canlı RDS çağrısı yapmaz; Phase 08A sync'i ayrı ADMIN_WEB boundary'sindedir ve RDS status mutation yoktur.
 - Normalize layout geometri robot/RDS/map koordinatı değildir.
 
 Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA_INTEGRATION_SPEC.md) belgesindedir.
@@ -195,6 +196,15 @@ Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA
 - Flutter yalnız TKG API'ye bağlanır; canlı RDS, PLC, SAP veya robot API çağrısı içermez.
 - Phase 07B kabulü 14 unit, 26 widget ve fresh PostgreSQL/gerçek API üzerinde 20 HTTP contract testiyle doğrulanmıştır.
 
+### 7.4 Phase 08A salt-okunur RDS sınırı
+
+- Yerel RDS `http://127.0.0.1:8080` üzerinde doğrulandı; 22 physical WorkSite (3 filled, 19 unfilled) ve 0 mevcut Wind Task gözlendi.
+- Server-side `RdsReadClient` yalnız WorkSite ve Wind Task query endpoint'lerini çağırır; HTTP ile birlikte body `code/msg` doğrulanır.
+- Admin, mevcut RDS sahnesini temsil eden navigation profile'ı açıkça seçer. Ad/kod benzerliğinden profil veya slot mapping türetilmez.
+- WorkSite aynası `integration.rds_worksites`, açık slot mapping'i mevcut `integration.layout_slot_rds_mapping` tablosunu kullanır; migration yoktur.
+- `MACHINE` region ve logical WorkSite mapping reddedilir. Disabled/locked/syncFailed physical kimlik eşlenebilir fakat execution readiness false kalır.
+- Flutter'a RDS configuration verilmez. Wind Task create/stop, callback, RDS mutation ve robot hareketi yoktur.
+
 ## 8. Sonraki aşama sınırı
 
-Phase 08 canlı RDS task/WorkSite/callback/alarm entegrasyonudur. SEER map/profile, PLC, SAP, robot koordinatı ve execution callback entegrasyonu henüz başlamamıştır. Phase 07B hiçbir Phase 08 işi başlatmamıştır.
+Phase 08B, gerçek RDS task dispatch/stop/callback ve failure reconciliation aşamasıdır. SEER map/profile, PLC, SAP ve robot koordinatı henüz başlamamıştır. Phase 08A yalnız read/query ve TKG mirror/mapping kapsamındadır.

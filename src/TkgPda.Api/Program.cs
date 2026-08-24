@@ -19,6 +19,7 @@ var jwtOptions = new JwtOptions(
     builder.Configuration.GetValue("Authentication:Jwt:ExpiryMinutes", 15),
     builder.Configuration.GetValue("Authentication:Jwt:ClockSkewSeconds", 30));
 jwtOptions.Validate();
+var rdsOptions = RdsOptions.FromConfiguration(builder.Configuration);
 
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
 builder.Services.Configure<JsonOptions>(options =>
@@ -27,6 +28,7 @@ builder.Services.Configure<JsonOptions>(options =>
     options.SerializerOptions.WriteIndented = false;
 });
 builder.Services.AddSingleton(jwtOptions);
+builder.Services.AddSingleton(rdsOptions);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordHashService>(services => services.GetRequiredService<Pbkdf2PasswordHasher>());
@@ -34,6 +36,22 @@ builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<IApiDataStore, PostgresApiDataStore>();
 builder.Services.AddSingleton<IAdminConfigurationStore, PostgresAdminConfigurationStore>();
+builder.Services.AddSingleton<IRdsIntegrationStore, PostgresRdsIntegrationStore>();
+builder.Services.AddHttpClient("RdsReadOnly", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);
+    if (rdsOptions.BaseAddress is { } baseAddress)
+    {
+        client.BaseAddress = baseAddress;
+    }
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    UseCookies = false,
+    AllowAutoRedirect = false
+});
+builder.Services.AddSingleton<IRdsReadClient, RdsReadClient>();
+builder.Services.AddSingleton<RdsIntegrationService>();
 builder.Services.AddSingleton<AdminConfigurationService>();
 builder.Services.AddSingleton<ITransportWorkflowStore>(services =>
     new PostgresTransportWorkflowStore(services.GetRequiredService<NpgsqlDataSource>()));

@@ -45,6 +45,13 @@ String failureLabel(String? code, String? operatorMessage) {
 
 String readinessLabel(String? code) => switch (code) {
   'RDS_WORKSITE_NOT_MAPPED' => 'Robot noktası henüz eşlenmemiş.',
+  'RDS_WORKSITE_NOT_PHYSICAL' =>
+    'Eşlenen robot noktası fiziksel taşıma noktası değil.',
+  'RDS_WORKSITE_STALE' =>
+    'Robot noktası için güncel senkronizasyon kanıtı yok.',
+  'RDS_WORKSITE_DISABLED' => 'Robot noktası kullanım dışı.',
+  'RDS_WORKSITE_SYNC_FAILED' => 'Robot noktası senkronize değil.',
+  'RDS_WORKSITE_LOCKED' => 'Robot noktası şu anda kullanımda.',
   _ => 'Robot yürütme hazırlığı tamamlanmamış.',
 };
 

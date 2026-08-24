@@ -111,3 +111,6 @@ public sealed record UpdateAdminContainerRequest(
     int? HeightMm,
     decimal? CapacityQuantity,
     bool IsActive);
+
+public sealed record SyncRdsWorkSitesRequest(Guid NavigationProfileId);
+public sealed record SetRdsWorkSiteMappingRequest(Guid RdsWorksiteId);

@@ -87,6 +87,7 @@ public sealed record PdaAvailableActionRecord(
 
 public sealed record PdaExecutionReadinessRecord(
     bool RdsWorkSiteMapped,
+    bool IsExecutionReady,
     string? ReadinessCode,
     string? ReadinessMessage);
 

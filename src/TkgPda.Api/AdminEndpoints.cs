@@ -64,7 +64,57 @@ public static class AdminEndpoints
         admin.MapGet("/audit-logs", (int? limit, Guid? actorUserId, string? entityType, AdminConfigurationService service, CancellationToken ct) =>
             service.ListAuditAsync(limit ?? 100, actorUserId, entityType, ct));
 
+        admin.MapGet("/rds/status", RdsStatusAsync);
+        admin.MapGet("/rds/navigation-profiles", (RdsIntegrationService service, CancellationToken ct) => service.ListNavigationProfilesAsync(ct));
+        admin.MapPost("/rds/worksites/sync", SyncRdsWorkSitesAsync);
+        admin.MapGet("/rds/worksites", ListRdsWorkSitesAsync);
+        admin.MapGet("/rds/slot-mappings", (Guid? layoutId, RdsIntegrationService service, CancellationToken ct) => service.ListSlotMappingsAsync(layoutId, ct));
+        admin.MapPut("/layout-slots/{slotId:guid}/rds-mapping", SetRdsMappingAsync);
+        admin.MapDelete("/layout-slots/{slotId:guid}/rds-mapping", RemoveRdsMappingAsync);
+
         return endpoints;
+    }
+
+    private static Task<RdsConnectionStatusRecord> RdsStatusAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
+        service.GetStatusAsync(CorrelationId(context), ct);
+
+    private static Task<RdsWorkSiteSyncRecord> SyncRdsWorkSitesAsync(
+        SyncRdsWorkSitesRequest request,
+        HttpContext context,
+        RdsIntegrationService service,
+        CancellationToken ct) =>
+        service.SyncWorkSitesAsync(request.NavigationProfileId, CorrelationId(context), ct);
+
+    private static Task<IReadOnlyList<RdsMirroredWorkSiteRecord>> ListRdsWorkSitesAsync(
+        Guid navigationProfileId,
+        string? siteId,
+        string? area,
+        string? group,
+        int? type,
+        int? filled,
+        int? locked,
+        int? disabled,
+        int? syncFailed,
+        RdsIntegrationService service,
+        CancellationToken ct) =>
+        service.ListWorkSitesAsync(new(navigationProfileId, siteId, area, group, type, filled, locked, disabled, syncFailed), ct);
+
+    private static Task<RdsSlotMappingRecord> SetRdsMappingAsync(
+        Guid slotId,
+        SetRdsWorkSiteMappingRequest request,
+        HttpContext context,
+        RdsIntegrationService service,
+        CancellationToken ct) =>
+        service.SetSlotMappingAsync(slotId, request.RdsWorksiteId, MutationContext(context), ct);
+
+    private static async Task<IResult> RemoveRdsMappingAsync(
+        Guid slotId,
+        HttpContext context,
+        RdsIntegrationService service,
+        CancellationToken ct)
+    {
+        await service.RemoveSlotMappingAsync(slotId, MutationContext(context), ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> LoginAsync(
@@ -320,7 +370,7 @@ public static class AdminEndpoints
 
     private static AdminMutationContext MutationContext(HttpContext context)
     {
-        var correlationId = context.Items.TryGetValue(ApiContextKeys.CorrelationId, out var value) && value is Guid id ? id : Guid.NewGuid();
+        var correlationId = CorrelationId(context);
         var userAgent = context.Request.Headers.UserAgent.ToString();
         return new AdminMutationContext(
             context.User.UserId(),
@@ -328,6 +378,9 @@ public static class AdminEndpoints
             context.Connection.RemoteIpAddress?.ToString(),
             userAgent.Length > 2000 ? userAgent[..2000] : userAgent);
     }
+
+    private static Guid CorrelationId(HttpContext context) =>
+        context.Items.TryGetValue(ApiContextKeys.CorrelationId, out var value) && value is Guid id ? id : Guid.NewGuid();
 
     private static IResult Versioned<T>(HttpContext context, T value, long version)
     {

@@ -52,45 +52,9 @@ class OperationScreen extends StatelessWidget {
               Expanded(
                 child: operational == null
                     ? const Center(child: CircularProgressIndicator())
-                    : RefreshIndicator(
-                        onRefresh: () =>
-                            controller.refreshContext(showBusy: true),
-                        child: ListView(
-                          key: const Key('operation-content'),
-                          padding: const EdgeInsets.all(14),
-                          children: [
-                            _MachineHeader(
-                              contextData: operational,
-                              controller: controller,
-                            ),
-                            const SizedBox(height: 14),
-                            _ProductSection(
-                              contextData: operational,
-                              controller: controller,
-                            ),
-                            const SizedBox(height: 14),
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(14),
-                                child: LayoutCanvas(
-                                  slots: operational.slots,
-                                  selectedSlotId: controller.selectedSlot?.id,
-                                  onSlotSelected: controller.selectSlot,
-                                ),
-                              ),
-                            ),
-                            if (controller.selectedSlot case final slot?) ...[
-                              const SizedBox(height: 14),
-                              _SlotDetails(slot: slot, controller: controller),
-                            ],
-                            const SizedBox(height: 14),
-                            _ActiveTransportSection(
-                              requests: operational.activeTransportRequests,
-                              controller: controller,
-                            ),
-                            const SizedBox(height: 40),
-                          ],
-                        ),
+                    : _OperationContent(
+                        contextData: operational,
+                        controller: controller,
                       ),
               ),
               if (controller.busy) const LinearProgressIndicator(minHeight: 5),
@@ -99,6 +63,113 @@ class OperationScreen extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+class _OperationContent extends StatelessWidget {
+  const _OperationContent({
+    required this.contextData,
+    required this.controller,
+  });
+
+  static const wideBreakpoint = 1000.0;
+
+  final OperationalContext contextData;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        constraints.maxWidth >= wideBreakpoint ? _wide() : _compact(),
+  );
+
+  Widget _compact() => RefreshIndicator(
+    onRefresh: () => controller.refreshContext(showBusy: true),
+    child: ListView(
+      key: const Key('operation-content'),
+      padding: const EdgeInsets.all(14),
+      children: [
+        _MachineHeader(contextData: contextData, controller: controller),
+        const SizedBox(height: 14),
+        _ProductSection(contextData: contextData, controller: controller),
+        const SizedBox(height: 14),
+        _LayoutCard(contextData: contextData, controller: controller),
+        if (controller.selectedSlot case final slot?) ...[
+          const SizedBox(height: 14),
+          _SlotDetails(slot: slot, controller: controller),
+        ],
+        const SizedBox(height: 14),
+        _ActiveTransportSection(
+          requests: contextData.activeTransportRequests,
+          controller: controller,
+        ),
+        const SizedBox(height: 40),
+      ],
+    ),
+  );
+
+  Widget _wide() => Row(
+    key: const Key('operation-wide-layout'),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        flex: 4,
+        child: RefreshIndicator(
+          onRefresh: () => controller.refreshContext(showBusy: true),
+          child: ListView(
+            key: const Key('operation-wide-left'),
+            padding: const EdgeInsets.fromLTRB(16, 16, 8, 24),
+            children: [
+              _MachineHeader(contextData: contextData, controller: controller),
+              const SizedBox(height: 14),
+              _ProductSection(contextData: contextData, controller: controller),
+              const SizedBox(height: 14),
+              _ActiveTransportSection(
+                requests: contextData.activeTransportRequests,
+                controller: controller,
+              ),
+            ],
+          ),
+        ),
+      ),
+      const VerticalDivider(width: 1),
+      Expanded(
+        flex: 6,
+        child: RefreshIndicator(
+          onRefresh: () => controller.refreshContext(showBusy: true),
+          child: ListView(
+            key: const Key('operation-wide-right'),
+            padding: const EdgeInsets.fromLTRB(8, 16, 16, 24),
+            children: [
+              _LayoutCard(contextData: contextData, controller: controller),
+              if (controller.selectedSlot case final slot?) ...[
+                const SizedBox(height: 14),
+                _SlotDetails(slot: slot, controller: controller),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _LayoutCard extends StatelessWidget {
+  const _LayoutCard({required this.contextData, required this.controller});
+
+  final OperationalContext contextData;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: LayoutCanvas(
+        slots: contextData.slots,
+        selectedSlotId: controller.selectedSlot?.id,
+        onSlotSelected: controller.selectSlot,
+      ),
+    ),
   );
 }
 
@@ -112,46 +183,63 @@ class _MachineHeader extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     child: Padding(
       padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 30,
-            child: Icon(Icons.precision_manufacturing, size: 34),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  contextData.machine.displayName,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final summary = Row(
+            children: [
+              const CircleAvatar(
+                radius: 30,
+                child: Icon(Icons.precision_manufacturing, size: 34),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      contextData.machine.displayName,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Aktif Varyant: ${knownOr(contextData.activeVariantCode)} · ${knownOr(contextData.activeVariantName)}',
+                      key: const Key('active-variant'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text('Layout: ${knownOr(contextData.activeLayoutName)}'),
+                  ],
                 ),
-                Text(
-                  'Aktif Varyant: ${knownOr(contextData.activeVariantCode)} · ${knownOr(contextData.activeVariantName)}',
-                  key: const Key('active-variant'),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text('Layout: ${knownOr(contextData.activeLayoutName)}'),
-              ],
-            ),
-          ),
-          if (contextData.machine.permissions.canChangeVariant)
-            OutlinedButton.icon(
-              key: const Key('variant-selection-button'),
-              onPressed: controller.mutationEnabled
-                  ? () => _selectVariant(context)
-                  : null,
-              icon: const Icon(Icons.swap_horiz),
-              label: const Text('Varyant'),
-            ),
-        ],
+              ),
+            ],
+          );
+          if (!contextData.machine.permissions.canChangeVariant) return summary;
+          final button = OutlinedButton.icon(
+            key: const Key('variant-selection-button'),
+            onPressed: controller.mutationEnabled
+                ? () => _selectVariant(context)
+                : null,
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('Varyant'),
+          );
+          if (constraints.maxWidth < 520) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [summary, const SizedBox(height: 12), button],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: summary),
+              const SizedBox(width: 12),
+              button,
+            ],
+          );
+        },
       ),
     ),
   );
@@ -239,21 +327,31 @@ class _ProductSection extends StatelessWidget {
           if (contextData.productGroups.isEmpty)
             const Text('Aktif varyant için parça grubu tanımlı değil.')
           else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final group in contextData.productGroups)
-                  ChoiceChip(
-                    key: Key('product-group-${group.id}'),
-                    selected: controller.selectedProductGroup?.id == group.id,
-                    label: Text(
-                      '${group.mainPartCode} · ${knownOr(group.name)}',
+            LayoutBuilder(
+              builder: (context, constraints) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final group in contextData.productGroups)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth,
+                      ),
+                      child: ChoiceChip(
+                        key: Key('product-group-${group.id}'),
+                        selected:
+                            controller.selectedProductGroup?.id == group.id,
+                        label: Text(
+                          '${group.mainPartCode} · ${knownOr(group.name)}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onSelected: (selected) => controller.selectProductGroup(
+                          selected ? group : null,
+                        ),
+                      ),
                     ),
-                    onSelected: (selected) =>
-                        controller.selectProductGroup(selected ? group : null),
-                  ),
-              ],
+                ],
+              ),
             ),
           if (controller.selectedProductGroup case final group?) ...[
             const Divider(height: 28),
@@ -265,21 +363,30 @@ class _ProductSection extends StatelessWidget {
             if (group.parts.isEmpty)
               const Text('Alt parça tanımlı değil.')
             else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final part in group.parts)
-                    ChoiceChip(
-                      key: Key('product-part-${part.id}'),
-                      selected: controller.selectedPart?.id == part.id,
-                      label: Text(
-                        '${part.partCode}\nKasa: ${knownOr(part.containerCode)} · Lot: ${part.lotQuantity?.toStringAsFixed(0) ?? 'Tanımlı değil'}',
+              LayoutBuilder(
+                builder: (context, constraints) => Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final part in group.parts)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: ChoiceChip(
+                          key: Key('product-part-${part.id}'),
+                          selected: controller.selectedPart?.id == part.id,
+                          label: Text(
+                            '${part.partCode}\nKasa: ${knownOr(part.containerCode)} · Lot: ${part.lotQuantity?.toStringAsFixed(0) ?? 'Tanımlı değil'}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                          ),
+                          onSelected: (selected) =>
+                              controller.selectPart(selected ? part : null),
+                        ),
                       ),
-                      onSelected: (selected) =>
-                          controller.selectPart(selected ? part : null),
-                    ),
-                ],
+                  ],
+                ),
               ),
           ],
         ],
@@ -638,11 +745,13 @@ class _ActiveTransportSection extends StatelessWidget {
             children: [
               const Icon(Icons.local_shipping, size: 30),
               const SizedBox(width: 10),
-              Text(
-                'Aktif Taşımalar (${requests.length})',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
+              Expanded(
+                child: Text(
+                  'Aktif Taşımalar (${requests.length})',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],

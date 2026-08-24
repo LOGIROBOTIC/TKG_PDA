@@ -50,7 +50,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('TKG PDA Cihaz Kurulumu')),
+    appBar: AppBar(title: const Text('TKG Operator · Cihaz Kurulumu')),
     body: SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -68,7 +68,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                       const Icon(Icons.phonelink_lock, size: 64),
                       const SizedBox(height: 18),
                       const Text(
-                        'Önceden Tanımlı PDA',
+                        'Önceden Tanımlı Operatör Cihazı',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 24,
@@ -77,7 +77,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                       ),
                       const SizedBox(height: 10),
                       const Text(
-                        'Admin Web üzerinden sağlanan cihaz kodunu girin. Uygulama yeni cihaz kaydı oluşturmaz.',
+                        'Admin Web üzerinden sağlanan PDA veya hat terminali cihaz kodunu girin. Uygulama yeni cihaz kaydı oluşturmaz.',
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
@@ -110,7 +110,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                                 ),
                               )
                             : const Icon(Icons.lock),
-                        label: const Text('Cihaz Kodunu Güvenle Kaydet'),
+                        label: const Text('Cihaz Kodunu Kaydet'),
                       ),
                     ],
                   ),

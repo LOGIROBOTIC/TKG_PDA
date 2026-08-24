@@ -384,6 +384,37 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<void> reportLoadState(LayoutSlot slot, AvailableAction action) async {
+    final machine = _selectedMachine;
+    if (machine == null || !action.enabled || !mutationEnabled) return;
+    final target = action.action == 'MARK_FULL' ? 'FULL' : 'EMPTY';
+    _setBusy(true);
+    _clearFeedback();
+    try {
+      await _repository.updateLoadState(
+        machineId: machine.id,
+        slotId: slot.id,
+        loadState: target,
+      );
+      _notice = target == 'FULL'
+          ? 'Kasa dolu olarak bildirildi.'
+          : 'Kasa boş olarak bildirildi.';
+      await refreshContext();
+    } on ConnectivityException {
+      _offline = true;
+      _notice = 'Yük durumu sonucunun doğrulanması için bağlantıyı yenileyin.';
+    } on AmbiguousMutationException {
+      _offline = true;
+      _notice =
+          'Yük durumu sonucu belirsiz. Yeni bir durum seçmeden önce yenileyin.';
+    } on ApiProblem catch (problem) {
+      _problem = problem;
+      if (problem.shouldRefetch) await refreshContext();
+    } finally {
+      _setBusy(false);
+    }
+  }
+
   Future<void> onResumed() async {
     _foreground = true;
     if (!_session.isAuthenticated) {

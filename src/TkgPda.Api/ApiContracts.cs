@@ -1,3 +1,5 @@
+using TkgPda.Application;
+
 namespace TkgPda.Api;
 
 public sealed record LoginRequest(string Username, string Password);
@@ -36,6 +38,17 @@ public sealed record VariantSwitchHttpRequest(
     Guid LayoutId,
     Guid? NavigationProfileId);
 
+public sealed record UpdateLoadStateHttpRequest(string LoadState);
+
+public sealed record UpdateLoadStateHttpResponse(
+    Guid MachineId,
+    Guid SlotId,
+    string OccupancyState,
+    string LoadState,
+    long RowVersion,
+    bool IdempotentReplay,
+    RdsLoadContentSyncResult RdsContentSync);
+
 public sealed record TransportHttpResponse(
     Guid Id,
     long RequestNo,
@@ -51,4 +64,5 @@ public sealed record TransportHttpResponse(
     Guid? SourceSlotId,
     Guid? DestinationSlotId,
     int Priority,
-    bool IdempotentReplay);
+    bool IdempotentReplay,
+    bool RdsCancellationPending = false);

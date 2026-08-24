@@ -286,3 +286,24 @@ export interface RdsSyncResult {
   businessCode: number
   businessMessage: string
 }
+
+export interface RdsTaskTemplate {
+  id: string
+  variantId: string
+  variantCode: string
+  productGroupId: string | null
+  productGroupCode: string | null
+  operation: string
+  rdsTaskLabel: string | null
+  priority: number
+  config: JsonObject
+  isActive: boolean
+}
+
+export interface RdsTaskTemplateValidation {
+  validated: boolean
+  taskLabelExists: boolean
+  taskRecordExists: boolean
+  code: number
+  message: string
+}

@@ -259,6 +259,7 @@ class LayoutSlot {
     required this.rdsWorkSite,
     required this.executionReadiness,
     required this.availableActions,
+    required this.loadStateActions,
   });
 
   final String id;
@@ -284,6 +285,7 @@ class LayoutSlot {
   final RdsWorkSiteProjection rdsWorkSite;
   final ExecutionReadiness executionReadiness;
   final List<AvailableAction> availableActions;
+  final List<AvailableAction> loadStateActions;
 
   bool get isMachineRegion => role == 'MACHINE';
 
@@ -314,6 +316,9 @@ class LayoutSlot {
     ),
     availableActions: _maps(
       json['availableActions'],
+    ).map(AvailableAction.fromJson).toList(growable: false),
+    loadStateActions: _maps(
+      json['loadStateActions'],
     ).map(AvailableAction.fromJson).toList(growable: false),
   );
 }

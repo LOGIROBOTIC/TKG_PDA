@@ -146,6 +146,12 @@ public sealed class TransportWorkflowServiceTests
         public Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(Guid requestId, TransportRequestStatus nextStatus, CancellationToken cancellationToken = default) =>
             Task.FromResult(CreateResult.Request with { Id = requestId, Status = nextStatus });
 
+        public Task<TransportRequestSnapshot> RecordExecutionOutcomeAsync(Guid requestId, ExecutionOutcome outcome, CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateResult.Request with { Id = requestId, Status = outcome.Status });
+
+        public Task<LoadStateUpdateResult> UpdateLoadStateAsync(LoadStateUpdateRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LoadStateUpdateResult(request.MachineId, request.SlotId, OccupancyState.Occupied, request.TargetLoadState, 1, false));
+
         public Task SwitchVariantAsync(VariantSelection selection, CancellationToken cancellationToken = default)
         {
             Selection = selection;

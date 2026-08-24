@@ -35,6 +35,9 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/cancel", CancelTransportAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
+        endpoints.MapPut("/api/v1/machines/{machineId:guid}/slots/{slotId:guid}/load-state", UpdateLoadStateAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
         return endpoints;
     }
 
@@ -225,25 +228,95 @@ public static class ApiEndpoints
         HttpContext context,
         IApiDataStore dataStore,
         MachineAccessService access,
-        TransportWorkflowService workflow,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken)
     {
         var existing = await dataStore.FindTransportRequestAsync(requestId, cancellationToken)
             ?? throw new ApiException(StatusCodes.Status404NotFound, "REQUEST_NOT_FOUND", "The transport request does not exist.");
         _ = await access.EnsureAsync(context.User, existing.MachineId, MachineAccessKind.Operate, cancellationToken);
         EnsureCancellationAllowed(context.User, existing);
-        var result = await workflow.CancelAsync(requestId, context.User.UserId(), cancellationToken);
+        var result = await rdsExecution.CancelAsync(
+            requestId,
+            context.User.UserId(),
+            CorrelationId(context),
+            cancellationToken);
         await WriteAuditAsync(
             dataStore,
             context,
             context.User.UserId(),
             Device(context).Id,
-            result.WasAlreadyCancelled ? "TRANSPORT_CANCELLATION_REPLAYED" : "TRANSPORT_REQUEST_CANCELLED",
+            result.WasIdempotentReplay ? "TRANSPORT_CANCELLATION_REPLAYED" : result.PendingRdsConfirmation ? "RDS_CANCELLATION_REQUESTED" : "TRANSPORT_REQUEST_CANCELLED",
             "TRANSPORT_REQUEST",
             requestId.ToString(),
-            new { status = result.Request.Status.ToDatabase() },
+            new { status = result.Request.Status.ToDatabase(), result.PendingRdsConfirmation },
             cancellationToken);
-        return Results.Ok(ToResponse(result.Request, result.WasAlreadyCancelled));
+        return Results.Ok(ToResponse(result.Request, result.WasIdempotentReplay, result.PendingRdsConfirmation));
+    }
+
+    private static async Task<IResult> UpdateLoadStateAsync(
+        Guid machineId,
+        Guid slotId,
+        UpdateLoadStateHttpRequest request,
+        HttpContext context,
+        MachineAccessService access,
+        TransportWorkflowService workflow,
+        RdsExecutionCoordinator rdsExecution,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = Device(context);
+        if (!context.User.IsInRole(RoleCodes.Admin)
+            && !context.User.IsInRole(RoleCodes.Supervisor)
+            && !context.User.IsInRole(RoleCodes.LineOperator))
+        {
+            throw new ApiException(StatusCodes.Status403Forbidden, "OPERATION_NOT_ALLOWED_FOR_ROLE", "The authenticated role cannot report production load state.");
+        }
+        _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.Operate, cancellationToken);
+        var target = request.LoadState?.Trim().ToUpperInvariant() switch
+        {
+            "EMPTY" => LoadState.Empty,
+            "FULL" => LoadState.Full,
+            _ => throw new ApiException(StatusCodes.Status400BadRequest, "LOAD_STATE_NOT_SELECTABLE", "LoadState must be EMPTY or FULL.")
+        };
+        var result = await workflow.UpdateLoadStateAsync(
+            new(machineId, slotId, target, context.User.UserId()),
+            cancellationToken);
+
+        RdsLoadContentSyncResult contentSync;
+        try
+        {
+            contentSync = await rdsExecution.SynchronizeLoadContentAsync(slotId, target, CorrelationId(context), cancellationToken);
+        }
+        catch (RdsExecutionException error)
+        {
+            contentSync = new("FAILED", null, null, $"TKG load state was updated; RDS content synchronization failed with {error.Code}.");
+        }
+
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            result.WasIdempotentReplay ? "LOAD_STATE_REPLAYED" : "LOAD_STATE_REPORTED",
+            "SLOT_RUNTIME_STATE",
+            slotId.ToString(),
+            new
+            {
+                occupancyState = result.OccupancyState.ToDatabase(),
+                loadState = result.LoadState.ToDatabase(),
+                result.RowVersion,
+                rdsContentSync = contentSync.Status
+            },
+            cancellationToken);
+
+        return Results.Ok(new UpdateLoadStateHttpResponse(
+            result.MachineId,
+            result.SlotId,
+            result.OccupancyState.ToDatabase(),
+            result.LoadState.ToDatabase(),
+            result.RowVersion,
+            result.WasIdempotentReplay,
+            contentSync));
     }
 
     private static async Task<IResult> SwitchVariantAsync(
@@ -316,7 +389,7 @@ public static class ApiEndpoints
         }
     }
 
-    private static TransportHttpResponse ToResponse(TransportRequestSnapshot request, bool replay) => new(
+    private static TransportHttpResponse ToResponse(TransportRequestSnapshot request, bool replay, bool cancellationPending = false) => new(
         request.Id,
         request.RequestNo,
         request.Status.ToDatabase(),
@@ -331,12 +404,16 @@ public static class ApiEndpoints
         request.SourceSlotId,
         request.DestinationSlotId,
         request.Priority,
-        replay);
+        replay,
+        cancellationPending);
 
     private static DeviceRecord Device(HttpContext context) =>
         context.Items.TryGetValue(ApiContextKeys.Device, out var value) && value is DeviceRecord device
             ? device
             : throw new ApiException(StatusCodes.Status401Unauthorized, "DEVICE_CONTEXT_REQUIRED", "A validated device context is required.");
+
+    private static Guid CorrelationId(HttpContext context) =>
+        context.Items.TryGetValue(ApiContextKeys.CorrelationId, out var value) && value is Guid id ? id : Guid.NewGuid();
 
     private static async Task WriteAuditAsync(
         IApiDataStore dataStore,

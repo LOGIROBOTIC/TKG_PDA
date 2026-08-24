@@ -114,3 +114,4 @@ public sealed record UpdateAdminContainerRequest(
 
 public sealed record SyncRdsWorkSitesRequest(Guid NavigationProfileId);
 public sealed record SetRdsWorkSiteMappingRequest(Guid RdsWorksiteId);
+public sealed record ValidateRdsTaskTemplateRequest(Guid TaskTemplateId);

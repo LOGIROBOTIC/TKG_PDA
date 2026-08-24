@@ -55,6 +55,14 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
                 error.Code,
                 "The read-only RDS service is temporarily unavailable.");
         }
+        catch (RdsExecutionException error)
+        {
+            logger.LogWarning("RDS execution operation failed with {Code} for request {TraceIdentifier}.", error.Code, context.TraceIdentifier);
+            var status = error.Code is "RDS_DISPATCH_DISABLED" or "RDS_UNAVAILABLE" or "RDS_TIMEOUT"
+                ? StatusCodes.Status503ServiceUnavailable
+                : StatusCodes.Status409Conflict;
+            await ApiErrorWriter.WriteAsync(context, status, error.Code, error.Message);
+        }
         catch (BadHttpRequestException error)
         {
             await ApiErrorWriter.WriteAsync(context, StatusCodes.Status400BadRequest, "INVALID_HTTP_REQUEST", error.Message);
@@ -101,13 +109,15 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
         "REQUEST_NOT_FOUND" or "SLOT_NOT_FOUND" or "PART_NOT_FOUND" or "CONTAINER_NOT_FOUND" or "TASK_TYPE_NOT_FOUND"
             => StatusCodes.Status404NotFound,
         "IDEMPOTENCY_KEY_REQUIRED" or "IDEMPOTENCY_KEY_TOO_LONG" or "SOURCE_REQUIRED" or "DESTINATION_REQUIRED"
-            or "SAME_SOURCE_DESTINATION" or "INVALID_PRIORITY" or "REQUEST_ID_REQUIRED"
+            or "SAME_SOURCE_DESTINATION" or "INVALID_PRIORITY" or "REQUEST_ID_REQUIRED" or "ID_REQUIRED"
+            or "LOAD_STATE_NOT_SELECTABLE"
             => StatusCodes.Status400BadRequest,
         "IDEMPOTENCY_KEY_REUSED" or "SLOT_ALREADY_RESERVED" or "ACTIVE_TRANSPORT_EXISTS"
             or "RUNTIME_CONTEXT_MISMATCH" or "NAVIGATION_CONTEXT_MISMATCH" or "VARIANT_LAYOUT_CONFLICT"
             or "NAVIGATION_PROFILE_CONFLICT" or "PRODUCT_GROUP_CONFLICT" or "PART_CONFLICT"
             or "CONTAINER_CONFLICT" or "INVALID_SLOT_STATE" or "ILLEGAL_STATUS_TRANSITION"
-            or "CANCELLATION_AFTER_EXECUTION_DEFERRED" or "REQUEST_LOCK_SCOPE_CHANGED"
+            or "CANCELLATION_AFTER_EXECUTION_DEFERRED" or "REQUEST_LOCK_SCOPE_CHANGED" or "CANCELLATION_NOT_ALLOWED"
+            or "SLOT_NOT_IN_ACTIVE_LAYOUT" or "OCCUPIED_SLOT_REQUIRED" or "SLOT_BUSY"
             => StatusCodes.Status409Conflict,
         "MACHINE_REGION_FORBIDDEN" or "CROSS_MACHINE_SLOT" or "CROSS_LAYOUT_SLOT" or "SLOT_DISABLED"
             => StatusCodes.Status422UnprocessableEntity,

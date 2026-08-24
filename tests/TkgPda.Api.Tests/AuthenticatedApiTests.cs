@@ -234,7 +234,7 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
     }
 
     [Fact]
-    public async Task Queued_transport_can_be_cancelled_but_late_cancellation_is_explicit_conflict()
+    public async Task Queued_transport_cancels_locally_and_dispatched_transport_reports_pending_Rds_confirmation()
     {
         await fixture.ResetAsync();
         var identity = await fixture.SeedIdentityAsync();
@@ -255,9 +255,16 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         await fixture.ExecuteAsync(
             "UPDATE ops.transport_requests SET status = 'SENT_TO_RDS' WHERE id = @id",
             ("id", late!.Id));
-        var rejected = await client.PostAsync($"/api/v1/transport-requests/{late.Id}/cancel", null);
-        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
-        Assert.Equal("CANCELLATION_AFTER_EXECUTION_DEFERRED", await ApiTestFixture.ErrorCodeAsync(rejected));
+        await fixture.ExecuteAsync(
+            "INSERT INTO integration.rds_tasks (transport_request_id, rds_task_record_id, rds_task_label) VALUES (@id, @record_id, 'SIM_TASK')",
+            ("id", late.Id),
+            ("record_id", late.Id.ToString()));
+        var pending = await client.PostAsync($"/api/v1/transport-requests/{late.Id}/cancel", null);
+        Assert.Equal(HttpStatusCode.OK, pending.StatusCode);
+        var pendingBody = await pending.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        Assert.NotNull(pendingBody);
+        Assert.Equal("SENT_TO_RDS", pendingBody.Status);
+        Assert.True(pendingBody.RdsCancellationPending);
     }
 
     [Fact]

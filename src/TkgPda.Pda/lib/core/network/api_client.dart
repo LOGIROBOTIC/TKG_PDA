@@ -55,6 +55,9 @@ class ApiClient {
     mutation: mutation,
   );
 
+  Future<ApiResponse> put(String path, {Object? body}) =>
+      _send('PUT', path, body: body, mutation: true);
+
   Future<ApiResponse> _send(
     String method,
     String path, {

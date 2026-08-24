@@ -13,6 +13,7 @@ namespace TkgPda.Api.Tests;
 
 public sealed class ApiTestFixture : WebApplicationFactory<Program>
 {
+    public const string CallbackKey = "phase08b-test-callback-key-0000000000000000";
     public TestRdsReadClient RdsClient { get; } = new();
 
     public string ConnectionString => Environment.GetEnvironmentVariable("TKG_PDA_API_TEST_CONNECTION_STRING")
@@ -22,6 +23,7 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseSetting("Rds:CallbackKey", CallbackKey);
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<IRdsReadClient>();

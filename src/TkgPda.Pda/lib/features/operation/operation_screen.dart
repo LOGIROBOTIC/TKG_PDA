@@ -342,6 +342,20 @@ class _SlotDetails extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _RdsReadiness(slot: slot),
+            if (slot.loadStateActions.isNotEmpty) ...[
+              const Divider(height: 28),
+              const Text(
+                'Kasa Yük Durumu',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              for (final action in slot.loadStateActions)
+                _LoadStateActionRow(
+                  slot: slot,
+                  action: action,
+                  controller: controller,
+                ),
+            ],
             const Divider(height: 28),
             const Text(
               'Kullanılabilir İşlemler',
@@ -354,6 +368,74 @@ class _SlotDetails extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _LoadStateActionRow extends StatelessWidget {
+  const _LoadStateActionRow({
+    required this.slot,
+    required this.action,
+    required this.controller,
+  });
+
+  final LayoutSlot slot;
+  final AvailableAction action;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = action.enabled && controller.mutationEnabled;
+    final label = action.action == 'MARK_FULL' ? 'Kasa Doldu' : 'Kasa Boş';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: OutlinedButton(
+              key: Key('load-state-${action.action}'),
+              onPressed: enabled ? () => _confirm(context, label) : null,
+              child: Text(label),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: Text(
+              enabled
+                  ? 'Sunucu bu durum bildirimine izin veriyor.'
+                  : action.disabledMessage ??
+                        action.disabledCode ??
+                        'Kullanılamıyor.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirm(BuildContext context, String label) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$label olarak işaretle'),
+        content: Text(
+          '${slot.displayName} için yük durumu değiştirilsin mi? Bu işlem taşıma talebi oluşturmaz.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            key: Key('confirm-${action.action}'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Onayla'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.reportLoadState(slot, action);
   }
 }
 

@@ -115,7 +115,8 @@ public sealed record SlotContextRecord(
     DateTimeOffset? RuntimeUpdatedAt,
     RdsWorkSiteProjectionRecord RdsWorkSite,
     PdaExecutionReadinessRecord ExecutionReadiness,
-    IReadOnlyList<PdaAvailableActionRecord> AvailableActions);
+    IReadOnlyList<PdaAvailableActionRecord> AvailableActions,
+    IReadOnlyList<PdaAvailableActionRecord> LoadStateActions);
 
 public sealed record PdaProductGroupPartRecord(
     Guid Id,

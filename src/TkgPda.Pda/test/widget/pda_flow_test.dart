@@ -207,6 +207,50 @@ void main() {
     harness.dispose();
   });
 
+  testWidgets(
+    'Kasa Doldu is server-authoritative separate from transport and refetches context',
+    (tester) async {
+      final repository = FakePdaRepository();
+      final harness = await _operationHarness(tester, repository: repository);
+
+      await _selectSlot(tester, 'slot-empty');
+      final loadButton = tester.widget<OutlinedButton>(
+        find.byKey(const Key('load-state-MARK_FULL')),
+      );
+      expect(loadButton.onPressed, isNotNull);
+      expect(find.byKey(const Key('action-REMOVE_EMPTY')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('load-state-MARK_FULL')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('taşıma talebi oluşturmaz'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirm-MARK_FULL')));
+      await tester.pumpAndSettle();
+
+      expect(repository.loadStateCount, 1);
+      expect(repository.lastLoadState, 'FULL');
+      expect(repository.createCount, 0);
+      expect(repository.contextCount, 2);
+      harness.dispose();
+    },
+  );
+
+  testWidgets('Kasa Boş uses only backend-projected capability', (
+    tester,
+  ) async {
+    final repository = FakePdaRepository();
+    final harness = await _operationHarness(tester, repository: repository);
+
+    await _selectSlot(tester, 'slot-full');
+    final loadButton = tester.widget<OutlinedButton>(
+      find.byKey(const Key('load-state-MARK_EMPTY')),
+    );
+    expect(loadButton.onPressed, isNotNull);
+    final markFull = tester.widget<OutlinedButton>(
+      find.byKey(const Key('load-state-MARK_FULL')),
+    );
+    expect(markFull.onPressed, isNull);
+    harness.dispose();
+  });
+
   testWidgets('disabled action renders backend reason', (tester) async {
     final harness = await _operationHarness(tester);
 

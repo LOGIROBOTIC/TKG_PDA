@@ -210,6 +210,154 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         return request;
     }
 
+    public async Task<TransportRequestSnapshot> RecordExecutionOutcomeAsync(
+        Guid requestId,
+        ExecutionOutcome outcome,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        if (outcome.Status is not (TransportRequestStatus.Failed or TransportRequestStatus.Cancelled))
+        {
+            throw new WorkflowRuleException("UNSUPPORTED_EXECUTION_OUTCOME", "Only executor-confirmed failure and cancellation outcomes are supported.");
+        }
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var lockedWorkflow = await LockWorkflowRequestAsync(connection, transaction, requestId, cancellationToken);
+        var request = lockedWorkflow.Request;
+
+        if (request.Status == outcome.Status || request.Status is TransportRequestStatus.Completed or TransportRequestStatus.Failed or TransportRequestStatus.Cancelled)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return request;
+        }
+
+        TransportStateMachine.EnsureTransition(request.Status, outcome.Status);
+        var previousStatus = request.Status;
+        request = await UpdateRequestOutcomeAsync(connection, transaction, request, outcome, cancellationToken);
+        await InsertEventAsync(
+            connection,
+            transaction,
+            request.Id,
+            actorUserId: null,
+            outcome.Status == TransportRequestStatus.Cancelled ? "RDS_CANCELLATION_CONFIRMED" : "RDS_EXECUTION_FAILED",
+            previousStatus,
+            outcome.Status,
+            outcome.Status == TransportRequestStatus.Cancelled
+                ? "RDS confirmed that execution was stopped."
+                : "RDS reported a terminal execution failure.",
+            new
+            {
+                outcome.FailureCode,
+                outcome.FailureMessage,
+                outcome.EvidenceType
+            },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return request;
+    }
+
+    public async Task<LoadStateUpdateResult> UpdateLoadStateAsync(
+        LoadStateUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.TargetLoadState == LoadState.Unknown)
+        {
+            throw new WorkflowRuleException("LOAD_STATE_NOT_SELECTABLE", "UNKNOWN cannot be selected by an operator.");
+        }
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        await LockMachineRuntimeAsync(connection, transaction, request.MachineId, cancellationToken);
+        Guid? activeLayoutId;
+        await using (var runtime = new NpgsqlCommand(
+                         "SELECT active_layout_id FROM ops.machine_runtime_state WHERE machine_id = @machine_id",
+                         connection,
+                         transaction))
+        {
+            runtime.Parameters.AddWithValue("machine_id", request.MachineId);
+            var value = await runtime.ExecuteScalarAsync(cancellationToken);
+            activeLayoutId = value is null or DBNull ? null : (Guid)value;
+        }
+
+        var slot = await LockSlotAsync(connection, transaction, request.SlotId, cancellationToken);
+        if (slot.MachineId != request.MachineId || activeLayoutId != slot.LayoutId)
+        {
+            throw new WorkflowRuleException("SLOT_NOT_IN_ACTIVE_LAYOUT", "The slot must belong to the machine's active layout.");
+        }
+
+        if (!slot.IsEnabled)
+        {
+            throw new WorkflowRuleException("SLOT_DISABLED", "The slot is disabled.");
+        }
+
+        if (slot.Role == SlotRole.Machine)
+        {
+            throw new WorkflowRuleException("MACHINE_REGION_FORBIDDEN", "Machine/cell display regions cannot report load state.");
+        }
+
+        if (slot.State.Occupancy != OccupancyState.Occupied)
+        {
+            throw new WorkflowRuleException("OCCUPIED_SLOT_REQUIRED", "Load state can be reported only for an occupied slot.");
+        }
+
+        await using (var active = new NpgsqlCommand(
+                         $"""
+                         SELECT 1
+                         FROM ops.transport_requests
+                         WHERE status IN ({ActiveStatusesSql})
+                           AND (source_slot_id = @slot_id OR destination_slot_id = @slot_id)
+                         LIMIT 1
+                         """,
+                         connection,
+                         transaction))
+        {
+            active.Parameters.AddWithValue("slot_id", request.SlotId);
+            if (await active.ExecuteScalarAsync(cancellationToken) is not null)
+            {
+                throw new WorkflowRuleException("SLOT_BUSY", "Load state cannot change while an active transport uses the slot.");
+            }
+        }
+
+        if (slot.State.Load == request.TargetLoadState)
+        {
+            await using var version = new NpgsqlCommand(
+                "SELECT row_version FROM ops.slot_runtime_state WHERE layout_slot_id = @slot_id",
+                connection,
+                transaction);
+            version.Parameters.AddWithValue("slot_id", request.SlotId);
+            var currentVersion = Convert.ToInt64(await version.ExecuteScalarAsync(cancellationToken));
+            await transaction.CommitAsync(cancellationToken);
+            return new(request.MachineId, request.SlotId, slot.State.Occupancy, slot.State.Load, currentVersion, true);
+        }
+
+        long rowVersion;
+        await using (var update = new NpgsqlCommand(
+                         """
+                         UPDATE ops.slot_runtime_state
+                         SET load_state = @load_state,
+                             updated_by = @updated_by,
+                             row_version = row_version + 1,
+                             updated_at = now()
+                         WHERE layout_slot_id = @slot_id
+                         RETURNING row_version
+                         """,
+                         connection,
+                         transaction))
+        {
+            update.Parameters.AddWithValue("slot_id", request.SlotId);
+            update.Parameters.AddWithValue("load_state", request.TargetLoadState.ToDatabase());
+            update.Parameters.AddWithValue("updated_by", request.ActorUserId);
+            rowVersion = Convert.ToInt64(await update.ExecuteScalarAsync(cancellationToken));
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new(request.MachineId, request.SlotId, OccupancyState.Occupied, request.TargetLoadState, rowVersion, false);
+    }
+
     public async Task SwitchVariantAsync(VariantSelection selection, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -784,6 +932,33 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         command.Parameters.AddWithValue("status", nextStatus.ToDatabase());
         await command.ExecuteNonQueryAsync(cancellationToken);
         return request with { Status = nextStatus };
+    }
+
+    private static async Task<TransportRequestSnapshot> UpdateRequestOutcomeAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        TransportRequestSnapshot request,
+        ExecutionOutcome outcome,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE ops.transport_requests
+            SET status = @status,
+                failure_code = @failure_code,
+                failure_message = @failure_message,
+                cancelled_at = CASE WHEN @status = 'CANCELLED' THEN COALESCE(cancelled_at, now()) ELSE cancelled_at END,
+                updated_at = now()
+            WHERE id = @id
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("id", request.Id);
+        command.Parameters.AddWithValue("status", outcome.Status.ToDatabase());
+        command.Parameters.AddWithValue("failure_code", (object?)outcome.FailureCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("failure_message", (object?)outcome.FailureMessage ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        return request with { Status = outcome.Status };
     }
 
     private static async Task UpdateSlotStateAsync(

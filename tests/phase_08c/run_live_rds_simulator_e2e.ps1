@@ -2,14 +2,26 @@ param(
     [string]$PgBin = 'C:\Program Files\PostgreSQL\18\bin',
     [int]$PostgresPort = 55445,
     [int]$ApiPort = 5000,
-    [string]$RdsBaseUrl = 'http://127.0.0.1:8080'
+    [string]$RdsBaseUrl = 'http://127.0.0.1:8080',
+    [string]$CommissioningPhase = '08c',
+    [string]$TaskLabel = 'TKG_SIM_MOVE',
+    [string]$FromParameter = 'fromPoint',
+    [string]$ToParameter = 'toPoint',
+    [string]$FromValue = 'AP15',
+    [string]$ToValue = 'AP20',
+    [string]$SceneConfirmationVariable = 'TKG_PDA_PHASE08C_SIMULATOR_SCENE_CONFIRMED',
+    [int]$TerminalTimeoutSeconds = 180
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-$tempRoot = Join-Path $projectRoot '.codex-pg-phase08c-live'
+if ($CommissioningPhase -notmatch '^[0-9a-z]+$') {
+    throw 'CommissioningPhase may contain only lower-case letters and digits.'
+}
+$tempLeaf = ".codex-pg-phase$CommissioningPhase-live"
+$tempRoot = Join-Path $projectRoot $tempLeaf
 $dataDir = Join-Path $tempRoot 'data'
-$database = 'tkg_pda_phase08c'
+$database = "tkg_pda_phase$CommissioningPhase"
 $apiProcess = $null
 $postgresStarted = $false
 $apiStdOut = Join-Path $tempRoot 'api.stdout.log'
@@ -67,6 +79,7 @@ function Get-WorkSiteStateDigest {
             filled = $_.filled
             content = $_.content
             locked = $_.locked
+            lockedBy = $_.lockedBy
             disabled = $_.disabled
             syncFailed = $_.syncFailed
         }
@@ -92,8 +105,8 @@ function New-Pbkdf2Hash {
 if ($env:Rds__Enabled -ne 'true' -or $env:Rds__DispatchEnabled -ne 'true') {
     throw 'Explicit live opt-in required: set Rds__Enabled=true and Rds__DispatchEnabled=true.'
 }
-if ($env:TKG_PDA_PHASE08C_SIMULATOR_SCENE_CONFIRMED -ne 'true') {
-    throw 'Confirm in RDS UI that only sim_01/sim_02 are connected and set TKG_PDA_PHASE08C_SIMULATOR_SCENE_CONFIRMED=true.'
+if ([Environment]::GetEnvironmentVariable($SceneConfirmationVariable, 'Process') -ne 'true') {
+    throw "Confirm in RDS UI that only sim_01/sim_02 are connected and set $SceneConfirmationVariable=true."
 }
 if ([string]::IsNullOrWhiteSpace($env:Rds__IntegrationKey) -or $env:Rds__IntegrationKey.Length -lt 32 `
     -or [string]::IsNullOrWhiteSpace($env:Rds__CallbackKey) -or $env:Rds__CallbackKey.Length -lt 32) {
@@ -122,7 +135,7 @@ $managedEnvironment = @(
     'ASPNETCORE_ENVIRONMENT', 'Rds__BaseUrl', 'Rds__CallbackUrl', 'Rds__WorkerIntervalSeconds',
     'Rds__TimeoutSeconds', 'DOTNET_CLI_TELEMETRY_OPTOUT', 'PGCLIENTENCODING',
     'Rds__Enabled', 'Rds__DispatchEnabled', 'Rds__IntegrationKey', 'Rds__CallbackKey',
-    'TKG_PDA_PHASE08C_SIMULATOR_SCENE_CONFIRMED'
+    $SceneConfirmationVariable
 )
 foreach ($name in $managedEnvironment) {
     $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -169,12 +182,22 @@ WHERE m.code = 'SH-01-A'
 LIMIT 1;
 "@) | ConvertFrom-Json
     if (-not $context.machineId -or -not $context.variantId -or -not $context.layoutId -or -not $context.slotId) {
-        throw 'The Phase 08C customer context SH-01-A / variant 1 / logistics slot was not found.'
+        throw "The Phase $CommissioningPhase customer context SH-01-A / variant 1 / logistics slot was not found."
     }
 
     $operatorPassword = 'Phase08C-simulator-only-42!'
     $passwordHash = New-Pbkdf2Hash $operatorPassword
     $passwordHashSql = ConvertTo-SqlLiteral $passwordHash
+    $taskConfigJson = [ordered]@{
+        testScope = "P$($CommissioningPhase.ToUpperInvariant())"
+        commissioningOnly = $true
+        rdsInputBindings = @(
+            [ordered]@{ param = $FromParameter; source = 'LITERAL'; value = $FromValue; required = $true }
+            [ordered]@{ param = $ToParameter; source = 'LITERAL'; value = $ToValue; required = $true }
+        )
+    } | ConvertTo-Json -Depth 8 -Compress
+    $taskLabelSql = ConvertTo-SqlLiteral $TaskLabel
+    $taskConfigJsonSql = ConvertTo-SqlLiteral $taskConfigJson
     $setupSql = @'
 INSERT INTO auth.users (username, password_hash, full_name, employee_no, is_active)
 VALUES ('phase08c-operator', __PASSWORD_HASH__, 'Phase 08C Simulator Operator', 'P08C-SIM', true)
@@ -221,8 +244,8 @@ WHERE variant_id = '__VARIANT_ID__'::uuid
 
 INSERT INTO master.task_templates (
     variant_id, task_type_id, rds_task_label, priority, config_json, is_active)
-SELECT '__VARIANT_ID__'::uuid, id, 'TKG_SIM_MOVE', 1,
-       '{"testScope":"P08C","commissioningOnly":true,"rdsInputBindings":[{"param":"fromPoint","source":"LITERAL","value":"AP15","required":true},{"param":"toPoint","source":"LITERAL","value":"AP20","required":true}]}'::jsonb,
+SELECT '__VARIANT_ID__'::uuid, id, __TASK_LABEL__, 1,
+       __TASK_CONFIG_JSON__::jsonb,
        true
 FROM master.task_types WHERE code = 'BRING_EMPTY';
 '@
@@ -231,6 +254,8 @@ FROM master.task_types WHERE code = 'BRING_EMPTY';
     $setupSql = $setupSql.Replace('__VARIANT_ID__', [string]$context.variantId)
     $setupSql = $setupSql.Replace('__LAYOUT_ID__', [string]$context.layoutId)
     $setupSql = $setupSql.Replace('__SLOT_ID__', [string]$context.slotId)
+    $setupSql = $setupSql.Replace('__TASK_LABEL__', $taskLabelSql)
+    $setupSql = $setupSql.Replace('__TASK_CONFIG_JSON__', $taskConfigJsonSql)
     [void](Invoke-PsqlScalar $setupSql)
 
     $workSitesBefore = Get-WorkSiteStateDigest
@@ -272,7 +297,7 @@ FROM master.task_types WHERE code = 'BRING_EMPTY';
     $authHeaders = @{
         Authorization = "Bearer $($login.accessToken)"
         'X-Device-Code' = 'PDA-P08C-SIM'
-        'Idempotency-Key' = 'phase08c-single-simulator-request'
+        'Idempotency-Key' = "phase$CommissioningPhase-single-simulator-request"
     }
     $transportBody = [ordered]@{
         machineId = [string]$context.machineId
@@ -293,6 +318,7 @@ FROM master.task_types WHERE code = 'BRING_EMPTY';
     if ([int]$createdResponse.StatusCode -ne 201) { throw 'The single controlled TransportRequest was not created.' }
     $created = $createdResponse.Content | ConvertFrom-Json
     $requestId = [string]$created.id
+    Write-Host "PHASE_HARNESS TransportRequestId=$requestId"
 
     $replayResponse = Invoke-WebRequest -Method Post -Uri "$apiBaseUrl/api/v1/transport-requests" `
         -Headers $authHeaders -ContentType 'application/json' -Body $transportJson
@@ -305,7 +331,7 @@ FROM master.task_types WHERE code = 'BRING_EMPTY';
     $tkgStatusSequence = [Collections.Generic.List[string]]::new()
     $rdsStatusSequence = [Collections.Generic.List[int]]::new()
     $terminal = $null
-    for ($poll = 0; $poll -lt 180; $poll++) {
+    for ($poll = 0; $poll -lt $TerminalTimeoutSeconds; $poll++) {
         $stateText = Invoke-PsqlScalar @"
 SELECT json_build_object(
   'requestStatus', tr.status,
@@ -334,7 +360,7 @@ WHERE tr.id = '$requestId'::uuid;
         if ($state.requestStatus -in @('COMPLETED', 'FAILED', 'CANCELLED')) { $terminal = $state; break }
         Start-Sleep -Seconds 1
     }
-    if ($null -eq $terminal) { throw 'The controlled TKG/RDS simulator request did not reach a terminal state in 180 seconds.' }
+    if ($null -eq $terminal) { throw "The controlled TKG/RDS simulator request did not reach a terminal state in $TerminalTimeoutSeconds seconds." }
     if ($terminal.requestStatus -ne 'COMPLETED' -or [int]$terminal.rdsStatus -ne 1003) {
         throw "The controlled simulator request ended unexpectedly: TKG=$($terminal.requestStatus), RDS=$($terminal.rdsStatus)."
     }
@@ -367,12 +393,15 @@ WHERE tr.id = '$requestId'::uuid;
         }
     }
 
+    $retryInputParams = @{}
+    $retryInputParams[$FromParameter] = $FromValue
+    $retryInputParams[$ToParameter] = $ToValue
     $retryEnvelope = Invoke-RdsPost -Path '/script-api/tkg/create-transport' -Body @{
         integrationKey = $env:Rds__IntegrationKey
         taskRecordId = $requestId
-        taskLabel = 'TKG_SIM_MOVE'
+        taskLabel = $TaskLabel
         priority = 1
-        inputParams = @{ fromPoint = 'AP15'; toPoint = 'AP20' }
+        inputParams = $retryInputParams
     }
     if ([int]$retryEnvelope.code -ne 200 -or $retryEnvelope.message -ne 'IDEMPOTENT_REPLAY') {
         throw 'The same RDS taskRecordId was not accepted as an idempotent replay.'
@@ -409,15 +438,18 @@ WHERE transport_request_id = '$requestId'::uuid;
         throw 'TKG persistence contains an unexpected duplicate commissioning request/task projection.'
     }
 
+    $reportedInputParams = [ordered]@{}
+    $reportedInputParams[$FromParameter] = $FromValue
+    $reportedInputParams[$ToParameter] = $ToValue
     [ordered]@{
         result = 'PASS'
         simulatorAvailable = $true
         simulatorIds = @('sim_01', 'sim_02')
         physicalRobotConnected = $false
         taskDefinition = [ordered]@{
-            label = 'TKG_SIM_MOVE'
-            fixedRobot = 'sim_01'
-            fixedRoute = @('AP15', 'AP20')
+            label = $TaskLabel
+            fixedRobot = if ($TaskLabel -eq 'TKG_SIM_MOVE') { 'sim_01' } else { $null }
+            fixedRoute = if ($TaskLabel -eq 'TKG_SIM_MOVE') { @($FromValue, $ToValue) } else { $null }
             actions = @('Wait', 'Wait')
             productionWorkflow = $false
         }
@@ -430,11 +462,13 @@ WHERE transport_request_id = '$requestId'::uuid;
         finalRdsStatus = [int]$terminal.rdsStatus
         rdsTaskLabel = [string]$rdsTask.defLabel
         assignedAgv = [string]$rdsTask.agvId
-        inputParams = [ordered]@{ fromPoint = 'AP15'; toPoint = 'AP20' }
+        inputParams = $reportedInputParams
+        rdsReportedInputParams = $rdsTask.inputParams
         endedReason = [string]$rdsTask.endedReason
         blocks = $blocks
         callbackAuditCount = $callbackAuditCount
         callbackObserved = ($callbackAuditCount -gt 0)
+        reconciliationResult = if ($callbackAuditCount -gt 0) { 'CALLBACK_COMPLETED' } else { 'TERMINAL_STATE_OBSERVED_BY_RECONCILIATION' }
         transportEvents = $events
         tkgHttpReplaySameRequest = $true
         rdsRetryMessage = [string]$retryEnvelope.message
@@ -472,7 +506,7 @@ finally {
     if (Test-Path -LiteralPath $tempRoot) {
         $resolvedTemp = (Resolve-Path -LiteralPath $tempRoot).Path
         if (-not $resolvedTemp.StartsWith($projectRoot, [StringComparison]::OrdinalIgnoreCase) `
-            -or (Split-Path -Leaf $resolvedTemp) -ne '.codex-pg-phase08c-live') {
+            -or (Split-Path -Leaf $resolvedTemp) -ne $tempLeaf) {
             throw "Refusing unsafe cleanup target: $resolvedTemp"
         }
         Remove-Item -LiteralPath $resolvedTemp -Recurse -Force

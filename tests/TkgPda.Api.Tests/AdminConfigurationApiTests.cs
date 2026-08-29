@@ -83,6 +83,101 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
         }
     }
 
+    // ---- WP-01A: Admin employee / registry number management ----
+
+    [Fact]
+    public async Task Admin_login_does_not_accept_employee_number()
+    {
+        var admin = await AdminAsync();
+        admin.Client.Dispose();
+
+        // Give the admin identity a known employee number, then prove the Admin
+        // Web login path still requires a username and ignores employeeNumber.
+        using var anonymous = fixture.Client();
+        var response = await anonymous.PostAsJsonAsync(
+            "/api/v1/admin/auth/login",
+            new LoginRequest(null, admin.Identity.Password, admin.Identity.EmployeeNo));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_LOGIN_REQUEST", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Admin_user_create_trims_and_preserves_employee_number()
+    {
+        var (_, client) = await AdminAsync();
+        using (client)
+        {
+            var response = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.emp.trim", "Provisioned-password-42!", "Trim User", "  001245  ", [RoleCodes.LineOperator]));
+
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            var created = await response.Content.ReadFromJsonAsync<AdminUserRecord>();
+            Assert.Equal("001245", created!.EmployeeNo);
+        }
+    }
+
+    [Fact]
+    public async Task Admin_duplicate_normalized_employee_number_is_rejected_cleanly()
+    {
+        var (_, client) = await AdminAsync();
+        using (client)
+        {
+            var first = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.emp.first", "Provisioned-password-42!", "First", "ABC123", [RoleCodes.LineOperator]));
+            Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+
+            var conflict = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.emp.second", "Provisioned-password-42!", "Second", " abc123 ", [RoleCodes.LineOperator]));
+
+            Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+            Assert.Equal("CONFIGURATION_CONFLICT", await ApiTestFixture.ErrorCodeAsync(conflict));
+        }
+    }
+
+    [Fact]
+    public async Task Admin_allows_multiple_users_without_employee_number()
+    {
+        var (_, client) = await AdminAsync();
+        using (client)
+        {
+            var first = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.noemp.first", "Provisioned-password-42!", "No Emp 1", null, [RoleCodes.LineOperator]));
+            var second = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.noemp.second", "Provisioned-password-42!", "No Emp 2", "   ", [RoleCodes.LineOperator]));
+
+            Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+            Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+            var firstUser = await first.Content.ReadFromJsonAsync<AdminUserRecord>();
+            var secondUser = await second.Content.ReadFromJsonAsync<AdminUserRecord>();
+            Assert.Null(firstUser!.EmployeeNo);
+            Assert.Null(secondUser!.EmployeeNo);
+        }
+    }
+
+    [Fact]
+    public async Task Admin_accepts_leading_zero_distinct_employee_numbers()
+    {
+        var (_, client) = await AdminAsync();
+        using (client)
+        {
+            var padded = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.zero.padded", "Provisioned-password-42!", "Padded", "001245", [RoleCodes.LineOperator]));
+            var unpadded = await client.PostAsJsonAsync(
+                "/api/v1/admin/users",
+                new CreateAdminUserRequest("p05.zero.unpadded", "Provisioned-password-42!", "Unpadded", "1245", [RoleCodes.LineOperator]));
+
+            Assert.Equal(HttpStatusCode.Created, padded.StatusCode);
+            Assert.Equal(HttpStatusCode.Created, unpadded.StatusCode);
+        }
+    }
+
     [Fact]
     public async Task Password_reset_invalidates_old_password_and_never_audits_hash_material()
     {

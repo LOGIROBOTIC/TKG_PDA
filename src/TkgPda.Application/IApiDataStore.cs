@@ -6,6 +6,14 @@ public interface IApiDataStore
 {
     Task<AuthUserRecord?> FindUserByUsernameAsync(string username, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Resolves an operator by their normalized employee / registry number
+    /// (see <see cref="EmployeeNumber.NormalizeForLookup"/>). The lookup is
+    /// trim + case-insensitive and backed by an index; blank employee numbers
+    /// never match.
+    /// </summary>
+    Task<AuthUserRecord?> FindUserByEmployeeNumberAsync(string normalizedEmployeeNumber, CancellationToken cancellationToken = default);
+
     Task<DeviceRecord?> FindDeviceAsync(string deviceCode, CancellationToken cancellationToken = default);
 
     Task MarkLoginSucceededAsync(Guid userId, CancellationToken cancellationToken = default);

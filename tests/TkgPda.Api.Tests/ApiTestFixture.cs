@@ -78,12 +78,14 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
         bool canView = true,
         bool canOperate = true,
         bool canChangeVariant = false,
-        string? machineCode = "SH-01-A")
+        string? machineCode = "SH-01-A",
+        string? employeeNo = null)
     {
         var suffix = Guid.NewGuid().ToString("N")[..10];
         var username = $"user-{suffix}";
         var password = "Test-password-42!";
         var deviceCode = $"PDA-{suffix}";
+        var employeeNumber = employeeNo ?? $"E-{suffix}";
         var hasher = new Pbkdf2PasswordHasher();
         var userId = await ScalarAsync<Guid>(
             """
@@ -94,7 +96,7 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             ("username", username),
             ("password_hash", hasher.Hash(password)),
             ("full_name", $"Test User {suffix}"),
-            ("employee_no", $"E-{suffix}"),
+            ("employee_no", employeeNumber),
             ("active", active));
         await ExecuteAsync(
             """
@@ -130,7 +132,7 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
                 ("can_change_variant", canChangeVariant));
         }
 
-        return new TestIdentity(userId, username, password, deviceId, deviceCode, machineId);
+        return new TestIdentity(userId, username, password, deviceId, deviceCode, machineId, employeeNumber);
     }
 
     public async Task<HttpClient> LoginClientAsync(TestIdentity identity)
@@ -307,7 +309,8 @@ public sealed record TestIdentity(
     string Password,
     Guid DeviceId,
     string DeviceCode,
-    Guid? MachineId);
+    Guid? MachineId,
+    string EmployeeNo);
 
 public sealed record LayoutContext(Guid MachineId, Guid VariantId, Guid LayoutId);
 

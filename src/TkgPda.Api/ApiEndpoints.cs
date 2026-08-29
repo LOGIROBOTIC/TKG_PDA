@@ -49,10 +49,30 @@ public static class ApiEndpoints
         JwtTokenService tokenService,
         CancellationToken cancellationToken)
     {
-        var username = request.Username?.Trim() ?? string.Empty;
-        if (username.Length is < 1 or > 100 || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256)
+        // WP-01A: Operator login accepts either the legacy username (transitional,
+        // still used by the current Flutter client) or the customer employee /
+        // registry number (sicil). Exactly one identity must be supplied.
+        var username = request.Username?.Trim();
+        if (string.IsNullOrEmpty(username))
         {
-            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_LOGIN_REQUEST", "Username and password are required and must fit the supported limits.");
+            username = null;
+        }
+
+        var employeeNumber = EmployeeNumber.Canonicalize(request.EmployeeNumber);
+        if (username is not null && employeeNumber is not null)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "AMBIGUOUS_LOGIN_IDENTITY", "Provide either a username or an employee number, not both.");
+        }
+
+        if (username is null && employeeNumber is null)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_LOGIN_REQUEST", "A username or employee number is required.");
+        }
+
+        if ((username?.Length ?? employeeNumber!.Length) > 100
+            || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_LOGIN_REQUEST", "The identity and password are required and must fit the supported limits.");
         }
 
         var deviceCode = context.Request.Headers[ApiHeaders.DeviceCode].ToString().Trim();
@@ -67,7 +87,9 @@ public static class ApiEndpoints
             throw new ApiException(StatusCodes.Status403Forbidden, "DEVICE_NOT_AUTHORIZED", "The client device is unknown, inactive or not a PDA.");
         }
 
-        var user = await dataStore.FindUserByUsernameAsync(username, cancellationToken);
+        var user = employeeNumber is not null
+            ? await dataStore.FindUserByEmployeeNumberAsync(EmployeeNumber.NormalizeForLookup(employeeNumber)!, cancellationToken)
+            : await dataStore.FindUserByUsernameAsync(username!, cancellationToken);
         var passwordValid = user is null
             ? passwordHasher.VerifyUnknownUser(request.Password)
             : passwordHasher.Verify(request.Password, user.PasswordHash);
@@ -80,7 +102,7 @@ public static class ApiEndpoints
                 device.Id,
                 "AUTH_LOGIN_FAILED",
                 "AUTH_USER",
-                username,
+                employeeNumber ?? username,
                 new { reason = "INVALID_CREDENTIALS" },
                 cancellationToken);
             throw new ApiException(StatusCodes.Status401Unauthorized, "INVALID_CREDENTIALS", "The username or password is invalid.");

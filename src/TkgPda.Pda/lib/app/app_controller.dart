@@ -103,7 +103,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login(String username, String password) async {
+  Future<bool> login(String employeeNumber, String password) async {
     if (_deviceCode == null) {
       _stage = AppStage.deviceSetup;
       notifyListeners();
@@ -112,7 +112,7 @@ class AppController extends ChangeNotifier {
     _setBusy(true);
     _clearFeedback();
     try {
-      final session = await _repository.login(username.trim(), password);
+      final session = await _repository.login(employeeNumber.trim(), password);
       _session.establish(session);
       await _loadMachines();
       _stage = AppStage.machines;

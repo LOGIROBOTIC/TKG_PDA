@@ -12,6 +12,7 @@ import 'package:tkg_pda/core/platform/platform_info.dart';
 import 'package:tkg_pda/core/storage/device_code_store.dart';
 import 'package:tkg_pda/core/storage/device_code_store_secure.dart';
 import 'package:tkg_pda/data/models/pda_models.dart';
+import 'package:tkg_pda/data/repositories/pda_repository.dart';
 
 import '../support/fakes.dart';
 
@@ -166,6 +167,52 @@ void main() {
 
         expect(captured.headers['X-Device-Code'], testDeviceCode);
         expect(captured.headers, isNot(contains('Authorization')));
+      },
+    );
+
+    test(
+      'PdaRepository submits employeeNumber and never a username field',
+      () async {
+        late http.Request captured;
+        final client = ApiClient(
+          baseUri: Uri.parse('https://api.example.test'),
+          deviceCode: () => testDeviceCode,
+          accessToken: () => null,
+          onUnauthorized: () {},
+          httpClient: MockClient((request) async {
+            captured = request;
+            return http.Response(
+              jsonEncode({
+                'accessToken': 'runtime-only-test-token',
+                'tokenType': 'Bearer',
+                'expiresAt': DateTime.now()
+                    .toUtc()
+                    .add(const Duration(minutes: 10))
+                    .toIso8601String(),
+                'user': {
+                  'id': testUser.id,
+                  'username': testUser.username,
+                  'fullName': testUser.fullName,
+                  'employeeNo': '001245',
+                  'roles': testUser.roles,
+                },
+                'device': {
+                  'id': testDevice.id,
+                  'code': testDevice.code,
+                  'name': testDevice.name,
+                  'type': testDevice.type,
+                },
+              }),
+              200,
+            );
+          }),
+        );
+
+        await PdaRepository(client).login('001245', 'transient');
+
+        final body = jsonDecode(captured.body) as Map<String, dynamic>;
+        expect(body['employeeNumber'], '001245');
+        expect(body.containsKey('username'), isFalse);
       },
     );
 

@@ -169,6 +169,8 @@ class FakePdaRepository implements PdaDataSource {
   Object? contextError;
   Object? createError;
   int loginCount = 0;
+  String? lastEmployeeNumber;
+  String? lastPassword;
   int createCount = 0;
   int cancelCount = 0;
   int switchCount = 0;
@@ -182,8 +184,10 @@ class FakePdaRepository implements PdaDataSource {
   Completer<AuthenticatedUser>? meCompleter;
 
   @override
-  Future<LoginSession> login(String username, String password) async {
+  Future<LoginSession> login(String employeeNumber, String password) async {
     loginCount++;
+    lastEmployeeNumber = employeeNumber;
+    lastPassword = password;
     if (loginProblem case final problem?) throw problem;
     return LoginSession(
       accessToken: 'runtime-only-test-token',

@@ -2,7 +2,7 @@ import '../../core/network/api_client.dart';
 import '../models/pda_models.dart';
 
 abstract interface class PdaDataSource {
-  Future<LoginSession> login(String username, String password);
+  Future<LoginSession> login(String employeeNumber, String password);
   Future<AuthenticatedUser> me();
   Future<List<MachineSummary>> machines();
   Future<OperationalContext> operationalContext(String machineId);
@@ -31,10 +31,10 @@ class PdaRepository implements PdaDataSource {
   final ApiClient _api;
 
   @override
-  Future<LoginSession> login(String username, String password) async {
+  Future<LoginSession> login(String employeeNumber, String password) async {
     final response = await _api.post(
       '/api/v1/auth/login',
-      body: {'username': username, 'password': password},
+      body: {'employeeNumber': employeeNumber, 'password': password},
       mutation: false,
     );
     return LoginSession.fromJson(_json(response.body));

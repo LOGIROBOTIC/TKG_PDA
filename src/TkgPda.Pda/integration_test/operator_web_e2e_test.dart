@@ -13,7 +13,7 @@ import 'package:web/web.dart' as web;
 
 const _apiBaseUrl = String.fromEnvironment('TKG_API_BASE_URL');
 const _deviceCode = String.fromEnvironment('TKG_TEST_DEVICE_CODE');
-const _username = String.fromEnvironment('TKG_TEST_USERNAME');
+const _employeeNumber = String.fromEnvironment('TKG_TEST_EMPLOYEE_NUMBER');
 const _password = String.fromEnvironment('TKG_TEST_PASSWORD');
 
 void main() {
@@ -24,7 +24,7 @@ void main() {
     (tester) async {
       expect(_apiBaseUrl, isNotEmpty);
       expect(_deviceCode, isNotEmpty);
-      expect(_username, isNotEmpty);
+      expect(_employeeNumber, isNotEmpty);
       expect(_password, isNotEmpty);
 
       var checks = 0;
@@ -61,8 +61,8 @@ void main() {
       check(await store.read(), _deviceCode, 'Device Code persisted');
 
       await tester.enterText(
-        find.byKey(const Key('username-field')),
-        _username,
+        find.byKey(const Key('employee-number-field')),
+        _employeeNumber,
       );
       await tester.enterText(
         find.byKey(const Key('password-field')),

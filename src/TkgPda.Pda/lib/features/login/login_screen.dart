@@ -14,13 +14,13 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _username = TextEditingController();
+  final _employeeNumber = TextEditingController();
   final _password = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _username.dispose();
+    _employeeNumber.dispose();
     _password.clear();
     _password.dispose();
     super.dispose();
@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     FocusScope.of(context).unfocus();
-    await widget.controller.login(_username.text, _password.text);
+    await widget.controller.login(_employeeNumber.text, _password.text);
     _password.clear();
   }
 
@@ -84,17 +84,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 24),
                               TextFormField(
-                                key: const Key('username-field'),
-                                controller: _username,
+                                key: const Key('employee-number-field'),
+                                controller: _employeeNumber,
                                 textInputAction: TextInputAction.next,
                                 autocorrect: false,
                                 decoration: const InputDecoration(
-                                  labelText: 'Kullanıcı Adı',
-                                  prefixIcon: Icon(Icons.person),
+                                  labelText: 'Sicil Numarası',
+                                  prefixIcon: Icon(Icons.badge),
                                 ),
                                 validator: (value) =>
                                     (value?.trim().isEmpty ?? true)
-                                    ? 'Kullanıcı adı zorunludur.'
+                                    ? 'Sicil numarası zorunludur.'
                                     : null,
                               ),
                               const SizedBox(height: 16),

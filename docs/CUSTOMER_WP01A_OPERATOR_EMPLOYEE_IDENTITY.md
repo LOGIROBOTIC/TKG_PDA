@@ -65,6 +65,9 @@ her aktif yol (Category A) `002`'yi `001`'den hemen sonra uygular:
 - `tests/phase_08a` (readiness + live sync bootstrap'ı), `tests/phase_08b`
 - `tests/phase_08c` (Phase 10A canlı kabul harness'i bunu sarar)
 - `tests/phase_09`
+- `src/TkgPda.AdminWeb/e2e/global-setup.ts` (Admin Playwright E2E bootstrap;
+  taze PostgreSQL + güncel `TkgPda.Api` + Chromium — yalnız test-bootstrap
+  altyapısıdır, React ürün kaynağı değişmez)
 
 Yalnız seed/pipeline doğrulayan ve güncel backend'i çalıştırmayan Phase 02A/02B
 harness'ları (Category B) `001`-only kalır; migration 002 seed sayımlarını
@@ -76,9 +79,11 @@ no-op'tur. İlk (oluşturan) uygulama, normalize edilmiş mevcut çift kayıtlar
 varsa yine de **başarısız olur** (tasarım gereği; veri tahminle düzeltilmez).
 `tools/dev/start_local_stack.ps1` `002`'yi her başlangıçta idempotent olarak
 uygular; böylece hem taze hem de mevcut pre-WP01A yerel veritabanı yerinde
-yükseltilir. Admin Web e2e bootstrap'ı (`src/TkgPda.AdminWeb/e2e/global-setup.ts`)
-de güncel backend'i çalıştırır; kapsam sınırı nedeniyle bu paket onu
-değiştirmez ve mimar kararına bırakır.
+yükseltilir.
+
+Yalnız backend çalıştırmayan seed/pipeline harness'ları (`tests/phase_02a`,
+`tests/phase_02b`) `001`-only kalır; başka hiçbir aktif güncel-şema bootstrap'ı
+`002`'yi atlamaz.
 
 ## Operator geçiş (transitional) API davranışı
 

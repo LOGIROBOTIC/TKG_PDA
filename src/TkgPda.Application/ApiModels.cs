@@ -32,6 +32,21 @@ public sealed record MachineSummaryRecord(
     int DisplayOrder,
     MachinePermissionRecord Permissions);
 
+/// <summary>
+/// WP-02: a variant compatible with a selected part on an authorized machine,
+/// derived only from existing normalized master data (never inferred).
+/// RelationType is "MAIN" when the part is the product group's main part,
+/// otherwise the product_group_parts relation_type (RELATED/ALT_PART/
+/// CONSUMABLE/OTHER).
+/// </summary>
+public sealed record CompatibleVariantRecord(
+    Guid VariantId,
+    string VariantCode,
+    string VariantName,
+    Guid MachineId,
+    Guid ProductGroupId,
+    string RelationType);
+
 public sealed record VariantLayoutOptionRecord(
     Guid VariantId,
     string VariantCode,

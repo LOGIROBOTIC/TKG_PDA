@@ -150,6 +150,52 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
         return result;
     }
 
+    public async Task<IReadOnlyList<CompatibleVariantRecord>> ListCompatibleVariantsAsync(
+        Guid machineId,
+        Guid partId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT variant_id, code, name, machine_id, product_group_id, relation_type
+            FROM (
+                SELECT DISTINCT ON (v.id)
+                       v.id AS variant_id,
+                       v.code,
+                       v.name,
+                       v.machine_id,
+                       v.display_order,
+                       pg.id AS product_group_id,
+                       CASE WHEN pg.main_part_id = @part_id THEN 'MAIN' ELSE gpp.relation_type END AS relation_type
+                FROM master.variants v
+                JOIN master.product_groups pg ON pg.variant_id = v.id AND pg.is_active
+                LEFT JOIN master.product_group_parts gpp
+                       ON gpp.product_group_id = pg.id AND gpp.part_id = @part_id AND gpp.is_active
+                WHERE v.machine_id = @machine_id
+                  AND v.is_active
+                  AND (pg.main_part_id = @part_id OR gpp.part_id = @part_id)
+                ORDER BY v.id, (pg.main_part_id = @part_id) DESC, pg.display_order
+            ) resolved
+            ORDER BY display_order, code
+            """);
+        command.Parameters.AddWithValue("machine_id", machineId);
+        command.Parameters.AddWithValue("part_id", partId);
+        var result = new List<CompatibleVariantRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new CompatibleVariantRecord(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetGuid(3),
+                reader.GetGuid(4),
+                reader.GetString(5)));
+        }
+
+        return result;
+    }
+
     public async Task<OperationalContextDataRecord?> GetOperationalContextDataAsync(
         Guid userId,
         Guid machineId,

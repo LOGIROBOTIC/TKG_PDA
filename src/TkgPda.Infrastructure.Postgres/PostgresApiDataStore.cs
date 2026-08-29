@@ -7,28 +7,49 @@ namespace TkgPda.Infrastructure.Postgres;
 
 public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiDataStore
 {
-    public async Task<AuthUserRecord?> FindUserByUsernameAsync(
+    private const string AuthUserSelect =
+        """
+        SELECT u.id,
+               u.username,
+               u.password_hash,
+               u.full_name,
+               u.employee_no,
+               u.is_active,
+               COALESCE(
+                   array_agg(r.code ORDER BY r.code) FILTER (WHERE r.id IS NOT NULL),
+                   ARRAY[]::varchar[])
+        FROM auth.users u
+        LEFT JOIN auth.user_roles ur ON ur.user_id = u.id
+        LEFT JOIN auth.roles r ON r.id = ur.role_id AND r.is_active
+        """;
+
+    public Task<AuthUserRecord?> FindUserByUsernameAsync(
         string username,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        FindAuthUserAsync(
+            "WHERE u.username = @username",
+            "username",
+            username,
+            cancellationToken);
+
+    public Task<AuthUserRecord?> FindUserByEmployeeNumberAsync(
+        string normalizedEmployeeNumber,
+        CancellationToken cancellationToken = default) =>
+        FindAuthUserAsync(
+            "WHERE u.employee_no IS NOT NULL AND BTRIM(u.employee_no) <> '' AND UPPER(BTRIM(u.employee_no)) = @employee_no",
+            "employee_no",
+            normalizedEmployeeNumber,
+            cancellationToken);
+
+    private async Task<AuthUserRecord?> FindAuthUserAsync(
+        string whereClause,
+        string parameterName,
+        string parameterValue,
+        CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(
-            """
-            SELECT u.id,
-                   u.username,
-                   u.password_hash,
-                   u.full_name,
-                   u.employee_no,
-                   u.is_active,
-                   COALESCE(
-                       array_agg(r.code ORDER BY r.code) FILTER (WHERE r.id IS NOT NULL),
-                       ARRAY[]::varchar[])
-            FROM auth.users u
-            LEFT JOIN auth.user_roles ur ON ur.user_id = u.id
-            LEFT JOIN auth.roles r ON r.id = ur.role_id AND r.is_active
-            WHERE u.username = @username
-            GROUP BY u.id
-            """);
-        command.Parameters.AddWithValue("username", username);
+            $"{AuthUserSelect}\n{whereClause}\nGROUP BY u.id");
+        command.Parameters.AddWithValue(parameterName, parameterValue);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {

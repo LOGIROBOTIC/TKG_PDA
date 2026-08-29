@@ -116,6 +116,14 @@ if ($schemaExists -ne '1') {
     if ($LASTEXITCODE -ne 0) { throw "Applying 001_initial_schema.sql failed with exit code $LASTEXITCODE" }
 }
 
+# Migration 002 is idempotent (CREATE UNIQUE INDEX IF NOT EXISTS); apply it on
+# every startup so an existing pre-WP01A database is upgraded in place, while a
+# freshly created database (001 above) also receives it. It is a no-op once the
+# normalized employee_no index is present.
+Write-Host 'Applying migration 002 (002_operator_employee_identity.sql)...' -ForegroundColor Cyan
+& $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\002_operator_employee_identity.sql') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Applying 002_operator_employee_identity.sql failed with exit code $LASTEXITCODE" }
+
 Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cyan
 $seedFiles = @(
     (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql'),

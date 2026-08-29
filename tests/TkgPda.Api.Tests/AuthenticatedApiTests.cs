@@ -115,6 +115,175 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         Assert.Equal("DEVICE_NOT_AUTHORIZED", await ApiTestFixture.ErrorCodeAsync(response));
     }
 
+    // ---- WP-01A: employee / registry number (sicil) operator login ----
+
+    private async Task<HttpResponseMessage> PostLoginAsync(string? deviceCode, LoginRequest body)
+    {
+        var client = fixture.Client();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+        {
+            Content = JsonContent.Create(body)
+        };
+        if (deviceCode is not null)
+        {
+            request.Headers.Add(ApiHeaders.DeviceCode, deviceCode);
+        }
+
+        return await client.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task Employee_number_login_succeeds_and_returns_device_bound_session()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, identity.EmployeeNo));
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(login);
+        Assert.Equal(identity.UserId, login.User.Id);
+        Assert.Equal(identity.EmployeeNo, login.User.EmployeeNo);
+        Assert.Equal([RoleCodes.LineOperator], login.User.Roles);
+        Assert.Equal(identity.DeviceCode, login.Device.Code);
+
+        var client = fixture.Client();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+        client.DefaultRequestHeaders.Add(ApiHeaders.DeviceCode, identity.DeviceCode);
+        var me = await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/me");
+        Assert.Equal(ClientTypes.DeviceBound, me.GetProperty("clientType").GetString());
+    }
+
+    [Fact]
+    public async Task Employee_number_login_is_case_insensitive_and_trims_whitespace()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync(employeeNo: "ab001");
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, "  AB001  "));
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(identity.UserId, login!.User.Id);
+        Assert.Equal("ab001", login.User.EmployeeNo);
+    }
+
+    [Fact]
+    public async Task Employee_number_login_preserves_significant_leading_zeros()
+    {
+        await fixture.ResetAsync();
+        var padded = await fixture.SeedIdentityAsync(employeeNo: "001245");
+        var unpadded = await fixture.SeedIdentityAsync(employeeNo: "1245");
+
+        var paddedLogin = await (await PostLoginAsync(padded.DeviceCode, new LoginRequest(null, padded.Password, "001245")))
+            .Content.ReadFromJsonAsync<LoginResponse>();
+        var unpaddedLogin = await (await PostLoginAsync(unpadded.DeviceCode, new LoginRequest(null, unpadded.Password, "1245")))
+            .Content.ReadFromJsonAsync<LoginResponse>();
+
+        Assert.Equal(padded.UserId, paddedLogin!.User.Id);
+        Assert.Equal(unpadded.UserId, unpaddedLogin!.User.Id);
+        Assert.NotEqual(paddedLogin.User.Id, unpaddedLogin.User.Id);
+    }
+
+    [Fact]
+    public async Task Employee_number_login_unknown_number_is_generic_credentials_error()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, "E-does-not-exist"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("INVALID_CREDENTIALS", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Employee_number_login_wrong_password_is_rejected()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, "wrong-password", identity.EmployeeNo));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("INVALID_CREDENTIALS", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Employee_number_login_inactive_user_is_rejected()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync(active: false);
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, identity.EmployeeNo));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("INVALID_CREDENTIALS", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Employee_number_login_requires_authorized_device()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync(deviceActive: false);
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, identity.EmployeeNo));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("DEVICE_NOT_AUTHORIZED", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Login_with_both_username_and_employee_number_is_ambiguous()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(identity.Username, identity.Password, identity.EmployeeNo));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("AMBIGUOUS_LOGIN_IDENTITY", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Login_with_no_identity_is_rejected()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_LOGIN_REQUEST", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Login_with_blank_employee_number_and_no_username_is_rejected()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, identity.Password, "   "));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_LOGIN_REQUEST", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Legacy_username_operator_login_remains_supported()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(identity.Username, identity.Password));
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(identity.UserId, login!.User.Id);
+        Assert.Equal(identity.DeviceCode, login.Device.Code);
+    }
+
     [Fact]
     public async Task Protected_endpoints_require_authentication()
     {

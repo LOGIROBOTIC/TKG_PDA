@@ -10,7 +10,19 @@
 
 ## Sonuç
 
-Phase 10A **LIVE ACCEPTANCE PENDING**. Tüm artifact, regression ve statik doğrulamalar geçti. Canlı RDS doğrulaması bekliyor.
+Phase 10A **LIVE ACCEPTANCE PASSED / COMPLETE**. Tüm artifact, regression, statik doğrulamalar ve canlı simulator E2E kabulü geçti. Backend-driven reverse-direction (`AP20 → AP15`) dinamik Wind Task kabulü `2026-08-29` tarihinde canlı simulator ortamında doğrulandı.
+
+Phase 10A **kanıtlar**:
+
+- dinamik Wind Task `from`/`to` girdileri (runtime `taskInputs.*` tüketimi)
+- backend-driven dispatch (TKG uygulama akışı üzerinden)
+- UUID kimliği (`TransportRequest UUID == RDS taskRecordId`)
+- simulator yürütmesi (`1000 → 1003`)
+- callback/reconciliation ile terminal durum uygulanması
+- idempotency (`IDEMPOTENT_REPLAY`, aynı taskRecordId için tek instance)
+- WorkSite immutability (digest değişmedi)
+
+Phase 10A **kanıtlamaz** (bkz. [Phase sınırı](#phase-sınırı)): production `BRING_EMPTY` / `REMOVE_FULL` / `REMOVE_EMPTY`, fiziksel CBD15 hareketi, ForkLoad, ForkUnload, binTask, production WorkSite eşlemeleri, fork yükseklikleri, pickup/drop geometrisi, production recognition ayarları.
 
 ## Phase 08C sınırlılığı
 
@@ -67,21 +79,57 @@ node --test tests/phase_10a/rds_dynamic_task_contract.test.mjs
 
 Testler doğruladı: exact byte hash, label, ID, version, from/to String required, taskInputs.from/to expression, Select Robot, iki Robot Universal Action, Wait only, sabit robot yok, sabit AP yok, WorkSite/PLC/fork/load/unload yok, secret yok.
 
-## Manuel RDS UI kabulü
+## Canlı kabul (2026-08-29)
 
-**LIVE ACCEPTANCE PENDING — Bu bölüm canlı koşu sonrasında doldurulacak.**
+Kabul yolu, mevcut TKG uygulama akışıdır: `TransportRequest → QUEUED → integration.rds_tasks → RdsExecutionWorker → RdsExecutionCoordinator → RdsExecutionClient → /script-api/tkg/create-transport → jj.createWindTask → TKG_SIM_DYNAMIC_MOVE → simulator → callback/reconciliation → TKG terminal`. Doğrudan `jj.createWindTask` veya manuel RDS Execute kullanılmadı.
 
-## TKG E2E kabulü
+| Alan | Değer |
+|---|---|
+| TransportRequest UUID | `e6c7d609-adcf-4d15-a657-50d280ccba1f` |
+| RDS taskRecordId | `e6c7d609-adcf-4d15-a657-50d280ccba1f` |
+| Kimlik | **MATCH** |
+| Yön | `AP20 → AP15` (Phase 08C `AP15 → AP20` hareketinin tersi) |
+| RDS inputParams | `from = AP20`, `to = AP15` |
+| Çözümlenen dinamik hedefler | birinci = `AP20`, ikinci = `AP15` |
+| Atanan simulator | `sim_02` |
+| RDS gözlenen | `1000 → 1003` |
+| RDS final | `1003` |
+| endedReason | `[RootBp]End Of Task` |
+| Blok zinciri | `RootBp`, `CSelectAgvBp`, `CAgvOperationBp`, `CAgvOperationBp` — tümü `1003` |
 
-**LIVE ACCEPTANCE PENDING — Bu bölüm canlı koşu sonrasında doldurulacak.**
+### TKG E2E kabulü
 
-## Idempotency
+| Alan | Değer |
+|---|---|
+| TKG gözlenen | `QUEUED → SENT_TO_RDS → RUNNING → COMPLETED` |
+| TKG final | **COMPLETED** |
+| Authenticated callback | gözlendi (sayı = 1) |
+| Callback sonucu | `RDS_CALLBACK_APPLIED` |
+| Terminal tamamlanma kaynağı | **CALLBACK** |
 
-**LIVE ACCEPTANCE PENDING**
+### Idempotency
 
-## WorkSite kanıtı
+| Alan | Değer |
+|---|---|
+| Aynı taskRecordId retry | `IDEMPOTENT_REPLAY` |
+| Bu taskRecordId için RDS instance sayısı | **1** |
+| TKG request sayısı / RDS projection sayısı | 1 / 1 |
 
-**LIVE ACCEPTANCE PENDING**
+> Not: RDS'te farklı taskRecordId'lere sahip tarihsel `TKG_SIM_DYNAMIC_MOVE` görevleri idempotency ile ilgisizdir; kabul kriteri **bu koşunun kesin taskRecordId'si** için instance sayısının 1 olmasıdır.
+
+### WorkSite kanıtı
+
+| Alan | Değer |
+|---|---|
+| WorkSite sayısı (önce) | 22 |
+| WorkSite sayısı (sonra) | 22 |
+| Digest (önce) | `5807fe6a5b41446e6015036340531372e7482fda3dd83a34f77eae2b9ffbe349` |
+| Digest (sonra) | `5807fe6a5b41446e6015036340531372e7482fda3dd83a34f77eae2b9ffbe349` |
+| WorkSite mutasyonu | **YOK** |
+
+### Acceptance-harness terminal-wait notu
+
+İlk canlı koşu 180 saniyelik terminal bekleme penceresiyle çalıştı ve ters `AP20 → AP15` rotası bu pencere içinde tamamlanmadı; koşu, RDS görevi `1003`'e ulaşmadan önce geçici TKG API/PostgreSQL'i kapattı. Bu, bir **acceptance-harness terminal-wait-window sınırlamasıdır** — üründe veya RDS işlevselliğinde bir hata değildir (dinamik girdi tüketimi ve dispatch her iki koşuda da doğru çalıştı). Commissioning sırasında keşfedildi ve düzeltildi: `tests/phase_08c/run_live_rds_simulator_e2e.ps1` artık opsiyonel bir `TerminalTimeoutSeconds` parametresi alır (varsayılan **180** — Phase 08C davranışı değişmedi), ve `tests/phase_10a/run_live_dynamic_rds_e2e.ps1` bunu açıkça **600** olarak geçer. PowerShell 7, Phase 10A canlı harness'in desteklenen çalışma zamanıdır.
 
 ## Regression test sonuçları
 
@@ -104,7 +152,13 @@ Testler doğruladı: exact byte hash, label, ID, version, from/to String require
 
 ## Güvenlik kapıları
 
-**LIVE ACCEPTANCE PENDING**
+Canlı kabul, simulator-only ortamda gerçekleştirildi:
+
+- Fiziksel robot bağlı değil; yalnız `sim_01` / `sim_02` (insan mimar tarafından RDS UI üzerinde doğrulandı).
+- Dispatch yalnız açık opt-in ile etkin: `Rds__Enabled=true`, `Rds__DispatchEnabled=true`, `TKG_PDA_PHASE10A_SIMULATOR_SCENE_CONFIRMED=true`.
+- `Rds__IntegrationKey` / `Rds__CallbackKey` yalnız process environment üzerinden sağlandı; repository'ye yazılmadı, log'lanmadı.
+- WorkSite mutasyonu yok; production fork/load/unload davranışı yok; production WorkSite eşlemesi eklenmedi.
+- Yalnız loopback HTTP RDS endpoint'i (`http://127.0.0.1:8080`) kabul edildi.
 
 ## Phase sınırı
 

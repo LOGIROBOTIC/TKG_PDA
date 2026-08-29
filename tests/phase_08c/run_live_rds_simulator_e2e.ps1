@@ -9,7 +9,8 @@ param(
     [string]$ToParameter = 'toPoint',
     [string]$FromValue = 'AP15',
     [string]$ToValue = 'AP20',
-    [string]$SceneConfirmationVariable = 'TKG_PDA_PHASE08C_SIMULATOR_SCENE_CONFIRMED'
+    [string]$SceneConfirmationVariable = 'TKG_PDA_PHASE08C_SIMULATOR_SCENE_CONFIRMED',
+    [int]$TerminalTimeoutSeconds = 180
 )
 
 $ErrorActionPreference = 'Stop'
@@ -317,6 +318,7 @@ FROM master.task_types WHERE code = 'BRING_EMPTY';
     if ([int]$createdResponse.StatusCode -ne 201) { throw 'The single controlled TransportRequest was not created.' }
     $created = $createdResponse.Content | ConvertFrom-Json
     $requestId = [string]$created.id
+    Write-Host "PHASE_HARNESS TransportRequestId=$requestId"
 
     $replayResponse = Invoke-WebRequest -Method Post -Uri "$apiBaseUrl/api/v1/transport-requests" `
         -Headers $authHeaders -ContentType 'application/json' -Body $transportJson
@@ -329,7 +331,7 @@ FROM master.task_types WHERE code = 'BRING_EMPTY';
     $tkgStatusSequence = [Collections.Generic.List[string]]::new()
     $rdsStatusSequence = [Collections.Generic.List[int]]::new()
     $terminal = $null
-    for ($poll = 0; $poll -lt 180; $poll++) {
+    for ($poll = 0; $poll -lt $TerminalTimeoutSeconds; $poll++) {
         $stateText = Invoke-PsqlScalar @"
 SELECT json_build_object(
   'requestStatus', tr.status,
@@ -358,7 +360,7 @@ WHERE tr.id = '$requestId'::uuid;
         if ($state.requestStatus -in @('COMPLETED', 'FAILED', 'CANCELLED')) { $terminal = $state; break }
         Start-Sleep -Seconds 1
     }
-    if ($null -eq $terminal) { throw 'The controlled TKG/RDS simulator request did not reach a terminal state in 180 seconds.' }
+    if ($null -eq $terminal) { throw "The controlled TKG/RDS simulator request did not reach a terminal state in $TerminalTimeoutSeconds seconds." }
     if ($terminal.requestStatus -ne 'COMPLETED' -or [int]$terminal.rdsStatus -ne 1003) {
         throw "The controlled simulator request ended unexpectedly: TKG=$($terminal.requestStatus), RDS=$($terminal.rdsStatus)."
     }

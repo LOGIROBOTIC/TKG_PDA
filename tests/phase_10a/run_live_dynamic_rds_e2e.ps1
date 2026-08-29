@@ -97,4 +97,5 @@ if ([int]$countAfter.totalCount -ne 0) {
     -ToParameter 'to' `
     -FromValue 'AP20' `
     -ToValue 'AP15' `
-    -SceneConfirmationVariable 'TKG_PDA_PHASE10A_SIMULATOR_SCENE_CONFIRMED'
+    -SceneConfirmationVariable 'TKG_PDA_PHASE10A_SIMULATOR_SCENE_CONFIRMED' `
+    -TerminalTimeoutSeconds 600

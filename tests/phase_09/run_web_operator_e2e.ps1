@@ -293,7 +293,7 @@ WHERE rn <= 3;
     $sharedDefines = @(
         "--dart-define=TKG_API_BASE_URL=http://127.0.0.1:$ApiPort",
         '--dart-define=TKG_TEST_DEVICE_CODE=SH01A-TERM01',
-        '--dart-define=TKG_TEST_USERNAME=phase09-operator',
+        '--dart-define=TKG_TEST_EMPLOYEE_NUMBER=P09-WEB',
         "--dart-define=TKG_TEST_PASSWORD=$testPassword"
     )
     Push-Location $pdaRoot

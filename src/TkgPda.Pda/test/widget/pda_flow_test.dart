@@ -47,6 +47,43 @@ void main() {
     harness.dispose();
   });
 
+  testWidgets('login screen shows Sicil Numarası and no username field', (
+    tester,
+  ) async {
+    final harness = await _harness(tester);
+
+    expect(find.text('Sicil Numarası'), findsOneWidget);
+    expect(find.text('Kullanıcı Adı'), findsNothing);
+    expect(find.byKey(const Key('employee-number-field')), findsOneWidget);
+    expect(find.byKey(const Key('username-field')), findsNothing);
+    harness.dispose();
+  });
+
+  testWidgets('login submits the employee number, not a username', (
+    tester,
+  ) async {
+    final repository = FakePdaRepository();
+    final harness = await _harness(tester, repository: repository);
+
+    await _loginFromUi(tester, employeeNumber: '00123');
+
+    expect(repository.lastEmployeeNumber, '00123');
+    harness.dispose();
+  });
+
+  testWidgets('login preserves significant leading zeros in the sicil value', (
+    tester,
+  ) async {
+    final repository = FakePdaRepository();
+    final harness = await _harness(tester, repository: repository);
+
+    await _loginFromUi(tester, employeeNumber: '001245');
+
+    expect(repository.lastEmployeeNumber, '001245');
+    expect(repository.lastEmployeeNumber, isNot('1245'));
+    harness.dispose();
+  });
+
   testWidgets('invalid login shows generic ProblemDetails UX', (tester) async {
     final repository = FakePdaRepository()
       ..loginProblem = const ApiProblem(
@@ -62,6 +99,28 @@ void main() {
     expect(find.byKey(const Key('problem-banner')), findsOneWidget);
     expect(
       find.text('Oturumunuz sona erdi. Lütfen yeniden giriş yapın.'),
+      findsOneWidget,
+    );
+    harness.dispose();
+  });
+
+  testWidgets('login shows a device error when the device is not authorized', (
+    tester,
+  ) async {
+    final repository = FakePdaRepository()
+      ..loginProblem = const ApiProblem(
+        status: 403,
+        code: 'DEVICE_NOT_AUTHORIZED',
+        detail: 'The client device is unknown, inactive or not a PDA.',
+        correlationId: 'corr-device',
+      );
+    final harness = await _harness(tester, repository: repository);
+
+    await _loginFromUi(tester);
+
+    expect(find.byKey(const Key('problem-banner')), findsOneWidget);
+    expect(
+      find.text('Bu işlem için yetkiniz bulunmuyor.'),
       findsOneWidget,
     );
     harness.dispose();
@@ -599,8 +658,14 @@ Future<_Harness> _operationHarness(
   return harness;
 }
 
-Future<void> _loginFromUi(WidgetTester tester) async {
-  await tester.enterText(find.byKey(const Key('username-field')), 'operator');
+Future<void> _loginFromUi(
+  WidgetTester tester, {
+  String employeeNumber = '00123',
+}) async {
+  await tester.enterText(
+    find.byKey(const Key('employee-number-field')),
+    employeeNumber,
+  );
   await tester.enterText(find.byKey(const Key('password-field')), 'transient');
   await tester.tap(find.byKey(const Key('login-button')));
   await tester.pumpAndSettle();

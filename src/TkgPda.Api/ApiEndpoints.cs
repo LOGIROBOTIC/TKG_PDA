@@ -23,6 +23,9 @@ public static class ApiEndpoints
         endpoints.MapGet("/api/v1/machines/{machineId:guid}/operational-context", OperationalContextAsync)
             .RequireAuthorization();
 
+        endpoints.MapGet("/api/v1/machines/{machineId:guid}/parts/{partId:guid}/compatible-variants", CompatibleVariantsAsync)
+            .RequireAuthorization();
+
         endpoints.MapPost("/api/v1/machines/{machineId:guid}/variant-selection", SwitchVariantAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
 
@@ -178,6 +181,19 @@ public static class ApiEndpoints
         return result is null
             ? throw new ApiException(StatusCodes.Status404NotFound, "MACHINE_NOT_FOUND", "The requested machine does not exist or is inactive.")
             : Results.Ok(result);
+    }
+
+    private static async Task<IResult> CompatibleVariantsAsync(
+        Guid machineId,
+        Guid partId,
+        HttpContext context,
+        MachineAccessService access,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.View, cancellationToken);
+        var variants = await dataStore.ListCompatibleVariantsAsync(machineId, partId, cancellationToken);
+        return Results.Ok(variants);
     }
 
     private static async Task<IResult> CreateTransportAsync(

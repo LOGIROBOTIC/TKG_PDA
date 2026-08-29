@@ -28,6 +28,17 @@ public interface IApiDataStore
         bool administrator,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// WP-02: resolves the variants on <paramref name="machineId"/> compatible
+    /// with <paramref name="partId"/>, derived only from existing master data
+    /// (master.variants / master.product_groups / master.product_group_parts).
+    /// Returns an empty list when the part has no mapping; never infers one.
+    /// </summary>
+    Task<IReadOnlyList<CompatibleVariantRecord>> ListCompatibleVariantsAsync(
+        Guid machineId,
+        Guid partId,
+        CancellationToken cancellationToken = default);
+
     Task<OperationalContextDataRecord?> GetOperationalContextDataAsync(
         Guid userId,
         Guid machineId,

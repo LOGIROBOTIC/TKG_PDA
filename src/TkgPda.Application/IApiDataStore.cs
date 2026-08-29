@@ -39,6 +39,15 @@ public interface IApiDataStore
         Guid partId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// WP-03A: resolves the machine-level main-part options (each with its
+    /// Related/Alt parts), deduplicated across all of the machine's variants,
+    /// derived only from existing master data. Never infers a mapping.
+    /// </summary>
+    Task<IReadOnlyList<MachineMainPartOptionRecord>> ListMachinePartOptionsAsync(
+        Guid machineId,
+        CancellationToken cancellationToken = default);
+
     Task<OperationalContextDataRecord?> GetOperationalContextDataAsync(
         Guid userId,
         Guid machineId,

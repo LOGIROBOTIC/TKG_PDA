@@ -128,7 +128,7 @@ public sealed class TransportWorkflowServiceTests
             new TransportRequestSnapshot(
                 Guid.NewGuid(), 1, "retry-key", TransportRequestStatus.Queued, TransportTaskType.BringEmpty,
                 RequestOrigin.LineOperator, null, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, null, null, null, null,
-                Guid.NewGuid(), 100),
+                Guid.NewGuid(), 100, TransportReadinessState.NotRequired, null),
             false);
 
         public Task<CreateTransportResult> CreateAndQueueAsync(CreateTransportRequest request, CancellationToken cancellationToken = default)
@@ -136,6 +136,9 @@ public sealed class TransportWorkflowServiceTests
             CreatedCommand = request;
             return Task.FromResult(CreateResult);
         }
+
+        public Task<TransportRequestSnapshot> MarkReadyAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateResult.Request with { Id = requestId, ReadinessState = TransportReadinessState.Ready, ReadyAt = DateTimeOffset.UtcNow });
 
         public Task<TransportBatchResult> CreateBatchAndQueueAsync(CreateTransportBatchRequest request, CancellationToken cancellationToken = default) =>
             Task.FromResult(new TransportBatchResult(

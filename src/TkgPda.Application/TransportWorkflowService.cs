@@ -35,6 +35,19 @@ public sealed class TransportWorkflowService(ITransportWorkflowStore store)
         return store.CancelAsync(requestId, actorUserId, cancellationToken);
     }
 
+    public Task<TransportRequestSnapshot> MarkReadyAsync(
+        Guid requestId,
+        Guid? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (requestId == Guid.Empty)
+        {
+            throw new WorkflowRuleException("REQUEST_ID_REQUIRED", "A transport request ID is required.");
+        }
+
+        return store.MarkReadyAsync(requestId, actorUserId, cancellationToken);
+    }
+
     public Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(
         Guid requestId,
         TransportRequestStatus nextStatus,

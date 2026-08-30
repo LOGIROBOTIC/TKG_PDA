@@ -31,7 +31,8 @@ public sealed record CreateTransportHttpRequest(
     string Operation,
     Guid? SourceSlotId,
     Guid? DestinationSlotId,
-    int Priority = 100);
+    int Priority = 100,
+    bool RequiresPreparation = false);
 
 public sealed record CreateTransportBatchItemHttpRequest(
     string IdempotencyKey,
@@ -45,7 +46,8 @@ public sealed record CreateTransportBatchItemHttpRequest(
     string Operation,
     Guid? SourceSlotId,
     Guid? DestinationSlotId,
-    int Priority = 100);
+    int Priority = 100,
+    bool RequiresPreparation = false);
 
 public sealed record CreateTransportBatchHttpRequest(
     string IdempotencyKey,
@@ -90,4 +92,6 @@ public sealed record TransportHttpResponse(
     Guid? DestinationSlotId,
     int Priority,
     bool IdempotentReplay,
-    bool RdsCancellationPending = false);
+    bool RdsCancellationPending,
+    string ReadinessState,
+    DateTimeOffset? ReadyAt);

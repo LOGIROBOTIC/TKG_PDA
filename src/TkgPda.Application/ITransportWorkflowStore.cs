@@ -18,6 +18,13 @@ public interface ITransportWorkflowStore
 
     Task<CancelTransportResult> CancelAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// WP-05A: transitions a request's BUSINESS readiness from
+    /// WAITING_PREPARATION to READY and records ready_at. Idempotent when
+    /// already READY. Never touches the execution state machine.
+    /// </summary>
+    Task<TransportRequestSnapshot> MarkReadyAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default);
+
     Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(
         Guid requestId,
         TransportRequestStatus nextStatus,

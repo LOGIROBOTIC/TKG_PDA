@@ -68,8 +68,12 @@ Never print or commit:
 Admin:
 username + password
 
-Operator target:
-employeeNumber + password + device
+Operator production:
+employeeNumber + device
+NO password
+
+Legacy Operator:
+username + password + device
 
 Legacy Operator username login remains temporarily supported in backend.
 

@@ -47,8 +47,19 @@ public sealed record CreateTransportRequest(
     TransportTaskType TaskType,
     Guid? SourceSlotId,
     Guid? DestinationSlotId,
-    int Priority = 100)
+    int Priority = 100,
+    bool RequiresPreparation = false)
 {
+    /// <summary>
+    /// WP-05A: the BUSINESS readiness a new request starts at.
+    /// RequiresPreparation=false (the default) preserves every existing
+    /// workflow exactly: NotRequired is already execution-eligible under
+    /// the existing rules.
+    /// </summary>
+    public TransportReadinessState InitialReadinessState => RequiresPreparation
+        ? TransportReadinessState.WaitingPreparation
+        : TransportReadinessState.NotRequired;
+
     public Guid ReservedSlotId => TaskType == TransportTaskType.BringEmpty
         ? DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", "BRING_EMPTY requires a machine destination slot.")
         : SourceSlotId ?? throw new WorkflowRuleException("SOURCE_REQUIRED", $"{TaskType.ToDatabase()} requires a machine source slot.");
@@ -96,7 +107,36 @@ public sealed record TransportRequestSnapshot(
     Guid? ContainerTypeId,
     Guid? SourceSlotId,
     Guid? DestinationSlotId,
-    int Priority);
+    int Priority,
+    TransportReadinessState ReadinessState,
+    DateTimeOffset? ReadyAt);
+
+/// <summary>
+/// WP-05A: readiness transition rules. Separate from
+/// <see cref="TransportStateMachine"/> (the execution state machine), which
+/// this never touches. Only WaitingPreparation -> Ready is allowed;
+/// Ready -> Ready is an idempotent no-op; no other transition (including any
+/// regression back to WaitingPreparation) is permitted.
+/// </summary>
+public static class TransportReadinessRules
+{
+    public static bool IsMarkReadyNoOp(TransportReadinessState current) => current == TransportReadinessState.Ready;
+
+    public static void EnsureCanMarkReady(TransportRequestStatus executionStatus, TransportReadinessState readiness)
+    {
+        if (executionStatus is TransportRequestStatus.Completed or TransportRequestStatus.Failed or TransportRequestStatus.Cancelled)
+        {
+            throw new WorkflowRuleException("REQUEST_TERMINAL", $"A {executionStatus.ToDatabase()} transport request's readiness cannot be changed.");
+        }
+
+        if (readiness != TransportReadinessState.WaitingPreparation)
+        {
+            throw new WorkflowRuleException(
+                "READINESS_NOT_APPLICABLE",
+                $"Only a WAITING_PREPARATION request can be marked ready (current readiness: {readiness.ToDatabase()}).");
+        }
+    }
+}
 
 public sealed record CreateTransportResult(TransportRequestSnapshot Request, bool WasIdempotentReplay);
 

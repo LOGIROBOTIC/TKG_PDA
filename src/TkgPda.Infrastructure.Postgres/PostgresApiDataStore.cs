@@ -670,7 +670,7 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                    r.request_origin, r.requested_by, r.machine_id, r.variant_id,
                    r.layout_id, r.navigation_id, r.product_group_id, r.part_id,
                    r.container_type_id, r.source_slot_id, r.destination_slot_id,
-                   r.priority
+                   r.priority, r.readiness_state, r.ready_at
             FROM ops.transport_requests r
             JOIN master.task_types tt ON tt.id = r.task_type_id
             WHERE r.id = @request_id
@@ -695,7 +695,9 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                 NullableGuid(reader, 13),
                 NullableGuid(reader, 14),
                 NullableGuid(reader, 15),
-                reader.GetInt32(16))
+                reader.GetInt32(16),
+                WorkflowCode.ParseReadinessState(reader.GetString(17)),
+                reader.IsDBNull(18) ? null : reader.GetFieldValue<DateTimeOffset>(18))
             : null;
     }
 

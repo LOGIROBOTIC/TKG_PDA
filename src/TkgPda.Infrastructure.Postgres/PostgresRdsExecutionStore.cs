@@ -13,7 +13,7 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         SELECT r.id, r.request_no, COALESCE(r.idempotency_key, ''), r.status, tt.code, r.request_origin,
                r.requested_by, r.machine_id, r.variant_id, r.layout_id, r.navigation_id,
                r.product_group_id, r.part_id, r.container_type_id, r.source_slot_id,
-               r.destination_slot_id, r.priority
+               r.destination_slot_id, r.priority, r.readiness_state, r.ready_at
         FROM ops.transport_requests r
         JOIN master.task_types tt ON tt.id = r.task_type_id
         """;
@@ -38,6 +38,7 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
             SELECT id
             FROM ops.transport_requests
             WHERE status = 'QUEUED'
+              AND readiness_state <> 'WAITING_PREPARATION'
             ORDER BY priority, queued_at, id
             LIMIT @limit
             """,
@@ -118,7 +119,7 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
             SELECT r.id, r.request_no, COALESCE(r.idempotency_key, ''), r.status, tt.code, r.request_origin,
                    r.requested_by, r.machine_id, r.variant_id, r.layout_id, r.navigation_id,
                    r.product_group_id, r.part_id, r.container_type_id, r.source_slot_id,
-                   r.destination_slot_id, r.priority,
+                   r.destination_slot_id, r.priority, r.readiness_state, r.ready_at,
                    m.code, v.code, main_part.part_code, p.part_code, ct.code,
                    template.id, template.rds_task_label, template.priority, template.config_json::text,
                    src.slot_id, src.slot_code, src.slot_group_code, src.slot_role, src.site_id,
@@ -187,24 +188,24 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
         var request = ReadRequest(reader);
-        if (reader.IsDBNull(22))
+        if (reader.IsDBNull(24))
         {
             throw new RdsExecutionException("RDS_TASK_TEMPLATE_NOT_FOUND", "No active task template matches the request variant, product group and operation.");
         }
 
         return new RdsDispatchContext(
             request,
-            reader.GetString(17),
-            reader.GetString(18),
-            Text(reader, 19),
-            Text(reader, 20),
+            reader.GetString(19),
+            reader.GetString(20),
             Text(reader, 21),
-            reader.GetGuid(22),
+            Text(reader, 22),
             Text(reader, 23),
-            reader.GetInt32(24),
-            Json(reader.GetString(25)),
-            Endpoint(reader, 26),
-            Endpoint(reader, 37));
+            reader.GetGuid(24),
+            Text(reader, 25),
+            reader.GetInt32(26),
+            Json(reader.GetString(27)),
+            Endpoint(reader, 28),
+            Endpoint(reader, 39));
     }
 
     public async Task<TransportRequestSnapshot?> FindRequestAsync(Guid requestId, CancellationToken cancellationToken = default)
@@ -425,7 +426,8 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         WorkflowCode.ParseRequestOrigin(reader.GetString(5)),
         Uuid(reader, 6), reader.GetGuid(7), reader.GetGuid(8), reader.GetGuid(9),
         Uuid(reader, 10), Uuid(reader, 11), Uuid(reader, 12), Uuid(reader, 13),
-        Uuid(reader, 14), Uuid(reader, 15), reader.GetInt32(16));
+        Uuid(reader, 14), Uuid(reader, 15), reader.GetInt32(16),
+        WorkflowCode.ParseReadinessState(reader.GetString(17)), Timestamp(reader, 18));
 
     private static RdsDispatchEndpoint Endpoint(NpgsqlDataReader reader, int start) => new(
         Uuid(reader, start), Text(reader, start + 1), Text(reader, start + 2), Text(reader, start + 3),

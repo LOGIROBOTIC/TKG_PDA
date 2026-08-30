@@ -126,6 +126,9 @@ if ($LASTEXITCODE -ne 0) { throw "Applying 002_operator_employee_identity.sql fa
 Write-Host 'Applying migration 003 (003_transport_batch.sql)...' -ForegroundColor Cyan
 & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\003_transport_batch.sql') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Applying 003_transport_batch.sql failed with exit code $LASTEXITCODE" }
+Write-Host 'Applying migration 004 (004_transport_request_readiness.sql)...' -ForegroundColor Cyan
+& $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\004_transport_request_readiness.sql') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Applying 004_transport_request_readiness.sql failed with exit code $LASTEXITCODE" }
 
 Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cyan
 $seedFiles = @(

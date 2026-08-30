@@ -80,6 +80,7 @@ export default async function globalSetup(): Promise<void> {
     applySqlFile('db/migrations/001_initial_schema.sql')
     applySqlFile('db/migrations/002_operator_employee_identity.sql')
     applySqlFile('db/migrations/003_transport_batch.sql')
+    applySqlFile('db/migrations/004_transport_request_readiness.sql')
     applySqlFile('db/seeds/generated/002a_customer_textual_master_data.sql')
     applySqlFile('db/seeds/generated/002b_customer_physical_layouts.sql')
 

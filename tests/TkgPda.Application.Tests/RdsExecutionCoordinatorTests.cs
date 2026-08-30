@@ -243,7 +243,8 @@ public sealed class RdsExecutionCoordinatorTests
     private static TransportRequestSnapshot Request() => new(
         RequestId, 42, "key", TransportRequestStatus.Queued, TransportTaskType.BringEmpty,
         RequestOrigin.Api, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 100);
+        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 100,
+        TransportReadinessState.NotRequired, null);
 
     private static RdsWindTaskSnapshot WindTask(int status) => new(
         RequestId.ToString(), "TKG_SIM_TRANSPORT", status, "sim_01", null,
@@ -345,6 +346,7 @@ public sealed class RdsExecutionCoordinatorTests
         public Task<CreateTransportResult> CreateAndQueueAsync(CreateTransportRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<TransportBatchResult> CreateBatchAndQueueAsync(CreateTransportBatchRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<CancelTransportResult> CancelAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default) => Task.FromResult(new CancelTransportResult(initial with { Status = TransportRequestStatus.Cancelled }, false));
+        public Task<TransportRequestSnapshot> MarkReadyAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(Guid requestId, TransportRequestStatus nextStatus, CancellationToken cancellationToken = default) { Transitions.Add(nextStatus); return Task.FromResult(initial with { Status = nextStatus }); }
         public Task<TransportRequestSnapshot> RecordExecutionOutcomeAsync(Guid requestId, ExecutionOutcome outcome, CancellationToken cancellationToken = default) { Outcomes.Add(outcome); return Task.FromResult(initial with { Status = outcome.Status }); }
         public Task<LoadStateUpdateResult> UpdateLoadStateAsync(LoadStateUpdateRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();

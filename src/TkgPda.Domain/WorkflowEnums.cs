@@ -19,6 +19,19 @@ public enum TransportTaskType
     RemoveEmpty
 }
 
+/// <summary>
+/// WP-05A: BUSINESS readiness — separate from <see cref="TransportRequestStatus"/>
+/// (the execution state machine, which this never modifies). A request that
+/// requires warehouse preparation starts WaitingPreparation and must not
+/// become dispatchable until explicitly marked Ready.
+/// </summary>
+public enum TransportReadinessState
+{
+    NotRequired,
+    WaitingPreparation,
+    Ready
+}
+
 public enum RequestOrigin
 {
     LineOperator,
@@ -81,6 +94,22 @@ public static class WorkflowCode
         "FAILED" => TransportRequestStatus.Failed,
         "CANCELLED" => TransportRequestStatus.Cancelled,
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown SQL transport status.")
+    };
+
+    public static string ToDatabase(this TransportReadinessState value) => value switch
+    {
+        TransportReadinessState.NotRequired => "NOT_REQUIRED",
+        TransportReadinessState.WaitingPreparation => "WAITING_PREPARATION",
+        TransportReadinessState.Ready => "READY",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
+    };
+
+    public static TransportReadinessState ParseReadinessState(string value) => value switch
+    {
+        "NOT_REQUIRED" => TransportReadinessState.NotRequired,
+        "WAITING_PREPARATION" => TransportReadinessState.WaitingPreparation,
+        "READY" => TransportReadinessState.Ready,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown SQL readiness state.")
     };
 
     public static string ToDatabase(this TransportTaskType value) => value switch

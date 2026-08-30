@@ -202,6 +202,54 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         return new CancelTransportResult(request, WasAlreadyCancelled: false);
     }
 
+    public async Task<TransportRequestSnapshot> MarkReadyAsync(
+        Guid requestId,
+        Guid? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var request = await LockRequestAsync(connection, transaction, requestId, cancellationToken);
+
+        if (TransportReadinessRules.IsMarkReadyNoOp(request.ReadinessState))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return request;
+        }
+
+        TransportReadinessRules.EnsureCanMarkReady(request.Status, request.ReadinessState);
+
+        var readyAt = DateTimeOffset.UtcNow;
+        await using (var command = new NpgsqlCommand(
+                         """
+                         UPDATE ops.transport_requests
+                         SET readiness_state = 'READY', ready_at = @ready_at, updated_at = now()
+                         WHERE id = @id
+                         """,
+                         connection,
+                         transaction))
+        {
+            command.Parameters.AddWithValue("id", requestId);
+            command.Parameters.AddWithValue("ready_at", readyAt);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await InsertEventAsync(
+            connection,
+            transaction,
+            requestId,
+            actorUserId,
+            "READINESS_MARKED_READY",
+            null,
+            null,
+            "Warehouse preparation completed; request marked READY.",
+            new { ready_at = readyAt },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return request with { ReadinessState = TransportReadinessState.Ready, ReadyAt = readyAt };
+    }
+
     public async Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(
         Guid requestId,
         TransportRequestStatus nextStatus,
@@ -762,12 +810,14 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                 id, idempotency_key, request_origin, requested_by,
                 machine_id, variant_id, layout_id, navigation_id,
                 product_group_id, part_id, container_type_id, task_type_id,
-                source_slot_id, destination_slot_id, status, priority, batch_id)
+                source_slot_id, destination_slot_id, status, priority, batch_id,
+                readiness_state)
             VALUES (
                 @id, @idempotency_key, @request_origin, @requested_by,
                 @machine_id, @variant_id, @layout_id, @navigation_id,
                 @product_group_id, @part_id, @container_type_id, @task_type_id,
-                @source_slot_id, @destination_slot_id, 'CREATED', @priority, @batch_id)
+                @source_slot_id, @destination_slot_id, 'CREATED', @priority, @batch_id,
+                @readiness_state)
             RETURNING request_no
             """,
             connection,
@@ -788,6 +838,7 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         AddNullableUuid(command, "destination_slot_id", request.DestinationSlotId);
         command.Parameters.AddWithValue("priority", request.Priority);
         AddNullableUuid(command, "batch_id", batchId);
+        command.Parameters.AddWithValue("readiness_state", request.InitialReadinessState.ToDatabase());
         var requestNo = (long)(await command.ExecuteScalarAsync(cancellationToken)
             ?? throw new InvalidOperationException("Request insert did not return a request number."));
 
@@ -808,7 +859,9 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             request.ContainerTypeId,
             request.SourceSlotId,
             request.DestinationSlotId,
-            request.Priority);
+            request.Priority,
+            request.InitialReadinessState,
+            ReadyAt: null);
     }
 
     private static async Task<TransportRequestSnapshot?> FindByIdempotencyKeyAsync(
@@ -962,7 +1015,9 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         reader.IsDBNull(13) ? null : reader.GetGuid(13),
         reader.IsDBNull(14) ? null : reader.GetGuid(14),
         reader.IsDBNull(15) ? null : reader.GetGuid(15),
-        reader.GetInt32(16));
+        reader.GetInt32(16),
+        WorkflowCode.ParseReadinessState(reader.GetString(17)),
+        reader.IsDBNull(18) ? null : reader.GetFieldValue<DateTimeOffset>(18));
 
     private static void EnsureEquivalentPayload(TransportRequestSnapshot existing, CreateTransportRequest request)
     {
@@ -1169,7 +1224,9 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                r.container_type_id,
                r.source_slot_id,
                r.destination_slot_id,
-               r.priority
+               r.priority,
+               r.readiness_state,
+               r.ready_at
         FROM ops.transport_requests r
         JOIN master.task_types tt ON tt.id = r.task_type_id
         """;

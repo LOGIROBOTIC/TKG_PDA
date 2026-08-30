@@ -44,6 +44,9 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/cancel", CancelTransportAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/ready", MarkTransportReadyAsync)
+            .RequireAuthorization(PolicyNames.WarehousePreparation);
+
         endpoints.MapPut("/api/v1/machines/{machineId:guid}/slots/{slotId:guid}/load-state", UpdateLoadStateAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
@@ -246,7 +249,8 @@ public static class ApiEndpoints
             operation,
             request.SourceSlotId,
             request.DestinationSlotId,
-            request.Priority);
+            request.Priority,
+            request.RequiresPreparation);
         var result = await workflow.CreateAsync(command, cancellationToken);
         context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.WasIdempotentReplay ? "true" : "false";
         context.Response.Headers.Location = $"/api/v1/transport-requests/{result.Request.Id}";
@@ -301,7 +305,8 @@ public static class ApiEndpoints
                 operation,
                 item.SourceSlotId,
                 item.DestinationSlotId,
-                item.Priority));
+                item.Priority,
+                item.RequiresPreparation));
         }
 
         var batchCommand = new CreateTransportBatchRequest(
@@ -369,6 +374,31 @@ public static class ApiEndpoints
             new { status = result.Request.Status.ToDatabase(), result.PendingRdsConfirmation },
             cancellationToken);
         return Results.Ok(ToResponse(result.Request, result.WasIdempotentReplay, result.PendingRdsConfirmation));
+    }
+
+    private static async Task<IResult> MarkTransportReadyAsync(
+        Guid requestId,
+        HttpContext context,
+        IApiDataStore dataStore,
+        MachineAccessService access,
+        TransportWorkflowService workflow,
+        CancellationToken cancellationToken)
+    {
+        var existing = await dataStore.FindTransportRequestAsync(requestId, cancellationToken)
+            ?? throw new ApiException(StatusCodes.Status404NotFound, "REQUEST_NOT_FOUND", "The transport request does not exist.");
+        _ = await access.EnsureAsync(context.User, existing.MachineId, MachineAccessKind.Operate, cancellationToken);
+        var updated = await workflow.MarkReadyAsync(requestId, context.User.UserId(), cancellationToken);
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            "TRANSPORT_REQUEST_MARKED_READY",
+            "TRANSPORT_REQUEST",
+            requestId.ToString(),
+            new { readinessState = updated.ReadinessState.ToDatabase(), updated.ReadyAt },
+            cancellationToken);
+        return Results.Ok(ToResponse(updated, replay: false));
     }
 
     private static async Task<IResult> UpdateLoadStateAsync(
@@ -523,7 +553,9 @@ public static class ApiEndpoints
         request.DestinationSlotId,
         request.Priority,
         replay,
-        cancellationPending);
+        cancellationPending,
+        request.ReadinessState.ToDatabase(),
+        request.ReadyAt);
 
     private static TransportBatchHttpResponse ToBatchResponse(TransportBatchResult result) => new(
         result.BatchId,

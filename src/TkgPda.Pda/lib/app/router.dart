@@ -5,6 +5,7 @@ import '../features/device_setup/device_setup_screen.dart';
 import '../features/login/login_screen.dart';
 import '../features/machines/machine_list_screen.dart';
 import '../features/operation/operation_screen.dart';
+import '../features/warehouse/warehouse_preparation_screen.dart';
 import 'app_controller.dart';
 
 GoRouter buildRouter(AppController controller) => GoRouter(
@@ -20,6 +21,7 @@ GoRouter buildRouter(AppController controller) => GoRouter(
         controller.selectedMachine == null
             ? '/machines'
             : '/machines/${controller.selectedMachine!.id}',
+      AppStage.warehousePreparation => '/warehouse-preparation',
     };
     return state.matchedLocation == target ? null : target;
   },
@@ -44,6 +46,11 @@ GoRouter buildRouter(AppController controller) => GoRouter(
     GoRoute(
       path: '/machines/:machineId',
       builder: (context, state) => OperationScreen(controller: controller),
+    ),
+    GoRoute(
+      path: '/warehouse-preparation',
+      builder: (context, state) =>
+          WarehousePreparationScreen(controller: controller),
     ),
   ],
 );

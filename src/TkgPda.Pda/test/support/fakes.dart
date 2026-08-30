@@ -174,6 +174,26 @@ final testActiveRequest = ActiveTransportRequest.fromJson({
   },
 });
 
+// Customer UI — Warehouse Preparation Console fixture.
+final testWarehousePreparationRequest = WarehousePreparationRequest.fromJson({
+  'requestId': '90000000-0000-0000-0000-000000000002',
+  'requestNo': 55,
+  'operation': 'BRING_EMPTY',
+  'machineId': testMachine.id,
+  'machineCode': testMachine.code,
+  'machineDisplayName': testMachine.displayName,
+  'partCode': '71550BN000-10-HAOS',
+  'containerTypeCode': null,
+  'sourceSlotId': null,
+  'sourceSlotCode': null,
+  'sourceSlotDisplayName': null,
+  'destinationSlotId': 'slot-vacant',
+  'destinationSlotCode': 'SLOT-V',
+  'destinationSlotDisplayName': 'Boş Konum',
+  'createdAt': '2026-08-24T08:00:00Z',
+  'queuedAt': '2026-08-24T08:00:01Z',
+});
+
 // WP-03B: part-first fixtures. testMainPartId matches testContext's
 // productGroups[0].mainPartId; testAltPartId matches its ALT_PART child —
 // so the "already active" auto-resolve and auto-carry-into-material paths
@@ -260,6 +280,7 @@ final testCompatibleVariantsByPart = <String, List<CompatibleVariant>>{
 };
 
 class FakePdaRepository implements PdaDataSource {
+  AuthenticatedUser loginUser = testUser;
   List<MachineSummary> machineValues = [testMachine];
   OperationalContext contextValue = testContext();
   ApiProblem? loginProblem;
@@ -275,6 +296,12 @@ class FakePdaRepository implements PdaDataSource {
   Object? batchCreateError;
   Completer<TransportBatchResult>? batchCreateCompleter;
   int cancelCount = 0;
+  List<WarehousePreparationRequest> warehouseRequestsValue = const [];
+  Object? warehouseRequestsError;
+  int warehouseRequestsCount = 0;
+  Object? markReadyError;
+  int markReadyCount = 0;
+  String? lastMarkReadyRequestId;
   int switchCount = 0;
   String? lastSwitchVariantId;
   Object? switchVariantError;
@@ -303,7 +330,7 @@ class FakePdaRepository implements PdaDataSource {
     return LoginSession(
       accessToken: 'runtime-only-test-token',
       expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 10)),
-      user: testUser,
+      user: loginUser,
       device: testDevice,
     );
   }
@@ -428,6 +455,24 @@ class FakePdaRepository implements PdaDataSource {
       operation: 'BRING_EMPTY',
       idempotentReplay: false,
     );
+  }
+
+  @override
+  Future<List<WarehousePreparationRequest>>
+  warehousePreparationRequests() async {
+    warehouseRequestsCount++;
+    if (warehouseRequestsError case final error?) throw error;
+    return warehouseRequestsValue;
+  }
+
+  @override
+  Future<void> markTransportReady(String requestId) async {
+    markReadyCount++;
+    lastMarkReadyRequestId = requestId;
+    if (markReadyError case final error?) throw error;
+    warehouseRequestsValue = warehouseRequestsValue
+        .where((request) => request.requestId != requestId)
+        .toList(growable: false);
   }
 
   @override

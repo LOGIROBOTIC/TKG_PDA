@@ -732,6 +732,64 @@ class TransportResult {
   );
 }
 
+/// Customer UI — Warehouse Preparation Console: a WAITING_PREPARATION
+/// transport request as returned by
+/// GET /api/v1/warehouse/preparation-requests. Self-contained (machine/part/
+/// slot codes are denormalized) since this list spans machines rather than
+/// being scoped to one already-loaded operational context.
+class WarehousePreparationRequest {
+  const WarehousePreparationRequest({
+    required this.requestId,
+    required this.requestNo,
+    required this.operation,
+    required this.machineId,
+    required this.machineCode,
+    required this.machineDisplayName,
+    required this.partCode,
+    required this.containerTypeCode,
+    required this.sourceSlotCode,
+    required this.sourceSlotDisplayName,
+    required this.destinationSlotCode,
+    required this.destinationSlotDisplayName,
+    required this.createdAt,
+    required this.queuedAt,
+  });
+
+  final String requestId;
+  final int requestNo;
+  final String operation;
+  final String machineId;
+  final String machineCode;
+  final String machineDisplayName;
+  final String? partCode;
+  final String? containerTypeCode;
+  final String? sourceSlotCode;
+  final String? sourceSlotDisplayName;
+  final String? destinationSlotCode;
+  final String? destinationSlotDisplayName;
+  final DateTime createdAt;
+  final DateTime? queuedAt;
+
+  factory WarehousePreparationRequest.fromJson(JsonMap json) =>
+      WarehousePreparationRequest(
+        requestId: json['requestId'] as String,
+        requestNo: _integer(json['requestNo']),
+        operation: json['operation'] as String? ?? '',
+        machineId: json['machineId'] as String,
+        machineCode: json['machineCode'] as String? ?? '',
+        machineDisplayName: json['machineDisplayName'] as String? ?? '',
+        partCode: json['partCode'] as String?,
+        containerTypeCode: json['containerTypeCode'] as String?,
+        sourceSlotCode: json['sourceSlotCode'] as String?,
+        sourceSlotDisplayName: json['sourceSlotDisplayName'] as String?,
+        destinationSlotCode: json['destinationSlotCode'] as String?,
+        destinationSlotDisplayName: json['destinationSlotDisplayName']
+            as String?,
+        createdAt: _date(json['createdAt']) ?? DateTime.now(),
+        queuedAt: _date(json['queuedAt']),
+      );
+}
+
 /// A single [TransportCommand] bound to its own child idempotency key, as
 /// required by POST /api/v1/transport-batches. Each item stays an
 /// independent TransportRequest server-side; the batch is a pure grouping

@@ -10,7 +10,18 @@ import '../data/models/pda_models.dart';
 import '../data/repositories/pda_repository.dart';
 import '../features/transport/submission_coordinator.dart';
 
-enum AppStage { starting, deviceSetup, login, machines, operation }
+enum AppStage {
+  starting,
+  deviceSetup,
+  login,
+  machines,
+  operation,
+  warehousePreparation,
+}
+
+/// Roles allowed to see and use the warehouse preparation console — the same
+/// set the backend's WarehousePreparation authorization policy grants.
+const _warehousePreparationRoles = {'ADMIN', 'SUPERVISOR', 'WAREHOUSE_OPERATOR'};
 
 /// WP-03B: the part the operator has chosen as the effective part for
 /// compatible-variant resolution — either a main part itself or one of its
@@ -114,6 +125,12 @@ class AppController extends ChangeNotifier {
       BatchSubmissionCoordinator();
   final Uuid _cartIdFactory = const Uuid();
 
+  // Customer UI — Warehouse Preparation Console.
+  List<WarehousePreparationRequest> _warehouseRequests = const [];
+  bool _warehouseLoading = false;
+  String? _warehouseError;
+  final Set<String> _warehouseMarkingReady = {};
+
   AppStage get stage => _stage;
   String? get deviceCode => _deviceCode;
   AuthenticatedUser? get user => _session.user;
@@ -159,6 +176,16 @@ class AppController extends ChangeNotifier {
   bool get canReviewBatch =>
       _batchCart.isNotEmpty && _batchCart.every((item) => item.isConfigured);
   bool get hasAmbiguousBatchSubmission => _batchSubmission.hasAmbiguousRequest;
+
+  // Customer UI — Warehouse Preparation Console.
+  bool get canAccessWarehousePreparation =>
+      (user?.roles ?? const []).any(_warehousePreparationRoles.contains);
+  List<WarehousePreparationRequest> get warehousePreparationRequests =>
+      _warehouseRequests;
+  bool get warehousePreparationLoading => _warehouseLoading;
+  String? get warehousePreparationError => _warehouseError;
+  bool isMarkingReady(String requestId) =>
+      _warehouseMarkingReady.contains(requestId);
 
   /// WP-03B: true while a machine is selected but the operator has not yet
   /// completed the part-first -> compatible-variant resolution gate.
@@ -571,6 +598,75 @@ class AppController extends ChangeNotifier {
     await submitBatch();
   }
 
+  // ---- Customer UI — Warehouse Preparation Console ----
+
+  /// Kept separate from the line-operator part-selection flow: this stage
+  /// never touches machine selection or part-first state, and vice versa.
+  Future<void> enterWarehousePreparation() async {
+    if (!canAccessWarehousePreparation) return;
+    _stage = AppStage.warehousePreparation;
+    _clearFeedback();
+    notifyListeners();
+    await loadWarehousePreparationRequests();
+  }
+
+  void leaveWarehousePreparation() {
+    _stage = AppStage.machines;
+    _warehouseRequests = const [];
+    _warehouseError = null;
+    _clearFeedback();
+    notifyListeners();
+  }
+
+  Future<void> loadWarehousePreparationRequests() async {
+    if (!_session.isAuthenticated) return;
+    _warehouseLoading = true;
+    _warehouseError = null;
+    notifyListeners();
+    try {
+      _warehouseRequests = await _repository.warehousePreparationRequests();
+      _offline = false;
+    } on ConnectivityException {
+      _offline = true;
+      _warehouseError = 'Bağlantı yok — hazırlık listesi yüklenemedi.';
+    } on ApiProblem catch (problem) {
+      _warehouseError = problem.operatorMessage;
+    } finally {
+      _warehouseLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Marks [requestId] READY. On success the item is removed from the local
+  /// list (the source of truth remains the server; a refresh would drop it
+  /// too since it is no longer WAITING_PREPARATION). On failure the item
+  /// stays exactly as it was so the operator can retry.
+  Future<void> markPreparationReady(String requestId) async {
+    if (_warehouseMarkingReady.contains(requestId)) return;
+    _warehouseMarkingReady.add(requestId);
+    _clearFeedback();
+    notifyListeners();
+    try {
+      await _repository.markTransportReady(requestId);
+      _warehouseRequests = _warehouseRequests
+          .where((request) => request.requestId != requestId)
+          .toList(growable: false);
+      _notice = 'Parça hazır olarak işaretlendi.';
+    } on ConnectivityException {
+      _offline = true;
+      _notice = 'Bağlantı yok — hazır durumu doğrulanamadı. Yeniden deneyin.';
+    } on AmbiguousMutationException {
+      _offline = true;
+      _notice =
+          'Hazır durumunun sunucuya ulaştığı doğrulanamadı. Yeniden deneyebilirsiniz.';
+    } on ApiProblem catch (problem) {
+      _problem = problem;
+    } finally {
+      _warehouseMarkingReady.remove(requestId);
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadPartOptions() async {
     final machine = _selectedMachine;
     if (machine == null) return;
@@ -906,6 +1002,10 @@ class AppController extends ChangeNotifier {
     _resetPartFirstState();
     _offline = false;
     _resumeValidationPending = false;
+    _warehouseRequests = const [];
+    _warehouseError = null;
+    _warehouseLoading = false;
+    _warehouseMarkingReady.clear();
   }
 
   void _clearFeedback() {

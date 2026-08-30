@@ -150,6 +150,60 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
         return result;
     }
 
+    public async Task<IReadOnlyList<WarehousePreparationRequestRecord>> ListWarehousePreparationRequestsAsync(
+        Guid userId,
+        bool administrator,
+        CancellationToken cancellationToken = default)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT r.id, r.request_no, tt.code,
+                   m.id, m.code, m.display_name,
+                   p.part_code, ct.code,
+                   src.id, src.code, src.display_name,
+                   dst.id, dst.code, dst.display_name,
+                   r.created_at, r.queued_at
+            FROM ops.transport_requests r
+            JOIN master.machines m ON m.id = r.machine_id
+            JOIN master.task_types tt ON tt.id = r.task_type_id
+            LEFT JOIN master.parts p ON p.id = r.part_id
+            LEFT JOIN master.container_types ct ON ct.id = r.container_type_id
+            LEFT JOIN master.layout_slots src ON src.id = r.source_slot_id
+            LEFT JOIN master.layout_slots dst ON dst.id = r.destination_slot_id
+            LEFT JOIN auth.user_machine_permissions perm
+              ON perm.machine_id = r.machine_id AND perm.user_id = @user_id
+            WHERE r.readiness_state = 'WAITING_PREPARATION'
+              AND (@administrator OR COALESCE(perm.can_operate, false))
+            ORDER BY r.created_at, r.request_no
+            """);
+        command.Parameters.AddWithValue("user_id", userId);
+        command.Parameters.AddWithValue("administrator", administrator);
+        var result = new List<WarehousePreparationRequestRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new WarehousePreparationRequestRecord(
+                reader.GetGuid(0),
+                reader.GetInt64(1),
+                reader.GetString(2),
+                reader.GetGuid(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                NullableString(reader, 6),
+                NullableString(reader, 7),
+                NullableGuid(reader, 8),
+                NullableString(reader, 9),
+                NullableString(reader, 10),
+                NullableGuid(reader, 11),
+                NullableString(reader, 12),
+                NullableString(reader, 13),
+                reader.GetFieldValue<DateTimeOffset>(14),
+                NullableDateTimeOffset(reader, 15)));
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<CompatibleVariantRecord>> ListCompatibleVariantsAsync(
         Guid machineId,
         Guid partId,

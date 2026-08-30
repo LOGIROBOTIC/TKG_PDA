@@ -28,6 +28,10 @@ abstract interface class PdaDataSource {
   );
   Future<TransportResult> transport(String requestId);
   Future<TransportResult> cancel(String requestId);
+
+  /// Customer UI — Warehouse Preparation Console.
+  Future<List<WarehousePreparationRequest>> warehousePreparationRequests();
+  Future<void> markTransportReady(String requestId);
   Future<void> updateLoadState({
     required String machineId,
     required String slotId,
@@ -163,6 +167,22 @@ class PdaRepository implements PdaDataSource {
       '/api/v1/transport-requests/$requestId/cancel',
     );
     return TransportResult.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<List<WarehousePreparationRequest>>
+  warehousePreparationRequests() async {
+    final response = await _api.get('/api/v1/warehouse/preparation-requests');
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(WarehousePreparationRequest.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> markTransportReady(String requestId) async {
+    await _api.post('/api/v1/transport-requests/$requestId/ready');
   }
 
   @override

@@ -253,6 +253,30 @@ public sealed record ActiveTransportRequestRecord(
     string? CancelDisabledMessage,
     PdaExecutionProjectionRecord Execution);
 
+/// <summary>
+/// Customer UI — Warehouse Preparation Console: the minimum, self-contained
+/// projection of a WAITING_PREPARATION transport request needed by a
+/// warehouse-authorized user to prepare it, independent of any single
+/// machine's operational context. Never includes RDS/technical identifiers.
+/// </summary>
+public sealed record WarehousePreparationRequestRecord(
+    Guid RequestId,
+    long RequestNo,
+    string Operation,
+    Guid MachineId,
+    string MachineCode,
+    string MachineDisplayName,
+    string? PartCode,
+    string? ContainerTypeCode,
+    Guid? SourceSlotId,
+    string? SourceSlotCode,
+    string? SourceSlotDisplayName,
+    Guid? DestinationSlotId,
+    string? DestinationSlotCode,
+    string? DestinationSlotDisplayName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? QueuedAt);
+
 public sealed record OperationalContextDataRecord(
     MachineSummaryRecord Machine,
     Guid? ActiveVariantId,

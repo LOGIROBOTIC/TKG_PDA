@@ -58,6 +58,18 @@ public interface IApiDataStore
         Guid requestId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Customer UI — Warehouse Preparation Console: lists every
+    /// WAITING_PREPARATION transport request on a machine visible to
+    /// <paramref name="userId"/> (same can_operate visibility the existing
+    /// mark-ready action itself requires; administrators see every machine).
+    /// Deterministic, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<WarehousePreparationRequestRecord>> ListWarehousePreparationRequestsAsync(
+        Guid userId,
+        bool administrator,
+        CancellationToken cancellationToken = default);
+
     Task WriteAuditAsync(AuditEntry entry, CancellationToken cancellationToken = default);
 
     Task<bool> IsReadyAsync(CancellationToken cancellationToken = default);

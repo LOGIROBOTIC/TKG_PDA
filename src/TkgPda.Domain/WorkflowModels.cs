@@ -60,6 +60,14 @@ public sealed record CreateTransportRequest(
         ? TransportReadinessState.WaitingPreparation
         : TransportReadinessState.NotRequired;
 
+    /// <summary>
+    /// The machine-side slot, once known. Customer UX — Automatic Machine
+    /// Slot Resolution: this is no longer required to be supplied up front —
+    /// omitting it asks the store to resolve and reserve one atomically from
+    /// master.layout_slot_parts (see PostgresTransportWorkflowStore.
+    /// ResolveMachineSlotAsync) — but by the time anything downstream reads
+    /// this, one side or the other must have been filled in.
+    /// </summary>
     public Guid ReservedSlotId => TaskType == TransportTaskType.BringEmpty
         ? DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", "BRING_EMPTY requires a machine destination slot.")
         : SourceSlotId ?? throw new WorkflowRuleException("SOURCE_REQUIRED", $"{TaskType.ToDatabase()} requires a machine source slot.");
@@ -80,8 +88,6 @@ public sealed record CreateTransportRequest(
         {
             throw new WorkflowRuleException("INVALID_PRIORITY", "Priority cannot be negative.");
         }
-
-        _ = ReservedSlotId;
 
         if (SourceSlotId.HasValue && SourceSlotId == DestinationSlotId)
         {

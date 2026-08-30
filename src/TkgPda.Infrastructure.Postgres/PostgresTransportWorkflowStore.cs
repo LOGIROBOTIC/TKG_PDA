@@ -100,6 +100,22 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                 : request with { DestinationSlotId = allocatedBufferSlotId };
         }
 
+        // Customer UX — Automatic Machine Slot Resolution: when the operator
+        // did not pick a specific physical machine-side slot themselves,
+        // resolve one now from slots explicitly mapped (master.
+        // layout_slot_parts) to the request's part on the active layout —
+        // the Operator is never asked to understand SLOT-001/SLOT-002.
+        var suppliedReservedSlotId = request.TaskType == TransportTaskType.BringEmpty
+            ? request.DestinationSlotId
+            : request.SourceSlotId;
+        if (!suppliedReservedSlotId.HasValue)
+        {
+            var resolvedMachineSlotId = await ResolveMachineSlotAsync(connection, transaction, request, cancellationToken);
+            request = request.TaskType == TransportTaskType.BringEmpty
+                ? request with { DestinationSlotId = resolvedMachineSlotId }
+                : request with { SourceSlotId = resolvedMachineSlotId };
+        }
+
         var suppliedSlotIds = new[] { request.SourceSlotId, request.DestinationSlotId }
             .Where(static value => value.HasValue)
             .Select(static value => value!.Value)
@@ -847,6 +863,63 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             : throw new WorkflowRuleException(
                 "EMPTY_BUFFER_UNAVAILABLE",
                 $"No configured EMPTY_STORAGE buffer slot is currently {expected.Occupancy.ToDatabase()}/{expected.Load.ToDatabase()} and available on this layout.");
+    }
+
+    /// <summary>
+    /// Customer UX — Automatic Machine Slot Resolution. Only slots explicitly
+    /// curated in master.layout_slot_parts for this part are eligible — the
+    /// unstructured metadata_json evidence on master.layout_slots is never
+    /// consulted here. Safe under concurrency via the same FOR UPDATE ...
+    /// SKIP LOCKED pattern as the EMPTY_STORAGE buffer allocator: two
+    /// concurrent callers competing for the same candidate set land on
+    /// different rows, or correctly find none left rather than double-
+    /// booking one. Ordering by the slot's own configured display order
+    /// keeps the choice deterministic.
+    /// </summary>
+    private static async Task<Guid> ResolveMachineSlotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (notFoundCode, notFoundMessage) = request.TaskType switch
+        {
+            TransportTaskType.BringEmpty => ("BRING_EMPTY_SLOT_NOT_FOUND", "Bu parça için boş konum bulunamadı."),
+            TransportTaskType.RemoveFull => ("REMOVE_FULL_SLOT_NOT_FOUND", "Bu parça için dolu kasa bulunamadı."),
+            TransportTaskType.RemoveEmpty => ("REMOVE_EMPTY_SLOT_NOT_FOUND", "Bu parça için boş kasa bulunamadı."),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.TaskType, null)
+        };
+        var expected = TransportRules.ExpectedMachineSlotState(request.TaskType);
+
+        await using var command = new NpgsqlCommand(
+            $"""
+             SELECT ls.id
+             FROM master.layout_slots ls
+             JOIN master.layout_slot_parts lsp ON lsp.layout_slot_id = ls.id
+             JOIN ops.slot_runtime_state rs ON rs.layout_slot_id = ls.id
+             WHERE ls.layout_id = @layout_id
+               AND lsp.part_id = @part_id
+               AND ls.slot_role <> 'MACHINE'
+               AND ls.is_enabled
+               AND rs.occupancy_state = @occupancy_state
+               AND rs.load_state = @load_state
+               AND NOT EXISTS (
+                   SELECT 1 FROM ops.transport_requests tr
+                   WHERE tr.status IN ({ActiveStatusesSql})
+                     AND (tr.source_slot_id = ls.id OR tr.destination_slot_id = ls.id)
+               )
+             ORDER BY ls.display_order, ls.code
+             FOR UPDATE OF rs SKIP LOCKED
+             LIMIT 1
+             """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("layout_id", request.LayoutId);
+        AddNullableUuid(command, "part_id", request.PartId);
+        command.Parameters.AddWithValue("occupancy_state", expected.Occupancy.ToDatabase());
+        command.Parameters.AddWithValue("load_state", expected.Load.ToDatabase());
+        var slotId = await command.ExecuteScalarAsync(cancellationToken);
+        return slotId is Guid id ? id : throw new WorkflowRuleException(notFoundCode, notFoundMessage);
     }
 
     private static async Task EnsureSlotsAreAvailableAsync(

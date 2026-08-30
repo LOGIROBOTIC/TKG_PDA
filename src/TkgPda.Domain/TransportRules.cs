@@ -101,6 +101,22 @@ public static class TransportRules
         };
 
     /// <summary>
+    /// Customer UX — Automatic Machine Slot Resolution: the machine-side
+    /// occupancy/load state an eligible, part-mapped slot must currently be
+    /// in for this operation. BRING_EMPTY needs an empty destination to fill;
+    /// REMOVE_FULL/REMOVE_EMPTY need a source already holding what they take
+    /// away. Mirrors ValidateReservation's own per-operation expectation, but
+    /// as a plain lookup the SQL-side resolver can use directly.
+    /// </summary>
+    public static (OccupancyState Occupancy, LoadState Load) ExpectedMachineSlotState(TransportTaskType taskType) => taskType switch
+    {
+        TransportTaskType.BringEmpty => (OccupancyState.Vacant, LoadState.Unknown),
+        TransportTaskType.RemoveFull => (OccupancyState.Occupied, LoadState.Full),
+        TransportTaskType.RemoveEmpty => (OccupancyState.Occupied, LoadState.Empty),
+        _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, null)
+    };
+
+    /// <summary>
     /// A buffer slot must be configured master data (slot_role =
     /// EMPTY_STORAGE) — never inferred from name, WorkSite, machine code or
     /// coordinates — and must currently be in the state this operation

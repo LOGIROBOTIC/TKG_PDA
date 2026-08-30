@@ -545,6 +545,200 @@ public sealed class PostgresTransportWorkflowTests
             new[] { "ILLEGAL_STATUS_TRANSITION", WorkflowErrorCodes.CancellationAfterExecutionDeferred });
     }
 
+    // ---- Customer UX — Automatic Machine Slot Resolution ----
+
+    [PostgresFact]
+    public async Task Bring_empty_auto_resolves_the_part_mapped_vacant_machine_slot()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var mapped = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-BRING-1");
+        var unmapped = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-BRING-2");
+        await SetSlotAsync(mapped, OccupancyState.Vacant, LoadState.Unknown);
+        await SetSlotAsync(unmapped, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(mapped, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var result = await store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "auto-bring-main", partId: partId));
+
+        Assert.Equal(mapped, result.Request.DestinationSlotId);
+    }
+
+    [PostgresFact]
+    public async Task Remove_full_auto_resolves_the_part_mapped_occupied_full_machine_slot()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var mapped = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-FULL-1");
+        await SetSlotAsync(mapped, OccupancyState.Occupied, LoadState.Full);
+        await AssignSlotPartAsync(mapped, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var result = await store.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveFull, "auto-remove-full", partId: partId));
+
+        Assert.Equal(mapped, result.Request.SourceSlotId);
+    }
+
+    [PostgresFact]
+    public async Task Remove_empty_auto_resolves_the_part_mapped_occupied_empty_machine_slot()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var mapped = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-EMPTY-1");
+        await SetSlotAsync(mapped, OccupancyState.Occupied, LoadState.Empty);
+        await AssignSlotPartAsync(mapped, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var result = await store.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveEmpty, "auto-remove-empty", partId: partId));
+
+        Assert.Equal(mapped, result.Request.SourceSlotId);
+    }
+
+    [PostgresFact]
+    public async Task Auto_resolution_never_selects_a_slot_mapped_to_a_different_part()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var targetPart = await PartIdAsync(0);
+        var otherPart = await PartIdAsync(1);
+        var wrongPartSlot = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-WRONGPART-1");
+        await SetSlotAsync(wrongPartSlot, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(wrongPartSlot, otherPart);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var error = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "wrong-part", partId: targetPart)));
+
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", error.Code);
+    }
+
+    [PostgresFact]
+    public async Task Auto_resolution_never_selects_a_slot_outside_the_active_layout()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        // A read-only lookup on a different machine's layout — does not touch
+        // SH-01-A's own active runtime state the way ConfigureAsync would.
+        var otherLayoutContext = await ContextAsync("SH-01-B", "1");
+        var partId = await PartIdAsync(0);
+        var otherLayoutSlot = await EnsureTestSlotAsync(otherLayoutContext.LayoutId, "SLOTPART-OTHERLAYOUT-1");
+        await SetSlotAsync(otherLayoutSlot, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(otherLayoutSlot, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var error = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "wrong-layout", partId: partId)));
+
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", error.Code);
+    }
+
+    [PostgresFact]
+    public async Task Auto_resolution_never_selects_a_disabled_slot()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var disabled = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-DISABLED-1");
+        await SetSlotAsync(disabled, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(disabled, partId);
+        await ExecuteAsync("UPDATE master.layout_slots SET is_enabled = false WHERE id = @id", ("id", disabled));
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var error = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "disabled-slot", partId: partId)));
+
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", error.Code);
+    }
+
+    [PostgresFact]
+    public async Task Auto_resolution_never_selects_a_slot_with_an_active_reservation()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var reserved = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-RESERVED-1");
+        await SetSlotAsync(reserved, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(reserved, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+        await store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "reserve-first", destination: reserved));
+
+        var error = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "reserve-second", partId: partId)));
+
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", error.Code);
+    }
+
+    [PostgresFact]
+    public async Task Auto_resolution_is_deterministic_when_multiple_slots_are_eligible()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var second = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-DETERM-2", displayOrder: 9502);
+        var first = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-DETERM-1", displayOrder: 9501);
+        await SetSlotAsync(first, OccupancyState.Vacant, LoadState.Unknown);
+        await SetSlotAsync(second, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(first, partId);
+        await AssignSlotPartAsync(second, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var result = await store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "deterministic-pick", partId: partId));
+
+        Assert.Equal(first, result.Request.DestinationSlotId);
+    }
+
+    [PostgresFact]
+    public async Task Concurrent_auto_resolution_for_the_same_part_claims_only_one_of_two_eligible_slots()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        var slotA = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-RACE-1");
+        var slotB = await EnsureTestSlotAsync(context.LayoutId, "SLOTPART-RACE-2");
+        await SetSlotAsync(slotA, OccupancyState.Vacant, LoadState.Unknown);
+        await SetSlotAsync(slotB, OccupancyState.Vacant, LoadState.Unknown);
+        await AssignSlotPartAsync(slotA, partId);
+        await AssignSlotPartAsync(slotB, partId);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var attempts = await Task.WhenAll(
+            CaptureAsync(() => store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "auto-race-a", partId: partId))),
+            CaptureAsync(() => store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "auto-race-b", partId: partId))));
+
+        Assert.Equal(2, attempts.Count(attempt => attempt.Result is not null));
+        var claimed = attempts.Where(attempt => attempt.Result is not null)
+            .Select(attempt => attempt.Result!.Request.DestinationSlotId!.Value)
+            .ToArray();
+        Assert.Equal(2, claimed.Distinct().Count());
+        Assert.Equal(new[] { slotA, slotB }.OrderBy(id => id), claimed.OrderBy(id => id));
+    }
+
+    [PostgresFact]
+    public async Task No_eligible_slot_reports_a_friendly_message_per_operation_without_a_raw_code()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var partId = await PartIdAsync(0);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        var bringError = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "no-slot-bring", partId: partId)));
+        var removeFullError = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveFull, "no-slot-remove-full", partId: partId)));
+        var removeEmptyError = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
+            store.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveEmpty, "no-slot-remove-empty", partId: partId)));
+
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", bringError.Code);
+        Assert.Equal("Bu parça için boş konum bulunamadı.", bringError.Message);
+        Assert.Equal("REMOVE_FULL_SLOT_NOT_FOUND", removeFullError.Code);
+        Assert.Equal("Bu parça için dolu kasa bulunamadı.", removeFullError.Message);
+        Assert.Equal("REMOVE_EMPTY_SLOT_NOT_FOUND", removeEmptyError.Code);
+        Assert.Equal("Bu parça için boş kasa bulunamadı.", removeEmptyError.Message);
+    }
+
     private async Task ResetAsync()
     {
         await ExecuteAsync(
@@ -554,6 +748,9 @@ public sealed class PostgresTransportWorkflowTests
             WHERE rds_worksite_id IN (SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%');
             DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%';
             DELETE FROM master.task_templates WHERE config_json ->> 'testScope' = 'P08B';
+            DELETE FROM master.layout_slot_parts
+            WHERE layout_slot_id IN (SELECT id FROM master.layout_slots WHERE code LIKE 'SLOTPART-%');
+            UPDATE master.layout_slots SET is_enabled = true WHERE code LIKE 'SLOTPART-%';
             """);
     }
 
@@ -630,6 +827,38 @@ public sealed class PostgresTransportWorkflowTests
             ("layout_id", layoutId),
             ("code", code));
     }
+
+    /// <summary>
+    /// Customer UX — Automatic Machine Slot Resolution: a plain OTHER-role
+    /// logistics test slot, distinct from the EMPTY_STORAGE buffer pool
+    /// above, for asserting machine-side part-mapped resolution.
+    /// </summary>
+    private async Task<Guid> EnsureTestSlotAsync(Guid layoutId, string code, int displayOrder = 9500)
+    {
+        await ExecuteAsync(
+            """
+            INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, display_order, is_enabled)
+            VALUES (@layout_id, @code, @code, 'OTHER', @display_order, true)
+            ON CONFLICT (layout_id, code) DO UPDATE SET is_enabled = true
+            """,
+            ("layout_id", layoutId),
+            ("code", code),
+            ("display_order", displayOrder));
+        return await ScalarAsync<Guid>(
+            "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code",
+            ("layout_id", layoutId),
+            ("code", code));
+    }
+
+    private Task AssignSlotPartAsync(Guid slotId, Guid partId) => ExecuteAsync(
+        "INSERT INTO master.layout_slot_parts (layout_slot_id, part_id) VALUES (@slot_id, @part_id) ON CONFLICT DO NOTHING",
+        ("slot_id", slotId),
+        ("part_id", partId));
+
+    /// <summary>A real, canonical customer part — deterministic by ordinal so
+    /// tests can pick two distinct ones without depending on exact codes.</summary>
+    private Task<Guid> PartIdAsync(int ordinal) =>
+        ScalarAsync<Guid>("SELECT id FROM master.parts ORDER BY part_code OFFSET @ordinal LIMIT 1", ("ordinal", ordinal));
 
     private async Task<LayoutContext> ContextAsync(string machineCode, string variantCode)
     {
@@ -732,7 +961,8 @@ public sealed class PostgresTransportWorkflowTests
         TransportTaskType type,
         string key,
         Guid? source = null,
-        Guid? destination = null) => new(
+        Guid? destination = null,
+        Guid? partId = null) => new(
         key,
         RequestOrigin.LineOperator,
         null,
@@ -741,7 +971,7 @@ public sealed class PostgresTransportWorkflowTests
         context.LayoutId,
         null,
         null,
-        null,
+        partId,
         null,
         type,
         source,

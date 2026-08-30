@@ -34,99 +34,111 @@ final testMachine = MachineSummary(
   ),
 );
 
+const testVariantV1Id = '40000000-0000-0000-0000-000000000001';
+const testVariantV2Id = '40000000-0000-0000-0000-000000000002';
+const testProductGroupId = '60000000-0000-0000-0000-000000000001';
+const testMainPartId = '70000000-0000-0000-0000-000000000001';
+const testAltPartId = '70000000-0000-0000-0000-000000000002';
+const testRelatedPartId = '70000000-0000-0000-0000-000000000003';
+const testOrphanPartId = '70000000-0000-0000-0000-000000000004';
+
 OperationalContext testContext({
   List<ActiveTransportRequest> activeRequests = const [],
-}) => OperationalContext.fromJson({
-  'machine': _machineJson,
-  'activeVariantId': '40000000-0000-0000-0000-000000000001',
-  'activeVariantCode': 'V1',
-  'activeVariantName': 'Varyant 1',
-  'activeLayoutId': '50000000-0000-0000-0000-000000000001',
-  'activeLayoutCode': 'LAYOUT-A',
-  'activeLayoutName': 'SH-01-A Yerleşimi',
-  'activeNavigationProfileId': null,
-  'runtimeRowVersion': 1,
-  'variantLayouts': [
-    {
-      'variantId': '40000000-0000-0000-0000-000000000001',
-      'variantCode': 'V1',
-      'variantName': 'Varyant 1',
-      'layoutId': '50000000-0000-0000-0000-000000000001',
-      'layoutCode': 'LAYOUT-A',
-      'layoutName': 'SH-01-A Yerleşimi',
-      'isDefault': true,
-    },
-    {
-      'variantId': '40000000-0000-0000-0000-000000000002',
-      'variantCode': 'V2',
-      'variantName': 'Varyant 2',
-      'layoutId': '50000000-0000-0000-0000-000000000001',
-      'layoutCode': 'LAYOUT-A',
-      'layoutName': 'SH-01-A Yerleşimi',
-      'isDefault': true,
-    },
-  ],
-  'slots': [_machineSlot, _vacantSlot, _emptySlot, _fullSlot],
-  'productGroups': [
-    {
-      'id': '60000000-0000-0000-0000-000000000001',
-      'mainPartId': '70000000-0000-0000-0000-000000000001',
-      'mainPartCode': '71550BN000-10-HAOS',
-      'name': 'Ana Parça',
-      'displayOrder': 1,
-      'parts': [
-        {
-          'id': '80000000-0000-0000-0000-000000000001',
-          'partId': '70000000-0000-0000-0000-000000000002',
-          'partCode': '715A2BN400-50',
-          'containerTypeId': null,
-          'containerCode': null,
-          'relationType': 'ALT_PART',
-          'lotQuantity': null,
-          'displayOrder': 1,
-        },
-      ],
-    },
-  ],
-  'activeTransportRequests': activeRequests
-      .map(
-        (request) => {
-          'requestId': request.requestId,
-          'requestNo': request.requestNo,
-          'operation': request.operation,
-          'status': request.status,
-          'requestedBy': request.requestedBy,
-          'requestedByUsername': request.requestedByUsername,
-          'isMine': request.isMine,
-          'sourceSlotId': request.sourceSlotId,
-          'destinationSlotId': request.destinationSlotId,
-          'productGroupId': request.productGroupId,
-          'partId': request.partId,
-          'containerTypeId': request.containerTypeId,
-          'priority': request.priority,
-          'createdAt': request.createdAt.toIso8601String(),
-          'canCancel': request.canCancel,
-          'cancelDisabledCode': request.cancelDisabledCode,
-          'cancelDisabledMessage': request.cancelDisabledMessage,
-          'execution': {
-            'state': request.execution.state,
-            'rdsTaskRecordId': request.execution.rdsTaskRecordId,
-            'rdsTaskLabel': request.execution.rdsTaskLabel,
-            'outOrderNo': request.execution.outOrderNo,
-            'agvId': request.execution.agvId,
-            'rdsStatus': request.execution.rdsStatus,
-            'lastSyncAt': request.execution.lastSyncAt?.toIso8601String(),
-            'failureCode': request.execution.failureCode,
-            'failureCategory': request.execution.failureCategory,
-            'operatorMessage': request.execution.operatorMessage,
-            'technicalMessage': request.execution.technicalMessage,
-            'correlationId': request.execution.correlationId,
+  String activeVariantId = testVariantV1Id,
+}) {
+  final isV2 = activeVariantId == testVariantV2Id;
+  return OperationalContext.fromJson({
+    'machine': _machineJson,
+    'activeVariantId': activeVariantId,
+    'activeVariantCode': isV2 ? 'V2' : 'V1',
+    'activeVariantName': isV2 ? 'Varyant 2' : 'Varyant 1',
+    'activeLayoutId': '50000000-0000-0000-0000-000000000001',
+    'activeLayoutCode': 'LAYOUT-A',
+    'activeLayoutName': 'SH-01-A Yerleşimi',
+    'activeNavigationProfileId': null,
+    'runtimeRowVersion': 1,
+    'variantLayouts': [
+      {
+        'variantId': testVariantV1Id,
+        'variantCode': 'V1',
+        'variantName': 'Varyant 1',
+        'layoutId': '50000000-0000-0000-0000-000000000001',
+        'layoutCode': 'LAYOUT-A',
+        'layoutName': 'SH-01-A Yerleşimi',
+        'isDefault': true,
+      },
+      {
+        'variantId': testVariantV2Id,
+        'variantCode': 'V2',
+        'variantName': 'Varyant 2',
+        'layoutId': '50000000-0000-0000-0000-000000000001',
+        'layoutCode': 'LAYOUT-A',
+        'layoutName': 'SH-01-A Yerleşimi',
+        'isDefault': true,
+      },
+    ],
+    'slots': [_machineSlot, _vacantSlot, _emptySlot, _fullSlot],
+    'productGroups': [
+      {
+        'id': testProductGroupId,
+        'mainPartId': testMainPartId,
+        'mainPartCode': '71550BN000-10-HAOS',
+        'name': 'Ana Parça',
+        'displayOrder': 1,
+        'parts': [
+          {
+            'id': '80000000-0000-0000-0000-000000000001',
+            'partId': testAltPartId,
+            'partCode': '715A2BN400-50',
+            'containerTypeId': null,
+            'containerCode': null,
+            'relationType': 'ALT_PART',
+            'lotQuantity': null,
+            'displayOrder': 1,
           },
-        },
-      )
-      .toList(),
-  'taskTemplates': [],
-});
+        ],
+      },
+    ],
+    'activeTransportRequests': activeRequests
+        .map(
+          (request) => {
+            'requestId': request.requestId,
+            'requestNo': request.requestNo,
+            'operation': request.operation,
+            'status': request.status,
+            'requestedBy': request.requestedBy,
+            'requestedByUsername': request.requestedByUsername,
+            'isMine': request.isMine,
+            'sourceSlotId': request.sourceSlotId,
+            'destinationSlotId': request.destinationSlotId,
+            'productGroupId': request.productGroupId,
+            'partId': request.partId,
+            'containerTypeId': request.containerTypeId,
+            'priority': request.priority,
+            'createdAt': request.createdAt.toIso8601String(),
+            'canCancel': request.canCancel,
+            'cancelDisabledCode': request.cancelDisabledCode,
+            'cancelDisabledMessage': request.cancelDisabledMessage,
+            'execution': {
+              'state': request.execution.state,
+              'rdsTaskRecordId': request.execution.rdsTaskRecordId,
+              'rdsTaskLabel': request.execution.rdsTaskLabel,
+              'outOrderNo': request.execution.outOrderNo,
+              'agvId': request.execution.agvId,
+              'rdsStatus': request.execution.rdsStatus,
+              'lastSyncAt': request.execution.lastSyncAt?.toIso8601String(),
+              'failureCode': request.execution.failureCode,
+              'failureCategory': request.execution.failureCategory,
+              'operatorMessage': request.execution.operatorMessage,
+              'technicalMessage': request.execution.technicalMessage,
+              'correlationId': request.execution.correlationId,
+            },
+          },
+        )
+        .toList(),
+    'taskTemplates': [],
+  });
+}
 
 final testActiveRequest = ActiveTransportRequest.fromJson({
   'requestId': '90000000-0000-0000-0000-000000000001',
@@ -162,6 +174,91 @@ final testActiveRequest = ActiveTransportRequest.fromJson({
   },
 });
 
+// WP-03B: part-first fixtures. testMainPartId matches testContext's
+// productGroups[0].mainPartId; testAltPartId matches its ALT_PART child —
+// so the "already active" auto-resolve and auto-carry-into-material paths
+// can be exercised end to end.
+final testMainPartOption = MachineMainPartOption(
+  partId: testMainPartId,
+  partCode: '71550BN000-10-HAOS',
+  description: 'Ana parça',
+  relatedParts: const [
+    MachineRelatedPart(
+      partId: testAltPartId,
+      partCode: '715A2BN400-50',
+      description: null,
+      relationType: 'ALT_PART',
+    ),
+    MachineRelatedPart(
+      partId: testRelatedPartId,
+      partCode: '715B3CN500-60',
+      description: null,
+      relationType: 'RELATED',
+    ),
+    MachineRelatedPart(
+      partId: testOrphanPartId,
+      partCode: '715C4DN600-70',
+      description: null,
+      relationType: 'RELATED',
+    ),
+  ],
+);
+
+final testSecondMainPartOption = MachineMainPartOption(
+  partId: '70000000-0000-0000-0000-000000000010',
+  partCode: '900-OTHER-MAIN',
+  description: null,
+  relatedParts: const [],
+);
+
+final testPartOptions = [testMainPartOption, testSecondMainPartOption];
+
+/// Keyed by partId. Main part -> single, already-active variant (V1, no
+/// switch needed). Alt part -> single, DIFFERENT variant (V2, requires
+/// switchVariant). Related part -> two variants (requires user selection).
+/// Orphan part -> no mapping (empty list).
+final testCompatibleVariantsByPart = <String, List<CompatibleVariant>>{
+  testMainPartId: [
+    const CompatibleVariant(
+      variantId: testVariantV1Id,
+      variantCode: 'V1',
+      variantName: 'Varyant 1',
+      machineId: '30000000-0000-0000-0000-000000000001',
+      productGroupId: testProductGroupId,
+      relationType: 'MAIN',
+    ),
+  ],
+  testAltPartId: [
+    const CompatibleVariant(
+      variantId: testVariantV2Id,
+      variantCode: 'V2',
+      variantName: 'Varyant 2',
+      machineId: '30000000-0000-0000-0000-000000000001',
+      productGroupId: testProductGroupId,
+      relationType: 'ALT_PART',
+    ),
+  ],
+  testRelatedPartId: [
+    const CompatibleVariant(
+      variantId: testVariantV1Id,
+      variantCode: 'V1',
+      variantName: 'Varyant 1',
+      machineId: '30000000-0000-0000-0000-000000000001',
+      productGroupId: testProductGroupId,
+      relationType: 'RELATED',
+    ),
+    const CompatibleVariant(
+      variantId: testVariantV2Id,
+      variantCode: 'V2',
+      variantName: 'Varyant 2',
+      machineId: '30000000-0000-0000-0000-000000000001',
+      productGroupId: testProductGroupId,
+      relationType: 'RELATED',
+    ),
+  ],
+  testOrphanPartId: const [],
+};
+
 class FakePdaRepository implements PdaDataSource {
   List<MachineSummary> machineValues = [testMachine];
   OperationalContext contextValue = testContext();
@@ -174,9 +271,19 @@ class FakePdaRepository implements PdaDataSource {
   int createCount = 0;
   int cancelCount = 0;
   int switchCount = 0;
+  String? lastSwitchVariantId;
+  Object? switchVariantError;
   int loadStateCount = 0;
   int contextCount = 0;
   int meCount = 0;
+  List<MachineMainPartOption> partOptionsValue = testPartOptions;
+  Object? partOptionsError;
+  int partOptionsCount = 0;
+  Map<String, List<CompatibleVariant>> compatibleVariantsValue =
+      testCompatibleVariantsByPart;
+  Object? compatibleVariantsError;
+  int compatibleVariantsCount = 0;
+  final List<String> compatibleVariantsRequestedPartIds = [];
   String? lastLoadState;
   String? lastIdempotencyKey;
   TransportCommand? lastCommand;
@@ -222,6 +329,29 @@ class FakePdaRepository implements PdaDataSource {
     required String? navigationProfileId,
   }) async {
     switchCount++;
+    lastSwitchVariantId = variantId;
+    if (switchVariantError case final error?) throw error;
+    contextValue = testContext(activeVariantId: variantId);
+  }
+
+  @override
+  Future<List<MachineMainPartOption>> machinePartOptions(
+    String machineId,
+  ) async {
+    partOptionsCount++;
+    if (partOptionsError case final error?) throw error;
+    return partOptionsValue;
+  }
+
+  @override
+  Future<List<CompatibleVariant>> compatibleVariants({
+    required String machineId,
+    required String partId,
+  }) async {
+    compatibleVariantsCount++;
+    compatibleVariantsRequestedPartIds.add(partId);
+    if (compatibleVariantsError case final error?) throw error;
+    return compatibleVariantsValue[partId] ?? const [];
   }
 
   @override

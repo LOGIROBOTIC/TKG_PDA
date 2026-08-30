@@ -142,8 +142,9 @@ void main() {
     await tester.tap(find.byKey(Key('machine-${testMachine.id}')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('operation-content')), findsOneWidget);
     expect(find.text('${testMachine.code} · Operasyon'), findsOneWidget);
+    expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
+    expect(harness.controller.context, isNotNull);
     harness.dispose();
   });
 
@@ -655,7 +656,24 @@ Future<_Harness> _operationHarness(
   final harness = await _loggedInHarness(tester, repository: repository);
   await harness.controller.selectMachine(testMachine);
   await tester.pumpAndSettle();
+  // WP-03B: the operation screen now gates behind part-first selection.
+  // Resolve the default fixture's main part, which auto-resolves to the
+  // already-active variant (no switchVariant round-trip), to reach the
+  // existing operation content exactly as before.
+  await _resolveDefaultPartFirstSelection(harness.controller);
+  await tester.pumpAndSettle();
   return harness;
+}
+
+Future<void> _resolveDefaultPartFirstSelection(AppController controller) async {
+  controller.selectMainPartOption(testMainPartOption);
+  await controller.selectEffectivePart(
+    EffectivePartSelection(
+      partId: testMainPartOption.partId,
+      partCode: testMainPartOption.partCode,
+      isMain: true,
+    ),
+  );
 }
 
 Future<void> _loginFromUi(

@@ -11,6 +11,21 @@ import '../features/transport/submission_coordinator.dart';
 
 enum AppStage { starting, deviceSetup, login, machines, operation }
 
+/// WP-03B: the part the operator has chosen as the effective part for
+/// compatible-variant resolution — either a main part itself or one of its
+/// Related/Alt parts.
+class EffectivePartSelection {
+  const EffectivePartSelection({
+    required this.partId,
+    required this.partCode,
+    required this.isMain,
+  });
+
+  final String partId;
+  final String partCode;
+  final bool isMain;
+}
+
 class AppController extends ChangeNotifier {
   AppController({
     required PdaDataSource repository,
@@ -48,6 +63,18 @@ class AppController extends ChangeNotifier {
   Timer? _pollTimer;
   TransportCommand? _ambiguousCommand;
 
+  // WP-03B: part-first selection state (machine-level, independent of the
+  // currently active variant until a compatible variant is resolved).
+  List<MachineMainPartOption> _partOptions = const [];
+  bool _partOptionsLoading = false;
+  String? _partOptionsError;
+  MachineMainPartOption? _selectedMainPart;
+  EffectivePartSelection? _selectedEffectivePart;
+  List<CompatibleVariant>? _compatibleVariants;
+  bool _compatibleVariantsLoading = false;
+  String? _compatibleVariantsError;
+  bool _partFirstResolved = false;
+
   AppStage get stage => _stage;
   String? get deviceCode => _deviceCode;
   AuthenticatedUser? get user => _session.user;
@@ -70,6 +97,19 @@ class AppController extends ChangeNotifier {
       _session.isAuthenticated;
   bool get pollingActive => _pollTimer?.isActive ?? false;
   bool get resumeValidationPending => _resumeValidationPending;
+
+  List<MachineMainPartOption> get partOptions => _partOptions;
+  bool get partOptionsLoading => _partOptionsLoading;
+  String? get partOptionsError => _partOptionsError;
+  MachineMainPartOption? get selectedMainPart => _selectedMainPart;
+  EffectivePartSelection? get selectedEffectivePart => _selectedEffectivePart;
+  List<CompatibleVariant>? get compatibleVariants => _compatibleVariants;
+  bool get compatibleVariantsLoading => _compatibleVariantsLoading;
+  String? get compatibleVariantsError => _compatibleVariantsError;
+
+  /// WP-03B: true while a machine is selected but the operator has not yet
+  /// completed the part-first -> compatible-variant resolution gate.
+  bool get needsPartSelection => _selectedMachine != null && !_partFirstResolved;
 
   Future<void> initialize() async {
     _deviceCode = await _deviceCodeStore.read();
@@ -180,9 +220,10 @@ class AppController extends ChangeNotifier {
     _selectedProductGroup = null;
     _selectedPart = null;
     _selectedSlot = null;
+    _resetPartFirstState();
     _stage = AppStage.operation;
     notifyListeners();
-    await refreshContext(showBusy: true);
+    await Future.wait([refreshContext(showBusy: true), _loadPartOptions()]);
   }
 
   void leaveMachine() {
@@ -192,6 +233,7 @@ class AppController extends ChangeNotifier {
     _selectedProductGroup = null;
     _selectedPart = null;
     _selectedSlot = null;
+    _resetPartFirstState();
     _stage = AppStage.machines;
     _clearFeedback();
     notifyListeners();
@@ -270,6 +312,130 @@ class AppController extends ChangeNotifier {
     } finally {
       _setBusy(false);
     }
+  }
+
+  // ---- WP-03B: part-first -> compatible-variant resolution ----
+
+  Future<void> reloadPartOptions() => _loadPartOptions();
+
+  void selectMainPartOption(MachineMainPartOption option) {
+    _selectedMainPart = option;
+    _selectedEffectivePart = null;
+    _compatibleVariants = null;
+    _compatibleVariantsError = null;
+    notifyListeners();
+  }
+
+  Future<void> selectEffectivePart(EffectivePartSelection selection) async {
+    _selectedEffectivePart = selection;
+    _compatibleVariants = null;
+    _compatibleVariantsError = null;
+    notifyListeners();
+    await _loadCompatibleVariants();
+  }
+
+  Future<void> retryCompatibleVariants() => _loadCompatibleVariants();
+
+  Future<void> selectCompatibleVariant(CompatibleVariant variant) =>
+      _resolveVariant(variant);
+
+  /// Returns to the part-first gate without leaving the machine or losing
+  /// the already-loaded operational context/slots.
+  void resetPartSelection() {
+    _selectedMainPart = null;
+    _selectedEffectivePart = null;
+    _compatibleVariants = null;
+    _compatibleVariantsError = null;
+    _partFirstResolved = false;
+    notifyListeners();
+  }
+
+  Future<void> _loadPartOptions() async {
+    final machine = _selectedMachine;
+    if (machine == null) return;
+    _partOptionsLoading = true;
+    _partOptionsError = null;
+    notifyListeners();
+    try {
+      _partOptions = await _repository.machinePartOptions(machine.id);
+    } on ConnectivityException {
+      _partOptionsError = 'Bağlantı yok — parça listesi yüklenemedi.';
+    } on ApiProblem catch (problem) {
+      _partOptionsError = problem.operatorMessage;
+    } finally {
+      _partOptionsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadCompatibleVariants() async {
+    final machine = _selectedMachine;
+    final part = _selectedEffectivePart;
+    if (machine == null || part == null) return;
+    _compatibleVariantsLoading = true;
+    _compatibleVariantsError = null;
+    notifyListeners();
+    try {
+      final variants = await _repository.compatibleVariants(
+        machineId: machine.id,
+        partId: part.partId,
+      );
+      _compatibleVariants = variants;
+      if (variants.length == 1) {
+        await _resolveVariant(variants.single);
+      }
+    } on ConnectivityException {
+      _compatibleVariantsError = 'Bağlantı yok — uyumlu varyantlar yüklenemedi.';
+    } on ApiProblem catch (problem) {
+      _compatibleVariantsError = problem.operatorMessage;
+    } finally {
+      _compatibleVariantsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Reuses the existing authorized variant-selection mechanism
+  /// ([switchVariant]) when the resolved variant differs from the machine's
+  /// current active variant; never bypasses machine authorization or
+  /// canChangeVariant policy. Does not touch the existing (separate, manual)
+  /// product-group/part selection used for transport-command material
+  /// metadata — that flow is untouched by WP-03B.
+  Future<void> _resolveVariant(CompatibleVariant variant) async {
+    final current = _context;
+    if (current != null && current.activeVariantId == variant.variantId) {
+      _partFirstResolved = true;
+      notifyListeners();
+      return;
+    }
+    final option = current == null
+        ? null
+        : _firstOrNull(
+            current.variantLayouts.where(
+              (candidate) => candidate.variantId == variant.variantId,
+            ),
+          );
+    if (option == null) {
+      _notice = 'Seçilen varyant için düzenli bir yerleşim bulunamadı.';
+      notifyListeners();
+      return;
+    }
+    await switchVariant(option);
+    if (_context?.activeVariantId == variant.variantId) {
+      _partFirstResolved = true;
+    }
+    notifyListeners();
+  }
+
+  void _resetPartFirstState() {
+    _partOptions = const [];
+    _partOptionsLoading = false;
+    _partOptionsError = null;
+    _selectedMainPart = null;
+    _selectedEffectivePart = null;
+    _compatibleVariants = null;
+    _compatibleVariantsLoading = false;
+    _compatibleVariantsError = null;
+    _partFirstResolved = false;
   }
 
   void selectProductGroup(ProductGroup? group) {
@@ -512,6 +678,7 @@ class AppController extends ChangeNotifier {
     _selectedProductGroup = null;
     _selectedPart = null;
     _selectedSlot = null;
+    _resetPartFirstState();
     _offline = false;
     _resumeValidationPending = false;
   }

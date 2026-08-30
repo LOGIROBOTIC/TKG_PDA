@@ -121,6 +121,35 @@ void main() {
         isNotEmpty,
         'alt parts projected',
       );
+
+      // WP-03B: the operation view now gates behind part-first selection.
+      // Resolve the active variant's own main part through the real
+      // part-options/compatible-variants endpoints (preferring the
+      // already-active variant if the part resolves to more than one, so
+      // this step does not itself trigger an unintended variant switch).
+      await first.selectEffectivePart(
+        EffectivePartSelection(
+          partId: context.productGroups.first.mainPartId,
+          partCode: context.productGroups.first.mainPartCode,
+          isMain: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (first.needsPartSelection) {
+        final variants = first.compatibleVariants ?? const [];
+        final match = variants.firstWhere(
+          (option) => option.variantId == context.activeVariantId,
+          orElse: () => variants.first,
+        );
+        await first.selectCompatibleVariant(match);
+        await tester.pumpAndSettle();
+      }
+      check(
+        first.needsPartSelection,
+        isFalse,
+        'part-first resolves before entering the operation view',
+      );
+
       check(
         context.slots.any((slot) => slot.isMachineRegion),
         isTrue,
@@ -312,7 +341,7 @@ void main() {
         0,
         'reload leaves sessionStorage empty',
       );
-      check(checks, 47, 'all frozen Phase 09 browser checks ran');
+      check(checks, 48, 'all frozen Phase 09 browser checks ran');
 
       first.dispose();
       second.dispose();

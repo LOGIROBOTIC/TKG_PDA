@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/auth/session_memory.dart';
 import '../core/errors/api_problem.dart';
@@ -24,6 +25,34 @@ class EffectivePartSelection {
   final String partId;
   final String partCode;
   final bool isMain;
+}
+
+/// Customer UI — Multi-Part Transport Batch: one effective part added to the
+/// multi-select cart. [command] stays null until the operator has walked
+/// this item through the existing part-first -> compatible-variant ->
+/// operation/slot flow and confirmed an action for it.
+class BatchCartItem {
+  BatchCartItem({
+    required this.cartItemId,
+    required this.mainPart,
+    required this.effectivePart,
+  });
+
+  final String cartItemId;
+  final MachineMainPartOption mainPart;
+  final EffectivePartSelection effectivePart;
+  TransportCommand? command;
+
+  /// Display-only snapshot captured at confirm time (the widget has the
+  /// resolved [LayoutSlot]/variant right there); avoided re-deriving these
+  /// from [AppController.context] later since a different cart item may by
+  /// then have switched the machine to a different active variant/layout.
+  String? slotDisplayName;
+  String? slotCode;
+  String? actionCode;
+  String? variantCode;
+
+  bool get isConfigured => command != null;
 }
 
 class AppController extends ChangeNotifier {
@@ -75,6 +104,16 @@ class AppController extends ChangeNotifier {
   String? _compatibleVariantsError;
   bool _partFirstResolved = false;
 
+  // Customer UI — Multi-Part Transport Batch: cart state, independent of the
+  // single-item part-first fields above (which drive whichever cart item is
+  // currently being configured).
+  bool _batchMode = false;
+  final List<BatchCartItem> _batchCart = [];
+  int _batchConfiguringIndex = -1;
+  final BatchSubmissionCoordinator _batchSubmission =
+      BatchSubmissionCoordinator();
+  final Uuid _cartIdFactory = const Uuid();
+
   AppStage get stage => _stage;
   String? get deviceCode => _deviceCode;
   AuthenticatedUser? get user => _session.user;
@@ -106,6 +145,20 @@ class AppController extends ChangeNotifier {
   List<CompatibleVariant>? get compatibleVariants => _compatibleVariants;
   bool get compatibleVariantsLoading => _compatibleVariantsLoading;
   String? get compatibleVariantsError => _compatibleVariantsError;
+
+  // Customer UI — Multi-Part Transport Batch.
+  bool get batchMode => _batchMode;
+  List<BatchCartItem> get batchCart => List.unmodifiable(_batchCart);
+  bool get isConfiguringBatchItem =>
+      _batchConfiguringIndex >= 0 && _batchConfiguringIndex < _batchCart.length;
+  BatchCartItem? get currentBatchItem =>
+      isConfiguringBatchItem ? _batchCart[_batchConfiguringIndex] : null;
+
+  /// 1-based position of the item currently being configured, for "N/M" UI.
+  int get currentBatchItemPosition => _batchConfiguringIndex + 1;
+  bool get canReviewBatch =>
+      _batchCart.isNotEmpty && _batchCart.every((item) => item.isConfigured);
+  bool get hasAmbiguousBatchSubmission => _batchSubmission.hasAmbiguousRequest;
 
   /// WP-03B: true while a machine is selected but the operator has not yet
   /// completed the part-first -> compatible-variant resolution gate.
@@ -350,6 +403,174 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- Customer UI — Multi-Part Transport Batch ----
+
+  void enterBatchSelection() {
+    if (_batchMode) return;
+    _batchMode = true;
+    notifyListeners();
+  }
+
+  /// Leaves batch mode and discards the cart. Only ever called after a
+  /// successful submission or an explicit operator cancel — never on a
+  /// recoverable failure (ambiguous/API error), so a failed submit keeps the
+  /// cart intact for retry.
+  void exitBatchSelection() {
+    _batchMode = false;
+    _batchCart.clear();
+    _batchConfiguringIndex = -1;
+    _batchSubmission.clear();
+    resetPartSelection();
+    notifyListeners();
+  }
+
+  /// Adds [part] (main, RELATED or ALT) to the cart. Returns false without
+  /// changing anything if that part is already selected.
+  bool addPartToBatch(MachineMainPartOption mainPart, EffectivePartSelection part) {
+    if (_batchCart.any((item) => item.effectivePart.partId == part.partId)) {
+      return false;
+    }
+    _batchCart.add(
+      BatchCartItem(
+        cartItemId: _cartIdFactory.v4(),
+        mainPart: mainPart,
+        effectivePart: part,
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> removePartFromBatch(String cartItemId) async {
+    final removedIndex = _batchCart.indexWhere(
+      (item) => item.cartItemId == cartItemId,
+    );
+    if (removedIndex == -1) return;
+    _batchCart.removeAt(removedIndex);
+    if (_batchConfiguringIndex == removedIndex) {
+      _batchConfiguringIndex = -1;
+      resetPartSelection();
+      await _advanceBatchConfiguration();
+    } else if (_batchConfiguringIndex > removedIndex) {
+      _batchConfiguringIndex--;
+    }
+    notifyListeners();
+  }
+
+  /// Starts (or resumes) the sequential per-item configuration wizard at the
+  /// first not-yet-configured cart item.
+  Future<void> beginBatchConfiguration() => _advanceBatchConfiguration();
+
+  /// Removes the item currently being configured (used for the zero-variant
+  /// "invalid item" case) and continues with whatever comes next.
+  Future<void> skipInvalidBatchItem() async {
+    final item = currentBatchItem;
+    if (item == null) return;
+    await removePartFromBatch(item.cartItemId);
+  }
+
+  /// Called instead of [submitTransport] from the action-confirm step while
+  /// a batch item is being configured: stores the resolved command on that
+  /// cart item and advances to the next unconfigured item (or to Review,
+  /// once every item has a command).
+  Future<void> confirmBatchItemCommand(
+    TransportCommand command, {
+    required LayoutSlot slot,
+    required AvailableAction action,
+  }) async {
+    if (!isConfiguringBatchItem) return;
+    final item = _batchCart[_batchConfiguringIndex];
+    item.command = command;
+    item.slotDisplayName = slot.displayName;
+    item.slotCode = slot.code;
+    item.actionCode = action.action;
+    item.variantCode = _context?.activeVariantCode;
+    _batchConfiguringIndex = -1;
+    resetPartSelection();
+    await _advanceBatchConfiguration();
+  }
+
+  Future<void> _advanceBatchConfiguration() async {
+    final index = _batchCart.indexWhere((item) => !item.isConfigured);
+    if (index == -1) {
+      notifyListeners();
+      return;
+    }
+    _batchConfiguringIndex = index;
+    await _loadBatchItemForConfiguration(_batchCart[index]);
+  }
+
+  Future<void> _loadBatchItemForConfiguration(BatchCartItem item) async {
+    _selectedMainPart = item.mainPart;
+    _selectedProductGroup = null;
+    _selectedPart = null;
+    _selectedSlot = null;
+    _selectedEffectivePart = null;
+    _compatibleVariants = null;
+    _compatibleVariantsError = null;
+    _partFirstResolved = false;
+    notifyListeners();
+    await selectEffectivePart(item.effectivePart);
+  }
+
+  /// Submits the configured cart. Exactly one item preserves the existing
+  /// single TransportRequest workflow; two or more use the batch endpoint
+  /// with one batch idempotency key and one independent key per item.
+  Future<void> submitBatch() async {
+    if (!canReviewBatch || _busy) return;
+    if (_batchCart.length == 1) {
+      final result = await submitTransport(_batchCart.single.command!);
+      if (result != null) {
+        exitBatchSelection();
+      }
+      return;
+    }
+    final machine = _selectedMachine;
+    if (machine == null || !_session.isAuthenticated) return;
+    _setBusy(true);
+    _clearFeedback();
+    try {
+      final commandsByCartItemId = {
+        for (final item in _batchCart) item.cartItemId: item.command!,
+      };
+      final result = await _batchSubmission.submit(commandsByCartItemId, (
+        batchKey,
+        itemKeys,
+      ) {
+        final items = [
+          for (final item in _batchCart)
+            TransportBatchItemCommand(
+              command: item.command!,
+              idempotencyKey: itemKeys[item.cartItemId]!,
+            ),
+        ];
+        return _repository.createTransportBatch(machine.id, batchKey, items);
+      });
+      _notice = result.idempotentReplay
+          ? 'Grup talebi doğrulandı.'
+          : 'Grup talebi oluşturuldu: ${result.items.length} işlem.';
+      exitBatchSelection();
+      await refreshContext();
+    } on AmbiguousMutationException {
+      _offline = true;
+      _notice =
+          'Grup gönderiminin sonucu belirsiz. Aynı seçim aynı anahtarla yeniden denenebilir.';
+    } on ApiProblem catch (problem) {
+      _problem = problem;
+      if (problem.shouldRefetch) {
+        await refreshContext();
+      }
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> retryAmbiguousBatch() async {
+    if (!_batchSubmission.hasAmbiguousRequest) return;
+    _offline = false;
+    await submitBatch();
+  }
+
   Future<void> _loadPartOptions() async {
     final machine = _selectedMachine;
     if (machine == null) return;
@@ -436,6 +657,10 @@ class AppController extends ChangeNotifier {
     _compatibleVariantsLoading = false;
     _compatibleVariantsError = null;
     _partFirstResolved = false;
+    _batchMode = false;
+    _batchCart.clear();
+    _batchConfiguringIndex = -1;
+    _batchSubmission.clear();
   }
 
   void selectProductGroup(ProductGroup? group) {

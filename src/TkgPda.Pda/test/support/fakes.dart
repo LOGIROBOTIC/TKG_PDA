@@ -268,6 +268,12 @@ class FakePdaRepository implements PdaDataSource {
   int loginCount = 0;
   String? lastEmployeeNumber;
   int createCount = 0;
+  int batchCreateCount = 0;
+  String? lastBatchMachineId;
+  String? lastBatchIdempotencyKey;
+  List<TransportBatchItemCommand>? lastBatchItems;
+  Object? batchCreateError;
+  Completer<TransportBatchResult>? batchCreateCompleter;
   int cancelCount = 0;
   int switchCount = 0;
   String? lastSwitchVariantId;
@@ -369,6 +375,35 @@ class FakePdaRepository implements PdaDataSource {
       status: 'QUEUED',
       operation: 'BRING_EMPTY',
       idempotentReplay: false,
+    );
+  }
+
+  @override
+  Future<TransportBatchResult> createTransportBatch(
+    String machineId,
+    String batchIdempotencyKey,
+    List<TransportBatchItemCommand> items,
+  ) async {
+    batchCreateCount++;
+    lastBatchMachineId = machineId;
+    lastBatchIdempotencyKey = batchIdempotencyKey;
+    lastBatchItems = items;
+    if (batchCreateError case final error?) throw error;
+    if (batchCreateCompleter case final completer?) return completer.future;
+    contextValue = testContext(activeRequests: [testActiveRequest]);
+    return TransportBatchResult(
+      batchId: '95000000-0000-0000-0000-000000000001',
+      idempotentReplay: false,
+      items: [
+        for (var i = 0; i < items.length; i++)
+          TransportResult(
+            id: '9500000$i-0000-0000-0000-00000000000$i',
+            requestNo: 100 + i,
+            status: 'QUEUED',
+            operation: items[i].command.operation,
+            idempotentReplay: false,
+          ),
+      ],
     );
   }
 

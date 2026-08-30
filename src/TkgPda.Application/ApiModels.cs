@@ -47,6 +47,30 @@ public sealed record CompatibleVariantRecord(
     Guid ProductGroupId,
     string RelationType);
 
+/// <summary>
+/// WP-03A: a Related/Alt part of a machine-level main part option. RelationType
+/// is the product_group_parts.relation_type (RELATED/ALT_PART/CONSUMABLE/OTHER).
+/// Any of these part IDs (main or related) is a valid partId for
+/// GET /api/v1/machines/{machineId}/parts/{partId}/compatible-variants.
+/// </summary>
+public sealed record MachineRelatedPartRecord(
+    Guid PartId,
+    string PartCode,
+    string? Description,
+    string RelationType);
+
+/// <summary>
+/// WP-03A: a machine-level main-part selection option, deduplicated across all
+/// of the machine's variants. Derived only from existing master data
+/// (master.product_groups / master.product_group_parts); no variant selection
+/// is required to see this projection.
+/// </summary>
+public sealed record MachineMainPartOptionRecord(
+    Guid PartId,
+    string PartCode,
+    string? Description,
+    IReadOnlyList<MachineRelatedPartRecord> RelatedParts);
+
 public sealed record VariantLayoutOptionRecord(
     Guid VariantId,
     string VariantCode,

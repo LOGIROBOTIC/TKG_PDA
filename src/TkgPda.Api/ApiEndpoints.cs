@@ -26,6 +26,9 @@ public static class ApiEndpoints
         endpoints.MapGet("/api/v1/machines/{machineId:guid}/parts/{partId:guid}/compatible-variants", CompatibleVariantsAsync)
             .RequireAuthorization();
 
+        endpoints.MapGet("/api/v1/machines/{machineId:guid}/part-options", MachinePartOptionsAsync)
+            .RequireAuthorization();
+
         endpoints.MapPost("/api/v1/machines/{machineId:guid}/variant-selection", SwitchVariantAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
 
@@ -194,6 +197,18 @@ public static class ApiEndpoints
         _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.View, cancellationToken);
         var variants = await dataStore.ListCompatibleVariantsAsync(machineId, partId, cancellationToken);
         return Results.Ok(variants);
+    }
+
+    private static async Task<IResult> MachinePartOptionsAsync(
+        Guid machineId,
+        HttpContext context,
+        MachineAccessService access,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.View, cancellationToken);
+        var options = await dataStore.ListMachinePartOptionsAsync(machineId, cancellationToken);
+        return Results.Ok(options);
     }
 
     private static async Task<IResult> CreateTransportAsync(

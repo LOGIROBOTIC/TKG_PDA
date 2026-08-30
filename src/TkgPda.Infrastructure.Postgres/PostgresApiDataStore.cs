@@ -196,6 +196,83 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
         return result;
     }
 
+    public async Task<IReadOnlyList<MachineMainPartOptionRecord>> ListMachinePartOptionsAsync(
+        Guid machineId,
+        CancellationToken cancellationToken = default)
+    {
+        var mainParts = new List<(Guid PartId, string PartCode, string? Description)>();
+        await using (var command = dataSource.CreateCommand(
+                         """
+                         SELECT DISTINCT p.id, p.part_code, p.description
+                         FROM master.product_groups pg
+                         JOIN master.variants v ON v.id = pg.variant_id AND v.is_active
+                         JOIN master.parts p ON p.id = pg.main_part_id AND p.is_active
+                         WHERE v.machine_id = @machine_id AND pg.is_active
+                         ORDER BY p.part_code
+                         """))
+        {
+            command.Parameters.AddWithValue("machine_id", machineId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                mainParts.Add((reader.GetGuid(0), reader.GetString(1), NullableString(reader, 2)));
+            }
+        }
+
+        if (mainParts.Count == 0)
+        {
+            return [];
+        }
+
+        var relatedByMainPart = mainParts.ToDictionary(
+            static main => main.PartId,
+            static _ => new List<MachineRelatedPartRecord>());
+        await using (var command = dataSource.CreateCommand(
+                         """
+                         SELECT main_part_id, part_id, part_code, description, relation_type
+                         FROM (
+                             SELECT DISTINCT ON (pg.main_part_id, gpp.part_id)
+                                    pg.main_part_id,
+                                    gpp.part_id,
+                                    p2.part_code,
+                                    p2.description,
+                                    gpp.relation_type,
+                                    gpp.display_order
+                             FROM master.product_group_parts gpp
+                             JOIN master.product_groups pg ON pg.id = gpp.product_group_id AND pg.is_active
+                             JOIN master.variants v ON v.id = pg.variant_id AND v.is_active
+                             JOIN master.parts p2 ON p2.id = gpp.part_id AND p2.is_active
+                             WHERE v.machine_id = @machine_id AND gpp.is_active
+                             ORDER BY pg.main_part_id, gpp.part_id, gpp.relation_type, gpp.display_order
+                         ) resolved
+                         ORDER BY main_part_id, relation_type, part_code
+                         """))
+        {
+            command.Parameters.AddWithValue("machine_id", machineId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var mainPartId = reader.GetGuid(0);
+                if (relatedByMainPart.TryGetValue(mainPartId, out var related))
+                {
+                    related.Add(new MachineRelatedPartRecord(
+                        reader.GetGuid(1),
+                        reader.GetString(2),
+                        NullableString(reader, 3),
+                        reader.GetString(4)));
+                }
+            }
+        }
+
+        return mainParts
+            .Select(main => new MachineMainPartOptionRecord(
+                main.PartId,
+                main.PartCode,
+                main.Description,
+                relatedByMainPart[main.PartId]))
+            .ToArray();
+    }
+
     public async Task<OperationalContextDataRecord?> GetOperationalContextDataAsync(
         Guid userId,
         Guid machineId,

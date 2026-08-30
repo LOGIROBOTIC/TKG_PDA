@@ -68,6 +68,18 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             WHERE main_part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P05-%');
             DELETE FROM master.parts WHERE part_code LIKE 'P05-%';
             DELETE FROM master.container_types WHERE code LIKE 'P05-%';
+            DELETE FROM master.variants WHERE code LIKE 'P02-%';
+            DELETE FROM master.product_group_parts
+            WHERE part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P02-%');
+            DELETE FROM master.product_groups
+            WHERE main_part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P02-%');
+            DELETE FROM master.parts WHERE part_code LIKE 'P02-%';
+            DELETE FROM master.variants WHERE code LIKE 'P03A-%';
+            DELETE FROM master.product_group_parts
+            WHERE part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P03A-%');
+            DELETE FROM master.product_groups
+            WHERE main_part_id IN (SELECT id FROM master.parts WHERE part_code LIKE 'P03A-%');
+            DELETE FROM master.parts WHERE part_code LIKE 'P03A-%';
             """);
     }
 

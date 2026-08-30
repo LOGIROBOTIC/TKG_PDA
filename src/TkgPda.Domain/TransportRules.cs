@@ -57,6 +57,75 @@ public static class TransportRules
         _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, null)
     };
 
+    /// <summary>
+    /// Customer Workflow — Empty Container Buffer: BRING_EMPTY draws an empty
+    /// container from a configured EMPTY_STORAGE slot (its source);
+    /// REMOVE_EMPTY returns one to a configured EMPTY_STORAGE slot (its
+    /// destination). REMOVE_FULL never touches the buffer. Returns null for
+    /// task types that have no buffer side.
+    /// </summary>
+    public static bool RequiresBufferSlot(TransportTaskType taskType) =>
+        taskType is TransportTaskType.BringEmpty or TransportTaskType.RemoveEmpty;
+
+    public static Guid? BufferSlotId(TransportTaskType taskType, Guid? sourceSlotId, Guid? destinationSlotId) =>
+        taskType switch
+        {
+            TransportTaskType.BringEmpty => sourceSlotId,
+            TransportTaskType.RemoveEmpty => destinationSlotId,
+            _ => null
+        };
+
+    /// <summary>
+    /// The buffer slot's required state at request-creation time: a full
+    /// container waiting to be brought in (BRING_EMPTY's source), or empty
+    /// space waiting to receive one (REMOVE_EMPTY's destination).
+    /// </summary>
+    public static SlotState ExpectedBufferState(TransportTaskType taskType) => taskType switch
+    {
+        TransportTaskType.BringEmpty => new SlotState(OccupancyState.Occupied, LoadState.Empty, null, null),
+        TransportTaskType.RemoveEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
+        _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, "This task type has no buffer slot.")
+    };
+
+    /// <summary>
+    /// The buffer slot's state once the transport completes: emptied out
+    /// (BRING_EMPTY took its container), or now holding the container that
+    /// was just removed (REMOVE_EMPTY's destination).
+    /// </summary>
+    public static SlotState BufferCompletionState(TransportTaskType taskType, Guid? partId, Guid? containerTypeId) =>
+        taskType switch
+        {
+            TransportTaskType.BringEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
+            TransportTaskType.RemoveEmpty => new SlotState(OccupancyState.Occupied, LoadState.Empty, partId, containerTypeId),
+            _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, "This task type has no buffer slot.")
+        };
+
+    /// <summary>
+    /// A buffer slot must be configured master data (slot_role =
+    /// EMPTY_STORAGE) — never inferred from name, WorkSite, machine code or
+    /// coordinates — and must currently be in the state this operation
+    /// expects of it.
+    /// </summary>
+    public static void ValidateBufferSlot(CreateTransportRequest request, SlotSnapshot bufferSlot)
+    {
+        if (bufferSlot.Role != SlotRole.EmptyStorage)
+        {
+            throw new WorkflowRuleException(
+                "EMPTY_BUFFER_SLOT_NOT_CONFIGURED",
+                $"Slot {bufferSlot.Id} is not a configured EMPTY_STORAGE buffer slot.");
+        }
+
+        var expected = ExpectedBufferState(request.TaskType);
+        if (bufferSlot.State.Occupancy != expected.Occupancy || bufferSlot.State.Load != expected.Load)
+        {
+            throw new WorkflowRuleException(
+                "EMPTY_BUFFER_STATE_MISMATCH",
+                $"{request.TaskType.ToDatabase()} buffer slot must be {expected.Occupancy}/{expected.Load} but was {bufferSlot.State.Occupancy}/{bufferSlot.State.Load}.");
+        }
+
+        ValidateAssociations(request, bufferSlot);
+    }
+
     private static void ValidateAssociations(CreateTransportRequest request, SlotSnapshot slot)
     {
         if (request.PartId.HasValue)

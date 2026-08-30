@@ -34,7 +34,9 @@ public sealed class WarehousePreparationApiTests(ApiTestFixture fixture) : IClas
         Assert.Equal(context.MachineId, match.MachineId);
         Assert.Equal("SH-01-A", match.MachineCode);
         Assert.Equal(slot, match.DestinationSlotId);
-        Assert.Null(match.SourceSlotId);
+        // Customer Workflow — Empty Container Buffer: BRING_EMPTY's omitted
+        // source is now auto-allocated from a configured EMPTY_STORAGE slot.
+        Assert.NotNull(match.SourceSlotId);
     }
 
     [Fact]

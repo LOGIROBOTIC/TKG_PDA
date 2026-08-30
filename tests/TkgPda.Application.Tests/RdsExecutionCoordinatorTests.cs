@@ -109,6 +109,33 @@ public sealed class RdsExecutionCoordinatorTests
     }
 
     [Fact]
+    public async Task An_auto_allocated_empty_container_buffer_slot_that_is_unmapped_cannot_be_dispatched()
+    {
+        // Customer Workflow — Empty Container Buffer dispatch safety:
+        // BRING_EMPTY's source IS the buffer slot that PostgresTransportWorkflowStore.
+        // AllocateBufferSlotAsync auto-allocates when the caller omits one.
+        // When no integration.layout_slot_rds_mapping row exists for it,
+        // GetDispatchContextAsync's LEFT JOIN yields IsMapped=false AND
+        // SiteId=null together (proven in
+        // PostgresEmptyContainerBufferTests.Missing_worksite_mapping_...).
+        // That combination is caught here by two independent, pre-existing
+        // guards before any RDS call: RdsTaskInputBinder rejects the missing
+        // required site value, and ValidateReferencedEndpoints/ValidateEndpoint
+        // would separately reject !IsMapped even if a stale site id were
+        // somehow present. No production code change was needed.
+        var fixture = Fixture(context: Context() with
+        {
+            Source = Endpoint("WS-SOURCE") with { IsMapped = false, SiteId = null }
+        });
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(() => fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("RDS_TASK_INPUT_UNRESOLVED", error.Code);
+        Assert.Equal(0, fixture.Client.CreateCount);
+        Assert.Equal(0, fixture.Store.EnsureCount);
+    }
+
+    [Fact]
     public async Task Missing_template_binding_keeps_other_dispatch_cycles_recoverable()
     {
         var fixture = Fixture(context: Context(Json("{}")));

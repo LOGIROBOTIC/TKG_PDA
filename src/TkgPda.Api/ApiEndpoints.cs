@@ -47,6 +47,9 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/ready", MarkTransportReadyAsync)
             .RequireAuthorization(PolicyNames.WarehousePreparation);
 
+        endpoints.MapGet("/api/v1/warehouse/preparation-requests", ListWarehousePreparationRequestsAsync)
+            .RequireAuthorization(PolicyNames.WarehousePreparation);
+
         endpoints.MapPut("/api/v1/machines/{machineId:guid}/slots/{slotId:guid}/load-state", UpdateLoadStateAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
@@ -419,6 +422,18 @@ public static class ApiEndpoints
             new { readinessState = updated.ReadinessState.ToDatabase(), updated.ReadyAt },
             cancellationToken);
         return Results.Ok(ToResponse(updated, replay: false));
+    }
+
+    private static async Task<IResult> ListWarehousePreparationRequestsAsync(
+        HttpContext context,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        var requests = await dataStore.ListWarehousePreparationRequestsAsync(
+            context.User.UserId(),
+            context.User.IsAdministrator(),
+            cancellationToken);
+        return Results.Ok(requests);
     }
 
     private static async Task<IResult> UpdateLoadStateAsync(

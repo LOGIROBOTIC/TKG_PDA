@@ -33,13 +33,54 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var result = await CreateAndQueueWithinTransactionAsync(connection, transaction, request, batchId: null, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
 
+    public async Task<TransportBatchResult> CreateBatchAndQueueAsync(
+        CreateTransportBatchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.ValidateShape();
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        await LockIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, cancellationToken);
+        var existingBatch = await FindBatchByIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, cancellationToken);
+        if (existingBatch is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return existingBatch with { WasIdempotentReplay = true };
+        }
+
+        var batchId = await InsertBatchAsync(connection, transaction, request, cancellationToken);
+
+        var children = new List<TransportRequestSnapshot>(request.Items.Count);
+        foreach (var item in request.Items)
+        {
+            var childResult = await CreateAndQueueWithinTransactionAsync(connection, transaction, item, batchId, cancellationToken);
+            children.Add(childResult.Request);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new TransportBatchResult(batchId, request.IdempotencyKey, request.MachineId, children, WasIdempotentReplay: false);
+    }
+
+    private static async Task<CreateTransportResult> CreateAndQueueWithinTransactionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        Guid? batchId,
+        CancellationToken cancellationToken)
+    {
         await LockIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, cancellationToken);
         var existing = await FindByIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, cancellationToken);
         if (existing is not null)
         {
             EnsureEquivalentPayload(existing, request);
-            await transaction.CommitAsync(cancellationToken);
             return new CreateTransportResult(existing, WasIdempotentReplay: true);
         }
 
@@ -64,7 +105,7 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         await EnsureSlotsAreAvailableAsync(connection, transaction, suppliedSlotIds, cancellationToken);
         TransportRules.ValidateReservation(request, slots[request.ReservedSlotId]);
 
-        var created = await InsertRequestAsync(connection, transaction, request, taskTypeId, cancellationToken);
+        var created = await InsertRequestAsync(connection, transaction, request, taskTypeId, batchId, cancellationToken);
         await InsertEventAsync(
             connection,
             transaction,
@@ -74,7 +115,7 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             null,
             TransportRequestStatus.Created,
             "Transport request created by Phase 03 workflow engine.",
-            new { idempotency_key = request.IdempotencyKey },
+            new { idempotency_key = request.IdempotencyKey, batch_id = batchId },
             cancellationToken);
 
         created = await TransitionAsync(
@@ -101,7 +142,6 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                 warehouse_endpoint_unresolved = request.TaskType == TransportTaskType.BringEmpty && !request.SourceSlotId.HasValue
             });
 
-        await transaction.CommitAsync(cancellationToken);
         return new CreateTransportResult(created, WasIdempotentReplay: false);
     }
 
@@ -712,6 +752,7 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         NpgsqlTransaction transaction,
         CreateTransportRequest request,
         Guid taskTypeId,
+        Guid? batchId,
         CancellationToken cancellationToken)
     {
         var id = Guid.NewGuid();
@@ -721,12 +762,12 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                 id, idempotency_key, request_origin, requested_by,
                 machine_id, variant_id, layout_id, navigation_id,
                 product_group_id, part_id, container_type_id, task_type_id,
-                source_slot_id, destination_slot_id, status, priority)
+                source_slot_id, destination_slot_id, status, priority, batch_id)
             VALUES (
                 @id, @idempotency_key, @request_origin, @requested_by,
                 @machine_id, @variant_id, @layout_id, @navigation_id,
                 @product_group_id, @part_id, @container_type_id, @task_type_id,
-                @source_slot_id, @destination_slot_id, 'CREATED', @priority)
+                @source_slot_id, @destination_slot_id, 'CREATED', @priority, @batch_id)
             RETURNING request_no
             """,
             connection,
@@ -746,6 +787,7 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         AddNullableUuid(command, "source_slot_id", request.SourceSlotId);
         AddNullableUuid(command, "destination_slot_id", request.DestinationSlotId);
         command.Parameters.AddWithValue("priority", request.Priority);
+        AddNullableUuid(command, "batch_id", batchId);
         var requestNo = (long)(await command.ExecuteScalarAsync(cancellationToken)
             ?? throw new InvalidOperationException("Request insert did not return a request number."));
 
@@ -779,6 +821,69 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         command.Parameters.AddWithValue("key", key);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadRequest(reader) : null;
+    }
+
+    private static async Task<Guid> InsertBatchAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO ops.transport_batches (idempotency_key, request_origin, requested_by, machine_id)
+            VALUES (@idempotency_key, @request_origin, @requested_by, @machine_id)
+            RETURNING id
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("idempotency_key", request.IdempotencyKey);
+        command.Parameters.AddWithValue("request_origin", request.Origin.ToDatabase());
+        AddNullableUuid(command, "requested_by", request.RequestedBy);
+        command.Parameters.AddWithValue("machine_id", request.MachineId);
+        return (Guid)(await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Batch insert did not return an id."));
+    }
+
+    private static async Task<TransportBatchResult?> FindBatchByIdempotencyKeyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        Guid batchId;
+        Guid machineId;
+        await using (var command = new NpgsqlCommand(
+                         "SELECT id, machine_id FROM ops.transport_batches WHERE idempotency_key = @key",
+                         connection,
+                         transaction))
+        {
+            command.Parameters.AddWithValue("key", key);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return null;
+            }
+
+            batchId = reader.GetGuid(0);
+            machineId = reader.GetGuid(1);
+        }
+
+        var children = new List<TransportRequestSnapshot>();
+        await using (var command = new NpgsqlCommand(
+                         RequestSelectSql + " WHERE r.batch_id = @batch_id ORDER BY r.request_no",
+                         connection,
+                         transaction))
+        {
+            command.Parameters.AddWithValue("batch_id", batchId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                children.Add(ReadRequest(reader));
+            }
+        }
+
+        return new TransportBatchResult(batchId, key, machineId, children, WasIdempotentReplay: false);
     }
 
     private static async Task<TransportRequestSnapshot> FindRequestAsync(

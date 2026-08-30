@@ -123,6 +123,9 @@ if ($schemaExists -ne '1') {
 Write-Host 'Applying migration 002 (002_operator_employee_identity.sql)...' -ForegroundColor Cyan
 & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\002_operator_employee_identity.sql') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Applying 002_operator_employee_identity.sql failed with exit code $LASTEXITCODE" }
+Write-Host 'Applying migration 003 (003_transport_batch.sql)...' -ForegroundColor Cyan
+& $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\003_transport_batch.sql') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Applying 003_transport_batch.sql failed with exit code $LASTEXITCODE" }
 
 Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cyan
 $seedFiles = @(

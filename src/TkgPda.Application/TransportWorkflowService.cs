@@ -13,6 +13,15 @@ public sealed class TransportWorkflowService(ITransportWorkflowStore store)
         return store.CreateAndQueueAsync(request, cancellationToken);
     }
 
+    public Task<TransportBatchResult> CreateBatchAsync(
+        CreateTransportBatchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.ValidateShape();
+        return store.CreateBatchAndQueueAsync(request, cancellationToken);
+    }
+
     public Task<CancelTransportResult> CancelAsync(
         Guid requestId,
         Guid? actorUserId,

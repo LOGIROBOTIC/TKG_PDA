@@ -219,7 +219,50 @@ public sealed class PostgresTransportReadinessTests
             ("machine_id", context.MachineId),
             ("variant_id", context.VariantId),
             ("layout_id", context.LayoutId));
+        await EnsureDefaultBufferSlotsAsync(context.LayoutId);
         return context;
+    }
+
+    /// <summary>
+    /// Customer Workflow — Empty Container Buffer: every BRING_EMPTY request
+    /// in this file omits an explicit source, so it now needs a configured
+    /// EMPTY_STORAGE buffer slot ready to bring (OCCUPIED/EMPTY) — see
+    /// PostgresTransportWorkflowStore.AllocateBufferSlotAsync. A small pool
+    /// (rather than one) lets this file's multi-request tests each get their
+    /// own; a high display_order keeps them out of LogisticsSlotsAsync's
+    /// ordered picks.
+    /// </summary>
+    private async Task EnsureDefaultBufferSlotsAsync(Guid layoutId)
+    {
+        const int poolSize = 6;
+        for (var i = 1; i <= poolSize; i++)
+        {
+            var code = $"BUFFER-TEST-BRING-{i}";
+            await ExecuteAsync(
+                """
+                INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, display_order)
+                SELECT @layout_id, @code, @display_name, 'EMPTY_STORAGE', 9000
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code
+                )
+                """,
+                ("layout_id", layoutId),
+                ("code", code),
+                ("display_name", $"Test Buffer Bring {i}"));
+            var bufferSlotId = await ScalarAsync<Guid>(
+                "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code",
+                ("layout_id", layoutId),
+                ("code", code));
+            await ExecuteAsync(
+                """
+                INSERT INTO ops.slot_runtime_state (layout_slot_id, occupancy_state, load_state)
+                VALUES (@slot_id, 'OCCUPIED', 'EMPTY')
+                ON CONFLICT (layout_slot_id) DO UPDATE
+                SET occupancy_state = 'OCCUPIED', load_state = 'EMPTY',
+                    row_version = ops.slot_runtime_state.row_version + 1, updated_at = now()
+                """,
+                ("slot_id", bufferSlotId));
+        }
     }
 
     private async Task<LayoutContext> ContextAsync(string machineCode, string variantCode)

@@ -96,10 +96,14 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
 
         Assert.Equal("BRING_EMPTY", batch.Items[0].Operation);
         Assert.Equal(slots[0], batch.Items[0].DestinationSlotId);
-        Assert.Null(batch.Items[0].SourceSlotId);
+        // Customer Workflow — Empty Container Buffer: BRING_EMPTY's omitted
+        // source is now auto-allocated from a configured EMPTY_STORAGE slot —
+        // independently per child, so each gets its own buffer slot.
+        Assert.NotNull(batch.Items[0].SourceSlotId);
         Assert.Equal("BRING_EMPTY", batch.Items[1].Operation);
         Assert.Equal(slots[1], batch.Items[1].DestinationSlotId);
-        Assert.Null(batch.Items[1].SourceSlotId);
+        Assert.NotNull(batch.Items[1].SourceSlotId);
+        Assert.NotEqual(batch.Items[0].SourceSlotId, batch.Items[1].SourceSlotId);
     }
 
     [Fact]

@@ -87,6 +87,19 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
         await LockAndValidateRuntimeContextAsync(connection, transaction, request, cancellationToken);
         var taskTypeId = await ResolveAndValidateMasterDataAsync(connection, transaction, request, cancellationToken);
 
+        // Customer Workflow — Empty Container Buffer: when the operator did not
+        // pick a physical buffer slot themselves, resolve one now from
+        // configured EMPTY_STORAGE slots on this layout — never left to a
+        // guessed/deferred destination.
+        if (TransportRules.RequiresBufferSlot(request.TaskType)
+            && TransportRules.BufferSlotId(request.TaskType, request.SourceSlotId, request.DestinationSlotId) is null)
+        {
+            var allocatedBufferSlotId = await AllocateBufferSlotAsync(connection, transaction, request, cancellationToken);
+            request = request.TaskType == TransportTaskType.BringEmpty
+                ? request with { SourceSlotId = allocatedBufferSlotId }
+                : request with { DestinationSlotId = allocatedBufferSlotId };
+        }
+
         var suppliedSlotIds = new[] { request.SourceSlotId, request.DestinationSlotId }
             .Where(static value => value.HasValue)
             .Select(static value => value!.Value)
@@ -104,6 +117,12 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
 
         await EnsureSlotsAreAvailableAsync(connection, transaction, suppliedSlotIds, cancellationToken);
         TransportRules.ValidateReservation(request, slots[request.ReservedSlotId]);
+
+        var bufferSlotId = TransportRules.BufferSlotId(request.TaskType, request.SourceSlotId, request.DestinationSlotId);
+        if (bufferSlotId.HasValue)
+        {
+            TransportRules.ValidateBufferSlot(request, slots[bufferSlotId.Value]);
+        }
 
         var created = await InsertRequestAsync(connection, transaction, request, taskTypeId, batchId, cancellationToken);
         await InsertEventAsync(
@@ -279,6 +298,13 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             var slotId = ReservedSlotId(request);
             var completedState = TransportRules.CompletionState(request.TaskType, request.PartId, request.ContainerTypeId);
             await UpdateSlotStateAsync(connection, transaction, slotId, completedState, updatedBy: null, cancellationToken);
+
+            var bufferSlotId = TransportRules.BufferSlotId(request.TaskType, request.SourceSlotId, request.DestinationSlotId);
+            if (bufferSlotId.HasValue)
+            {
+                var bufferState = TransportRules.BufferCompletionState(request.TaskType, request.PartId, request.ContainerTypeId);
+                await UpdateSlotStateAsync(connection, transaction, bufferSlotId.Value, bufferState, updatedBy: null, cancellationToken);
+            }
         }
 
         request = await UpdateRequestStatusAsync(connection, transaction, request, nextStatus, cancellationToken);
@@ -772,6 +798,57 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                 reader.IsDBNull(9) ? null : reader.GetGuid(9)));
     }
 
+    /// <summary>
+    /// Customer Workflow — Empty Container Buffer: atomically picks one
+    /// configured EMPTY_STORAGE slot on the request's layout that is
+    /// currently in the state this operation requires and has no active
+    /// transport reservation. <c>FOR UPDATE ... SKIP LOCKED</c> makes this
+    /// safe under concurrency without any broader workflow redesign: two
+    /// concurrent callers competing for the same candidate set simply land
+    /// on different rows (or, if only one candidate exists, the second
+    /// caller correctly finds none available rather than double-booking it).
+    /// Ordering by the slot's own configured display order keeps the choice
+    /// deterministic.
+    /// </summary>
+    private static async Task<Guid> AllocateBufferSlotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var expected = TransportRules.ExpectedBufferState(request.TaskType);
+        await using var command = new NpgsqlCommand(
+            $"""
+             SELECT ls.id
+             FROM master.layout_slots ls
+             JOIN ops.slot_runtime_state rs ON rs.layout_slot_id = ls.id
+             WHERE ls.layout_id = @layout_id
+               AND ls.slot_role = 'EMPTY_STORAGE'
+               AND ls.is_enabled
+               AND rs.occupancy_state = @occupancy_state
+               AND rs.load_state = @load_state
+               AND NOT EXISTS (
+                   SELECT 1 FROM ops.transport_requests tr
+                   WHERE tr.status IN ({ActiveStatusesSql})
+                     AND (tr.source_slot_id = ls.id OR tr.destination_slot_id = ls.id)
+               )
+             ORDER BY ls.display_order, ls.code
+             FOR UPDATE OF rs SKIP LOCKED
+             LIMIT 1
+             """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("layout_id", request.LayoutId);
+        command.Parameters.AddWithValue("occupancy_state", expected.Occupancy.ToDatabase());
+        command.Parameters.AddWithValue("load_state", expected.Load.ToDatabase());
+        var slotId = await command.ExecuteScalarAsync(cancellationToken);
+        return slotId is Guid id
+            ? id
+            : throw new WorkflowRuleException(
+                "EMPTY_BUFFER_UNAVAILABLE",
+                $"No configured EMPTY_STORAGE buffer slot is currently {expected.Occupancy.ToDatabase()}/{expected.Load.ToDatabase()} and available on this layout.");
+    }
+
     private static async Task EnsureSlotsAreAvailableAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -1021,6 +1098,14 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
 
     private static void EnsureEquivalentPayload(TransportRequestSnapshot existing, CreateTransportRequest request)
     {
+        // Customer Workflow — Empty Container Buffer: a retry that again omits
+        // the buffer-side slot is still the same logical request even though
+        // the stored copy now carries whichever slot auto-allocation resolved
+        // the first time — only the reserved (machine) side must match
+        // exactly.
+        var defersBufferSource = request.TaskType == TransportTaskType.BringEmpty && request.SourceSlotId is null;
+        var defersBufferDestination = request.TaskType == TransportTaskType.RemoveEmpty && request.DestinationSlotId is null;
+
         var equivalent = existing.Origin == request.Origin
             && existing.RequestedBy == request.RequestedBy
             && existing.MachineId == request.MachineId
@@ -1031,8 +1116,8 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             && existing.PartId == request.PartId
             && existing.ContainerTypeId == request.ContainerTypeId
             && existing.TaskType == request.TaskType
-            && existing.SourceSlotId == request.SourceSlotId
-            && existing.DestinationSlotId == request.DestinationSlotId
+            && (defersBufferSource || existing.SourceSlotId == request.SourceSlotId)
+            && (defersBufferDestination || existing.DestinationSlotId == request.DestinationSlotId)
             && existing.Priority == request.Priority;
 
         if (!equivalent)

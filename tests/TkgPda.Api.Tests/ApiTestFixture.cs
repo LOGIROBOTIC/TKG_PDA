@@ -197,7 +197,51 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             ("machine_id", context.MachineId),
             ("variant_id", context.VariantId),
             ("layout_id", context.LayoutId));
+        await EnsureDefaultBufferSlotsAsync(context.LayoutId);
         return context;
+    }
+
+    /// <summary>
+    /// Customer Workflow — Empty Container Buffer: every BRING_EMPTY/
+    /// REMOVE_EMPTY request now requires a configured EMPTY_STORAGE buffer
+    /// slot in the right state (see PostgresTransportWorkflowStore.
+    /// AllocateBufferSlotAsync). Pre-provisions a small pool of ready-to-bring
+    /// (OCCUPIED/EMPTY) and ready-to-receive (VACANT/UNKNOWN) buffer slots on
+    /// the layout — enough for concurrent-request tests to each get their
+    /// own — with a high display_order that keeps them out of the way of
+    /// LogisticsSlotsAsync's ordered slot picks, so every existing test that
+    /// omits an explicit source/destination for those operations keeps
+    /// working exactly as before via auto-allocation.
+    /// </summary>
+    private async Task EnsureDefaultBufferSlotsAsync(Guid layoutId)
+    {
+        const int poolSize = 6;
+        for (var i = 1; i <= poolSize; i++)
+        {
+            var bringBuffer = await EnsureLayoutSlotAsync(layoutId, $"BUFFER-TEST-BRING-{i}", $"Test Buffer Bring {i}");
+            await SetSlotAsync(bringBuffer, "OCCUPIED", "EMPTY");
+            var removeBuffer = await EnsureLayoutSlotAsync(layoutId, $"BUFFER-TEST-REMOVE-{i}", $"Test Buffer Remove {i}");
+            await SetSlotAsync(removeBuffer, "VACANT", "UNKNOWN");
+        }
+    }
+
+    private async Task<Guid> EnsureLayoutSlotAsync(Guid layoutId, string code, string displayName)
+    {
+        await ExecuteAsync(
+            """
+            INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, display_order)
+            SELECT @layout_id, @code, @display_name, 'EMPTY_STORAGE', 9000
+            WHERE NOT EXISTS (
+                SELECT 1 FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code
+            )
+            """,
+            ("layout_id", layoutId),
+            ("code", code),
+            ("display_name", displayName));
+        return await ScalarAsync<Guid>(
+            "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code",
+            ("layout_id", layoutId),
+            ("code", code));
     }
 
     public async Task<LayoutContext> ContextAsync(string machineCode, string variantCode)

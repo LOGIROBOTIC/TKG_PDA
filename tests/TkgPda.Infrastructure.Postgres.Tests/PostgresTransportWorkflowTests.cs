@@ -11,8 +11,12 @@ public sealed class PostgresTransportWorkflowTests
     private readonly string _connectionString = Environment.GetEnvironmentVariable("TKG_PDA_TEST_CONNECTION_STRING") ?? string.Empty;
 
     [PostgresFact]
-    public async Task Bring_empty_queues_with_optional_warehouse_source_and_does_not_change_slot_state()
+    public async Task Bring_empty_auto_allocates_a_configured_buffer_source_without_changing_any_slot_state()
     {
+        // Customer Workflow — Empty Container Buffer: an operator-omitted
+        // source is no longer left unresolved — the backend now allocates a
+        // concrete, configured EMPTY_STORAGE slot for it (and reserves it),
+        // while leaving both slots' occupancy/load untouched until completion.
         await ResetAsync();
         var context = await ConfigureAsync("SH-01-A", "1");
         var slotId = await LogisticsSlotAsync(context.LayoutId, requireContainer: false);
@@ -20,11 +24,13 @@ public sealed class PostgresTransportWorkflowTests
         await using var store = new PostgresTransportWorkflowStore(_connectionString);
 
         var result = await store.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "bring-optional-source", destination: slotId));
-        var state = await ReadSlotStateAsync(slotId);
+        var destinationState = await ReadSlotStateAsync(slotId);
 
         Assert.Equal(TransportRequestStatus.Queued, result.Request.Status);
-        Assert.Null(result.Request.SourceSlotId);
-        Assert.Equal((OccupancyState.Vacant, LoadState.Unknown), state);
+        Assert.NotNull(result.Request.SourceSlotId);
+        var bufferState = await ReadSlotStateAsync(result.Request.SourceSlotId!.Value);
+        Assert.Equal((OccupancyState.Occupied, LoadState.Empty), bufferState);
+        Assert.Equal((OccupancyState.Vacant, LoadState.Unknown), destinationState);
         Assert.Equal(3, await ScalarAsync<long>("SELECT count(*) FROM ops.transport_request_events WHERE transport_request_id = @id", ("id", result.Request.Id)));
     }
 
@@ -576,7 +582,53 @@ public sealed class PostgresTransportWorkflowTests
             ("machine_id", context.MachineId),
             ("variant_id", context.VariantId),
             ("layout_id", context.LayoutId));
+        await EnsureDefaultBufferSlotsAsync(context.LayoutId);
         return context;
+    }
+
+    /// <summary>
+    /// Customer Workflow — Empty Container Buffer: every BRING_EMPTY/
+    /// REMOVE_EMPTY request now requires a configured EMPTY_STORAGE buffer
+    /// slot in the right state (see PostgresTransportWorkflowStore.
+    /// AllocateBufferSlotAsync). Pre-provisions a small pool of ready-to-bring
+    /// (OCCUPIED/EMPTY) and ready-to-receive (VACANT/UNKNOWN) buffer slots on
+    /// the layout — enough for this file's existing concurrent-request tests
+    /// to each get their own — with a high display_order that keeps them out
+    /// of the way of LogisticsSlotAsync/LogisticsSlotsAsync's ordered slot
+    /// picks, so every existing test that omits an explicit source/
+    /// destination for those operations keeps working exactly as before via
+    /// auto-allocation. ResetAsync() truncates slot_runtime_state every time,
+    /// so this must re-run per test (called from ConfigureAsync).
+    /// </summary>
+    private async Task EnsureDefaultBufferSlotsAsync(Guid layoutId)
+    {
+        const int poolSize = 6;
+        for (var i = 1; i <= poolSize; i++)
+        {
+            var bringBuffer = await EnsureLayoutSlotAsync(layoutId, $"BUFFER-TEST-BRING-{i}", $"Test Buffer Bring {i}");
+            await SetSlotAsync(bringBuffer, OccupancyState.Occupied, LoadState.Empty);
+            var removeBuffer = await EnsureLayoutSlotAsync(layoutId, $"BUFFER-TEST-REMOVE-{i}", $"Test Buffer Remove {i}");
+            await SetSlotAsync(removeBuffer, OccupancyState.Vacant, LoadState.Unknown);
+        }
+    }
+
+    private async Task<Guid> EnsureLayoutSlotAsync(Guid layoutId, string code, string displayName)
+    {
+        await ExecuteAsync(
+            """
+            INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, display_order)
+            SELECT @layout_id, @code, @display_name, 'EMPTY_STORAGE', 9000
+            WHERE NOT EXISTS (
+                SELECT 1 FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code
+            )
+            """,
+            ("layout_id", layoutId),
+            ("code", code),
+            ("display_name", displayName));
+        return await ScalarAsync<Guid>(
+            "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND code = @code",
+            ("layout_id", layoutId),
+            ("code", code));
     }
 
     private async Task<LayoutContext> ContextAsync(string machineCode, string variantCode)

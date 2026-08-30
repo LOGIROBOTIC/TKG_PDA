@@ -1256,6 +1256,88 @@ COMMIT;
 """
 
 
+def eligible_slot_part_pairs(dataset: dict[str, Any]) -> list[dict[str, str]]:
+    """Curated (machine_code, layout_code, slot_code, part_code) rows for
+    master.layout_slot_parts — the ONLY input the automatic machine-slot
+    resolver may use.
+
+    A pair is included only when the slot's part evidence is fully resolved
+    (part_association_unresolved is False) AND the resolved part is not
+    flagged as a variant mismatch (present in master data but not planned
+    for this layout's machine/variant). Both are genuine ambiguity signals
+    the pipeline already computes from the customer source; anything short
+    of "resolved and variant-consistent" is left unmapped rather than
+    guessed, per the same standard this pipeline already holds itself to for
+    parts and containers.
+    """
+
+    pairs: list[dict[str, str]] = []
+    for slot in dataset["layout_slots"]:
+        if slot["slot_role"] == "MACHINE" or slot["part_association_unresolved"]:
+            continue
+        metadata = slot["metadata"]
+        mismatched = set(metadata.get("variant_mismatch_part_codes", ()))
+        for part_code in metadata.get("resolved_part_codes", ()):
+            if part_code in mismatched:
+                continue
+            pairs.append(
+                {
+                    "machine_code": slot["machine_code"],
+                    "layout_code": slot["layout_code"],
+                    "slot_code": slot["code"],
+                    "part_code": part_code,
+                }
+            )
+    pairs.sort(key=lambda row: (row["machine_code"], row["layout_code"], row["slot_code"], row["part_code"]))
+    return pairs
+
+
+def generate_slot_part_seed_sql(dataset: dict[str, Any], pairs: list[dict[str, str]]) -> str:
+    pair_values = values_clause(
+        (
+            sql_literal(row["machine_code"]),
+            sql_literal(row["layout_code"]),
+            sql_literal(row["slot_code"]),
+            sql_literal(row["part_code"]),
+        )
+        for row in pairs
+    )
+    unmapped = sum(
+        1
+        for slot in dataset["layout_slots"]
+        if slot["slot_role"] != "MACHINE" and slot["part_association_unresolved"]
+    )
+    return f"""-- TKG PDA Phase 02B generated Part <-> Layout Slot assignments
+-- schema_version: {dataset['schema_version']}
+-- source_digest: {dataset['source_digest']}
+-- curated pairs: {len(pairs)}; logistics slots left unmapped (unresolved part evidence): {unmapped}
+-- Populated ONLY where the customer-derived source relationship is
+-- unambiguous (part_association_unresolved = false and the resolved part
+-- is not a variant mismatch); everything else remains unmapped rather than
+-- guessed. See db/migrations/005_layout_slot_part_mapping.sql.
+-- deterministic output; do not edit by hand
+
+BEGIN;
+
+WITH source(machine_code, layout_code, slot_code, part_code) AS (
+VALUES
+{pair_values}
+), resolved AS (
+    SELECT ls.id AS layout_slot_id, p.id AS part_id
+    FROM source s
+    JOIN master.machines m ON m.code = s.machine_code
+    JOIN master.layouts l ON l.machine_id = m.id AND l.code = s.layout_code AND l.version = 1
+    JOIN master.layout_slots ls ON ls.layout_id = l.id AND ls.code = s.slot_code
+    JOIN master.parts p ON p.part_code = s.part_code
+)
+INSERT INTO master.layout_slot_parts (layout_slot_id, part_id)
+SELECT layout_slot_id, part_id FROM resolved
+ON CONFLICT (layout_slot_id, part_id) DO NOTHING;
+
+COMMIT;
+"""
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -1274,7 +1356,12 @@ def write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict[str, An
             writer.writerow(row)
 
 
-def run_pipeline(project_root: Path, output_dir: Path, seed_path: Path) -> dict[str, Any]:
+def run_pipeline(
+    project_root: Path,
+    output_dir: Path,
+    seed_path: Path,
+    slot_part_seed_path: Path,
+) -> dict[str, Any]:
     project_root = project_root.resolve()
     output_dir = output_dir.resolve()
     seed_path = seed_path.resolve()
@@ -1390,6 +1477,18 @@ def run_pipeline(project_root: Path, output_dir: Path, seed_path: Path) -> dict[
     seed_path.parent.mkdir(parents=True, exist_ok=True)
     seed_path.write_text(generate_seed_sql(dataset), encoding="utf-8", newline="\n")
 
+    slot_part_pairs = eligible_slot_part_pairs(dataset)
+    dataset["slot_part_pairs"] = slot_part_pairs
+    write_csv(
+        output_dir / "layout_slot_part_assignments.csv",
+        ("machine_code", "layout_code", "slot_code", "part_code"),
+        slot_part_pairs,
+    )
+    slot_part_seed_path.parent.mkdir(parents=True, exist_ok=True)
+    slot_part_seed_path.write_text(
+        generate_slot_part_seed_sql(dataset, slot_part_pairs), encoding="utf-8", newline="\n"
+    )
+
     if build_manifest(project_root) != dataset["manifest"]:
         raise StructuralExtractionError("Source files changed while generated outputs were being written")
     return dataset
@@ -1400,11 +1499,16 @@ def main() -> None:
     parser.add_argument("--project-root", type=Path, default=Path("."))
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--seed-path", type=Path)
+    parser.add_argument("--slot-part-seed-path", type=Path)
     args = parser.parse_args()
     project_root = args.project_root.resolve()
     output_dir = args.output_dir or project_root / "data/generated/phase_02b"
     seed_path = args.seed_path or project_root / "db/seeds/generated/002b_customer_physical_layouts.sql"
-    dataset = run_pipeline(project_root, output_dir, seed_path)
+    slot_part_seed_path = (
+        args.slot_part_seed_path
+        or project_root / "db/seeds/generated/002c_customer_layout_slot_part_assignments.sql"
+    )
+    dataset = run_pipeline(project_root, output_dir, seed_path, slot_part_seed_path)
     print(json.dumps(dataset["counts"], ensure_ascii=False, sort_keys=True))
 
 

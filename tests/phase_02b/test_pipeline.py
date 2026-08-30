@@ -15,6 +15,7 @@ from tools.phase_02b.pipeline import (  # noqa: E402
     KNOWN_MACHINES,
     build_dataset,
     build_manifest,
+    eligible_slot_part_pairs,
     normalize_identifier,
     normalize_label,
     rectangles_overlap,
@@ -46,8 +47,8 @@ class Phase02BPipelineTests(unittest.TestCase):
     def test_02_rerun_is_byte_equivalent_including_png_and_sql(self) -> None:
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             first_root, second_root = Path(first), Path(second)
-            run_pipeline(PROJECT_ROOT, first_root / "output", first_root / "seed.sql")
-            run_pipeline(PROJECT_ROOT, second_root / "output", second_root / "seed.sql")
+            run_pipeline(PROJECT_ROOT, first_root / "output", first_root / "seed.sql", first_root / "slot_parts.sql")
+            run_pipeline(PROJECT_ROOT, second_root / "output", second_root / "seed.sql", second_root / "slot_parts.sql")
             self.assertEqual(directory_hashes(first_root), directory_hashes(second_root))
 
     def test_03_all_layouts_use_the_known_nine_machines(self) -> None:
@@ -141,6 +142,37 @@ class Phase02BPipelineTests(unittest.TestCase):
         expected = json.loads((Path(__file__).parent / "expected_counts.json").read_text(encoding="utf-8"))
         for key, value in expected.items():
             self.assertEqual(self.dataset["counts"][key], value, key)
+
+    def test_14_slot_part_pairs_exclude_unresolved_and_mismatched_evidence(self) -> None:
+        pairs = eligible_slot_part_pairs(self.dataset)
+        self.assertTrue(pairs)
+
+        slots_by_key = {
+            (item["machine_code"], item["layout_code"], item["code"]): item
+            for item in self.dataset["layout_slots"]
+        }
+        for row in pairs:
+            slot = slots_by_key[(row["machine_code"], row["layout_code"], row["slot_code"])]
+            self.assertNotEqual(slot["slot_role"], "MACHINE")
+            self.assertFalse(slot["part_association_unresolved"])
+            self.assertNotIn(row["part_code"], slot["metadata"].get("variant_mismatch_part_codes", ()))
+            self.assertIn(row["part_code"], slot["metadata"]["resolved_part_codes"])
+
+        # Every logistics slot with unresolved part evidence contributes zero pairs.
+        unresolved_slots = {
+            (item["machine_code"], item["layout_code"], item["code"])
+            for item in self.dataset["layout_slots"]
+            if item["slot_role"] != "MACHINE" and item["part_association_unresolved"]
+        }
+        pair_slots = {(row["machine_code"], row["layout_code"], row["slot_code"]) for row in pairs}
+        self.assertTrue(unresolved_slots.isdisjoint(pair_slots))
+
+        seed = (
+            PROJECT_ROOT / "db/seeds/generated/002c_customer_layout_slot_part_assignments.sql"
+        ).read_text(encoding="utf-8")
+        self.assertIn(f"curated pairs: {len(pairs)}", seed)
+        self.assertNotIn("INSERT INTO master.parts", seed)
+        self.assertNotIn("INSERT INTO master.layout_slots", seed)
 
 
 if __name__ == "__main__":

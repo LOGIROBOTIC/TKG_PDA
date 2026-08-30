@@ -129,11 +129,15 @@ if ($LASTEXITCODE -ne 0) { throw "Applying 003_transport_batch.sql failed with e
 Write-Host 'Applying migration 004 (004_transport_request_readiness.sql)...' -ForegroundColor Cyan
 & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\004_transport_request_readiness.sql') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Applying 004_transport_request_readiness.sql failed with exit code $LASTEXITCODE" }
+Write-Host 'Applying migration 005 (005_layout_slot_part_mapping.sql)...' -ForegroundColor Cyan
+& $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Applying 005_layout_slot_part_mapping.sql failed with exit code $LASTEXITCODE" }
 
 Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cyan
 $seedFiles = @(
     (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql'),
-    (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql')
+    (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql'),
+    (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql')
 )
 foreach ($sf in $seedFiles) {
     & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f $sf | Out-Null

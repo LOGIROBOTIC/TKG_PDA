@@ -790,6 +790,27 @@ class WarehousePreparationRequest {
       );
 }
 
+/// Customer Monitoring — Robot Alarm Visibility: coarse Operator signal only
+/// (GET /api/v1/rds/robot-alarm-summary). No robot identity or diagnostic
+/// detail is exposed at this projection.
+class RobotAlarmSummary {
+  const RobotAlarmSummary({
+    required this.hasActiveRobotAlarm,
+    required this.highestSeverity,
+    required this.activeAlarmCount,
+  });
+
+  final bool hasActiveRobotAlarm;
+  final String? highestSeverity;
+  final int activeAlarmCount;
+
+  factory RobotAlarmSummary.fromJson(JsonMap json) => RobotAlarmSummary(
+    hasActiveRobotAlarm: json['hasActiveRobotAlarm'] as bool? ?? false,
+    highestSeverity: json['highestSeverity'] as String?,
+    activeAlarmCount: _integer(json['activeAlarmCount']),
+  );
+}
+
 /// A single [TransportCommand] bound to its own child idempotency key, as
 /// required by POST /api/v1/transport-batches. Each item stays an
 /// independent TransportRequest server-side; the batch is a pure grouping

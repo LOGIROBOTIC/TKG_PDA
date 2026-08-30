@@ -105,6 +105,7 @@ public sealed class RdsReadClient(
 {
     private const string WorkSitesEndpoint = "/api/work-sites/sites";
     private const string WindTasksEndpoint = "/api/queryWindTask";
+    private const string RobotAlarmsEndpoint = "/api/agv-report/core";
     private readonly object lastReadLock = new();
     private DateTimeOffset? lastSuccessfulRead;
 
@@ -121,7 +122,7 @@ public sealed class RdsReadClient(
         Guid correlationId,
         CancellationToken cancellationToken = default)
     {
-        using var document = await ReadAsync(WorkSitesEndpoint, new { }, correlationId, cancellationToken);
+        using var document = await ReadAsync(WorkSitesEndpoint, HttpMethod.Post, new { }, correlationId, cancellationToken);
         var root = document.RootElement;
         var (code, message, data) = ValidateEnvelope(root, WorkSitesEndpoint, correlationId);
         if (data.ValueKind != JsonValueKind.Array)
@@ -180,7 +181,7 @@ public sealed class RdsReadClient(
         Add(filters, "status", query.Status);
         Add(filters, "agvId", query.AgvId);
         var body = new { query.CurrentPage, query.PageSize, queryParam = filters };
-        using var document = await ReadAsync(WindTasksEndpoint, body, correlationId, cancellationToken);
+        using var document = await ReadAsync(WindTasksEndpoint, HttpMethod.Post, body, correlationId, cancellationToken);
         var root = document.RootElement;
         var (code, message, data) = ValidateEnvelope(root, WindTasksEndpoint, correlationId);
         if (data.ValueKind != JsonValueKind.Object)
@@ -219,7 +220,117 @@ public sealed class RdsReadClient(
         return new(page, code, message, WindTasksEndpoint, correlationId, readAt);
     }
 
-    private async Task<JsonDocument> ReadAsync(string endpoint, object body, Guid correlationId, CancellationToken cancellationToken)
+    public async Task<RdsReadResult<RdsRobotAlarmReport>> GetRobotAlarmsAsync(
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        using var document = await ReadAsync(RobotAlarmsEndpoint, HttpMethod.Get, null, correlationId, cancellationToken);
+        var root = document.RootElement;
+        var (code, message, data) = ValidateEnvelope(root, RobotAlarmsEndpoint, correlationId);
+        if (data.ValueKind != JsonValueKind.Object
+            || !data.TryGetProperty("report", out var report)
+            || report.ValueKind != JsonValueKind.Array)
+        {
+            throw Failure("RDS_INVALID_RESPONSE", "RDS robot report data is not an array.", RobotAlarmsEndpoint, correlationId, code);
+        }
+
+        var alarms = new List<RdsRobotAlarmSnapshot>();
+        var robots = new List<RdsRobotStateSnapshot>();
+        foreach (var robot in report.EnumerateArray())
+        {
+            if (robot.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var robotId = Text(robot, "uuid") ?? Text(robot, "vehicle_id");
+            if (string.IsNullOrEmpty(robotId))
+            {
+                continue;
+            }
+
+            var dispatchable = robot.TryGetProperty("dispatchable", out var dispatchableElement)
+                ? dispatchableElement.ValueKind switch
+                {
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    _ => (bool?)null,
+                }
+                : null;
+            var model = robot.TryGetProperty("basic_info", out var basicInfo) && basicInfo.ValueKind == JsonValueKind.Object
+                ? Text(basicInfo, "model")
+                : null;
+            robots.Add(new RdsRobotStateSnapshot(robotId, model, dispatchable, UndispatchableReasonText(robot)));
+
+            if (robot.TryGetProperty("rbk_report", out var rbkReport) && rbkReport.ValueKind == JsonValueKind.Object)
+            {
+                AppendAlarms(alarms, rbkReport, robotId, "fatals", "fatal");
+                AppendAlarms(alarms, rbkReport, robotId, "errors", "error");
+                AppendAlarms(alarms, rbkReport, robotId, "warnings", "warning");
+                AppendAlarms(alarms, rbkReport, robotId, "notices", "notice");
+            }
+        }
+
+        var readAt = MarkSuccess();
+        logger.LogInformation(
+            "RDS read succeeded for {Endpoint} with {Count} alarms across {RobotCount} robots and correlation {CorrelationId}.",
+            RobotAlarmsEndpoint,
+            alarms.Count,
+            robots.Count,
+            correlationId);
+        return new(new RdsRobotAlarmReport(alarms, robots), code, message, RobotAlarmsEndpoint, correlationId, readAt);
+    }
+
+    private static void AppendAlarms(List<RdsRobotAlarmSnapshot> alarms, JsonElement rbkReport, string robotId, string bucketName, string severity)
+    {
+        if (!rbkReport.TryGetProperty(bucketName, out var bucket) || bucket.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var item in bucket.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var code = Text(item, "code");
+            if (string.IsNullOrEmpty(code))
+            {
+                continue;
+            }
+
+            alarms.Add(new RdsRobotAlarmSnapshot(
+                robotId,
+                severity,
+                code,
+                Text(item, "desc", preserveEmpty: true),
+                Text(item, "time"),
+                Number(item, "times")));
+        }
+    }
+
+    // Only booleans with an unambiguous meaning are surfaced; "unlock" and
+    // "dispatchable_status" are numeric codes whose semantics are not
+    // documented, so they are left out rather than guessed at.
+    private static readonly string[] UndispatchableReasonFlags =
+        ["disconnect", "unconfirmed_reloc", "low_battery", "current_map_invalid", "suspended"];
+
+    private static string? UndispatchableReasonText(JsonElement robot)
+    {
+        if (!robot.TryGetProperty("undispatchable_reason", out var reason) || reason.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var active = UndispatchableReasonFlags
+            .Where(flag => reason.TryGetProperty(flag, out var value) && value.ValueKind == JsonValueKind.True)
+            .ToArray();
+        return active.Length > 0 ? string.Join(", ", active) : null;
+    }
+
+    private async Task<JsonDocument> ReadAsync(string endpoint, HttpMethod method, object? body, Guid correlationId, CancellationToken cancellationToken)
     {
         if (!Enabled || options.BaseAddress is null)
         {
@@ -228,10 +339,11 @@ public sealed class RdsReadClient(
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            using var request = new HttpRequestMessage(method, endpoint);
+            if (body is not null)
             {
-                Content = JsonContent.Create(body)
-            };
+                request.Content = JsonContent.Create(body);
+            }
             request.Headers.TryAddWithoutValidation("language", "en");
             request.Headers.TryAddWithoutValidation("X-Correlation-ID", correlationId.ToString());
             using var response = await httpClientFactory.CreateClient("RdsReadOnly").SendAsync(

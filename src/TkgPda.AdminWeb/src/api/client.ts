@@ -17,6 +17,7 @@ import type {
   RoleCode,
   RdsConnectionStatus,
   RdsNavigationProfile,
+  RdsRobotAlarm,
   RdsSlotMapping,
   RdsSyncResult,
   RdsWorkSite,
@@ -186,6 +187,7 @@ export const createAdminApi = (token: string) => ({
   },
 
   rdsStatus: async (signal?: AbortSignal) => (await request<RdsConnectionStatus>('/api/v1/admin/rds/status', { token, signal })).data,
+  rdsRobotAlarms: async (signal?: AbortSignal) => (await request<RdsRobotAlarm[]>('/api/v1/admin/rds/alarms', { token, signal })).data,
   rdsNavigationProfiles: async (signal?: AbortSignal) => (await request<RdsNavigationProfile[]>('/api/v1/admin/rds/navigation-profiles', { token, signal })).data,
   syncRdsWorkSites: async (navigationProfileId: string) =>
     (await request<RdsSyncResult>('/api/v1/admin/rds/worksites/sync', { method: 'POST', token, body: { navigationProfileId } })).data,

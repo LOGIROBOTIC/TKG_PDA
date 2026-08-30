@@ -58,6 +58,11 @@ class OperationScreen extends StatelessWidget {
                 ProblemBanner(problem: problem),
               if (controller.notice case final notice?)
                 NoticeBanner(message: notice),
+              RobotAlarmBanner(
+                summary: controller.robotAlarmSummary,
+                error: controller.robotAlarmError,
+                onRetry: controller.retryRobotAlarmSummary,
+              ),
               if (controller.hasAmbiguousSubmission)
                 _AmbiguousSubmissionBanner(controller: controller),
               if (controller.hasAmbiguousBatchSubmission)

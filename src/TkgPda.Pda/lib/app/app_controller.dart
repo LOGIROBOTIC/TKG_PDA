@@ -131,6 +131,12 @@ class AppController extends ChangeNotifier {
   String? _warehouseError;
   final Set<String> _warehouseMarkingReady = {};
 
+  // Customer Monitoring — Robot Alarm Visibility: kept independent of
+  // _offline/_problem above, since an RDS-unavailable alarm read must never
+  // be shown to the operator as "no active alarm".
+  RobotAlarmSummary? _robotAlarmSummary;
+  String? _robotAlarmError;
+
   AppStage get stage => _stage;
   String? get deviceCode => _deviceCode;
   AuthenticatedUser? get user => _session.user;
@@ -153,6 +159,8 @@ class AppController extends ChangeNotifier {
       _session.isAuthenticated;
   bool get pollingActive => _pollTimer?.isActive ?? false;
   bool get resumeValidationPending => _resumeValidationPending;
+  RobotAlarmSummary? get robotAlarmSummary => _robotAlarmSummary;
+  String? get robotAlarmError => _robotAlarmError;
 
   List<MachineMainPartOption> get partOptions => _partOptions;
   bool get partOptionsLoading => _partOptionsLoading;
@@ -316,6 +324,8 @@ class AppController extends ChangeNotifier {
     _resetPartFirstState();
     _stage = AppStage.machines;
     _clearFeedback();
+    _robotAlarmSummary = null;
+    _robotAlarmError = null;
     notifyListeners();
   }
 
@@ -328,6 +338,7 @@ class AppController extends ChangeNotifier {
     if (showBusy) {
       _setBusy(true);
     }
+    unawaited(retryRobotAlarmSummary());
     try {
       final next = await _repository.operationalContext(machine.id);
       _context = next;
@@ -356,6 +367,22 @@ class AppController extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Customer Monitoring — Robot Alarm Visibility. Runs independently of
+  /// [refreshContext]'s own offline/problem handling: a failed alarm read
+  /// must surface as [robotAlarmError], never silently as "no active alarm".
+  Future<void> retryRobotAlarmSummary() async {
+    if (!_session.isAuthenticated) return;
+    try {
+      _robotAlarmSummary = await _repository.robotAlarmSummary();
+      _robotAlarmError = null;
+    } on ConnectivityException {
+      _robotAlarmError = 'Bağlantı yok — robot durumu güncellenemedi.';
+    } on ApiProblem {
+      _robotAlarmError = 'Robot durumu şu anda görüntülenemiyor.';
+    }
+    notifyListeners();
   }
 
   Future<void> switchVariant(VariantLayoutOption option) async {
@@ -1006,6 +1033,8 @@ class AppController extends ChangeNotifier {
     _warehouseError = null;
     _warehouseLoading = false;
     _warehouseMarkingReady.clear();
+    _robotAlarmSummary = null;
+    _robotAlarmError = null;
   }
 
   void _clearFeedback() {

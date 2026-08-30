@@ -61,6 +61,105 @@ public sealed class RdsReadClientTests
     }
 
     [Fact]
+    public async Task Robot_alarms_flatten_across_severity_buckets_with_correct_fields()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"sim_01","vehicle_id":"sim_01","dispatchable":true,
+                 "basic_info":{"model":"AMB-150"},
+                 "undispatchable_reason":{"disconnect":false,"unconfirmed_reloc":false,"unlock":0,"low_battery":false,"current_map_invalid":false,"dispatchable_status":0,"suspended":false},
+                 "rbk_report":{
+                    "fatals":[{"code":"F1","desc":"Fatal one","time":"2026-08-30T10:00:00Z","times":1}],
+                    "errors":[{"code":"E1","desc":"Error one","time":"2026-08-30T10:01:00Z","times":2}],
+                    "warnings":[{"code":"W1","desc":"Warning one","time":"2026-08-30T10:02:00Z","times":3}],
+                    "notices":[{"code":"N1","desc":"Notice one","time":"2026-08-30T10:03:00Z","times":4}]}}
+            ]}}
+            """);
+        var client = Client(handler);
+
+        var result = await client.GetRobotAlarmsAsync(Guid.NewGuid());
+
+        Assert.Equal(4, result.Data.Alarms.Count);
+        Assert.Equal("/api/agv-report/core", handler.LastPath);
+        Assert.Equal(HttpMethod.Get, handler.LastMethod);
+        var fatal = Assert.Single(result.Data.Alarms, a => a.Code == "F1");
+        Assert.Equal("fatal", fatal.Severity);
+        Assert.Equal("sim_01", fatal.RobotId);
+        Assert.Equal("Fatal one", fatal.Description);
+        Assert.Equal("2026-08-30T10:00:00Z", fatal.OccurredAt);
+        Assert.Equal(1, fatal.OccurrenceCount);
+        Assert.Equal("error", Assert.Single(result.Data.Alarms, a => a.Code == "E1").Severity);
+        Assert.Equal("warning", Assert.Single(result.Data.Alarms, a => a.Code == "W1").Severity);
+        Assert.Equal("notice", Assert.Single(result.Data.Alarms, a => a.Code == "N1").Severity);
+
+        var robot = Assert.Single(result.Data.Robots);
+        Assert.Equal("sim_01", robot.RobotId);
+        Assert.Equal("AMB-150", robot.Model);
+        Assert.True(robot.Dispatchable);
+        Assert.Null(robot.UndispatchableReason);
+    }
+
+    [Fact]
+    public async Task Robot_alarms_are_deterministic_across_multiple_robots()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"sim_01","dispatchable":true,"rbk_report":{"errors":[{"code":"E1","desc":"d1","time":"t1","times":1}]}},
+                {"uuid":"sim_02","dispatchable":false,
+                 "undispatchable_reason":{"disconnect":false,"unconfirmed_reloc":false,"unlock":0,"low_battery":true,"current_map_invalid":false,"dispatchable_status":0,"suspended":false},
+                 "rbk_report":{"warnings":[{"code":"UNKNOWN_CODE","desc":"d2","time":"t2","times":2}]}}
+            ]}}
+            """);
+        var client = Client(handler);
+
+        var result = await client.GetRobotAlarmsAsync(Guid.NewGuid());
+
+        Assert.Equal(["sim_01", "sim_02"], result.Data.Alarms.Select(a => a.RobotId));
+        Assert.Equal("UNKNOWN_CODE", result.Data.Alarms[1].Code);
+        var sim02 = result.Data.Robots.Single(r => r.RobotId == "sim_02");
+        Assert.Equal("low_battery", sim02.UndispatchableReason);
+    }
+
+    [Fact]
+    public async Task Empty_robot_alarm_snapshot_is_a_valid_result()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[{"uuid":"sim_01","dispatchable":true,"rbk_report":{"errors":[],"fatals":[],"warnings":[],"notices":[]}}]}}
+            """);
+        var client = Client(handler);
+
+        var result = await client.GetRobotAlarmsAsync(Guid.NewGuid());
+
+        Assert.Empty(result.Data.Alarms);
+        Assert.Single(result.Data.Robots);
+    }
+
+    [Fact]
+    public async Task Malformed_alarm_item_without_code_is_skipped_safely()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"sim_01","rbk_report":{"errors":[{"desc":"no code here","time":"t","times":1}]}}
+            ]}}
+            """);
+        var client = Client(handler);
+
+        var result = await client.GetRobotAlarmsAsync(Guid.NewGuid());
+
+        Assert.Empty(result.Data.Alarms);
+    }
+
+    [Fact]
+    public async Task Robot_alarm_read_failure_surfaces_as_rds_unavailable_not_empty()
+    {
+        var client = Client(new RecordingHandler("{\"code\":50000,\"msg\":\"boom\",\"data\":null}"));
+
+        var error = await Assert.ThrowsAsync<RdsReadException>(() => client.GetRobotAlarmsAsync(Guid.NewGuid()));
+
+        Assert.Equal("RDS_BUSINESS_FAILURE", error.Code);
+    }
+
+    [Fact]
     public async Task Disabled_client_does_not_send_http()
     {
         var handler = new RecordingHandler("{}");
@@ -90,10 +189,12 @@ public sealed class RdsReadClientTests
         public string? LastPath { get; private set; }
         public string? LastLanguage { get; private set; }
         public string LastBody { get; private set; } = string.Empty;
+        public HttpMethod? LastMethod { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Calls++;
+            LastMethod = request.Method;
             LastPath = request.RequestUri?.AbsolutePath;
             LastLanguage = request.Headers.TryGetValues("language", out var values) ? values.Single() : null;
             LastBody = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);

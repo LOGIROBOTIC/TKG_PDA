@@ -302,6 +302,13 @@ class FakePdaRepository implements PdaDataSource {
   Object? markReadyError;
   int markReadyCount = 0;
   String? lastMarkReadyRequestId;
+  RobotAlarmSummary robotAlarmSummaryValue = const RobotAlarmSummary(
+    hasActiveRobotAlarm: false,
+    highestSeverity: null,
+    activeAlarmCount: 0,
+  );
+  Object? robotAlarmSummaryError;
+  int robotAlarmSummaryCount = 0;
   int switchCount = 0;
   String? lastSwitchVariantId;
   Object? switchVariantError;
@@ -483,6 +490,13 @@ class FakePdaRepository implements PdaDataSource {
   }) async {
     loadStateCount++;
     lastLoadState = loadState;
+  }
+
+  @override
+  Future<RobotAlarmSummary> robotAlarmSummary() async {
+    robotAlarmSummaryCount++;
+    if (robotAlarmSummaryError case final error?) throw error;
+    return robotAlarmSummaryValue;
   }
 }
 

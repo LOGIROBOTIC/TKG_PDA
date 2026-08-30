@@ -258,6 +258,18 @@ export interface RdsWorkSite {
   executionReady: boolean
 }
 
+export interface RdsRobotAlarm {
+  robotId: string
+  robotModel: string | null
+  severity: string
+  code: string
+  description: string | null
+  occurrenceCount: number | null
+  occurredAt: string | null
+  dispatchable: boolean | null
+  undispatchableReason: string | null
+}
+
 export interface RdsSlotMapping {
   slotId: string
   layoutId: string

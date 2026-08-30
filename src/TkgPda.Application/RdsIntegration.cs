@@ -48,6 +48,31 @@ public sealed record RdsReadResult<T>(
     Guid CorrelationId,
     DateTimeOffset ReadAt);
 
+// Customer Monitoring — Robot Alarm Visibility: flattened current alarm
+// entries from GET /api/agv-report/core. Severity comes from the RDS bucket
+// (fatals/errors/warnings/notices) the item was found in. An alarm is
+// active only while it appears in the current snapshot; RDS exposes no
+// explicit active/cleared flag or incident history for it.
+public sealed record RdsRobotAlarmSnapshot(
+    string RobotId,
+    string Severity,
+    string Code,
+    string? Description,
+    string? OccurredAt,
+    int? OccurrenceCount);
+
+// Per-robot state carried by the same GET /api/agv-report/core response,
+// kept separate from alarm items since it describes the robot, not an alarm.
+public sealed record RdsRobotStateSnapshot(
+    string RobotId,
+    string? Model,
+    bool? Dispatchable,
+    string? UndispatchableReason);
+
+public sealed record RdsRobotAlarmReport(
+    IReadOnlyList<RdsRobotAlarmSnapshot> Alarms,
+    IReadOnlyList<RdsRobotStateSnapshot> Robots);
+
 public interface IRdsReadClient
 {
     bool Enabled { get; }
@@ -60,6 +85,10 @@ public interface IRdsReadClient
 
     Task<RdsReadResult<RdsWindTaskPage>> QueryWindTasksAsync(
         RdsWindTaskQuery query,
+        Guid correlationId,
+        CancellationToken cancellationToken = default);
+
+    Task<RdsReadResult<RdsRobotAlarmReport>> GetRobotAlarmsAsync(
         Guid correlationId,
         CancellationToken cancellationToken = default);
 }
@@ -156,6 +185,22 @@ public sealed record RdsWorkSiteSyncRecord(
     DateTimeOffset SyncedAt,
     int BusinessCode,
     string BusinessMessage);
+
+public sealed record RdsRobotAlarmAdminRecord(
+    string RobotId,
+    string? RobotModel,
+    string Severity,
+    string Code,
+    string? Description,
+    int? OccurrenceCount,
+    string? OccurredAt,
+    bool? Dispatchable,
+    string? UndispatchableReason);
+
+public sealed record RdsRobotAlarmOperatorSummary(
+    bool HasActiveRobotAlarm,
+    string? HighestSeverity,
+    int ActiveAlarmCount);
 
 public interface IRdsIntegrationStore
 {
@@ -264,4 +309,53 @@ public sealed class RdsIntegrationService(IRdsReadClient client, IRdsIntegration
 
         return store.RemoveSlotMappingAsync(slotId, context, cancellationToken);
     }
+
+    // Customer Monitoring — Robot Alarm Visibility: Admin sees the full
+    // current-alarm detail; robot state (model/dispatchable/reason) is
+    // joined in from the same read since it is per-robot, not per-alarm.
+    public async Task<IReadOnlyList<RdsRobotAlarmAdminRecord>> ListRobotAlarmsForAdminAsync(
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await client.GetRobotAlarmsAsync(correlationId, cancellationToken);
+        var robotsById = result.Data.Robots.ToDictionary(robot => robot.RobotId, StringComparer.Ordinal);
+        return result.Data.Alarms
+            .Select(alarm =>
+            {
+                robotsById.TryGetValue(alarm.RobotId, out var robot);
+                return new RdsRobotAlarmAdminRecord(
+                    alarm.RobotId,
+                    robot?.Model,
+                    alarm.Severity,
+                    alarm.Code,
+                    alarm.Description,
+                    alarm.OccurrenceCount,
+                    alarm.OccurredAt,
+                    robot?.Dispatchable,
+                    robot?.UndispatchableReason);
+            })
+            .ToList();
+    }
+
+    // Coarse Operator projection: no verified TransportRequest -> assigned
+    // robot mapping exists yet (RdsTaskProjection.AgvId is not confirmed to
+    // share the agv-report uuid/vehicle_id identity space, and no store
+    // query scopes active tasks by machine), so per-machine filtering is
+    // deliberately not attempted here to avoid inventing that relationship.
+    public async Task<RdsRobotAlarmOperatorSummary> GetRobotAlarmSummaryForOperatorAsync(
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await client.GetRobotAlarmsAsync(correlationId, cancellationToken);
+        var alarms = result.Data.Alarms;
+        var highestSeverity = alarms.Count == 0
+            ? null
+            : alarms
+                .Select(alarm => alarm.Severity)
+                .OrderByDescending(severity => Array.IndexOf(SeverityRank, severity))
+                .First();
+        return new RdsRobotAlarmOperatorSummary(alarms.Count > 0, highestSeverity, alarms.Count);
+    }
+
+    private static readonly string[] SeverityRank = ["notice", "warning", "error", "fatal"];
 }

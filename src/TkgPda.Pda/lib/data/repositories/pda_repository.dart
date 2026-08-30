@@ -37,6 +37,9 @@ abstract interface class PdaDataSource {
     required String slotId,
     required String loadState,
   });
+
+  /// Customer Monitoring — Robot Alarm Visibility.
+  Future<RobotAlarmSummary> robotAlarmSummary();
 }
 
 class PdaRepository implements PdaDataSource {
@@ -195,6 +198,12 @@ class PdaRepository implements PdaDataSource {
       '/api/v1/machines/$machineId/slots/$slotId/load-state',
       body: {'loadState': loadState},
     );
+  }
+
+  @override
+  Future<RobotAlarmSummary> robotAlarmSummary() async {
+    final response = await _api.get('/api/v1/rds/robot-alarm-summary');
+    return RobotAlarmSummary.fromJson(_json(response.body));
   }
 
   static JsonMap _json(Object? body) =>

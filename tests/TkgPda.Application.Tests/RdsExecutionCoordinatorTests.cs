@@ -350,6 +350,7 @@ public sealed class RdsExecutionCoordinatorTests
         public DateTimeOffset? LastSuccessfulRead => DateTimeOffset.UtcNow;
         public Task<RdsReadResult<IReadOnlyList<RdsWorkSiteSnapshot>>> GetWorkSitesAsync(Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<RdsReadResult<RdsWindTaskPage>> QueryWindTasksAsync(RdsWindTaskQuery query, Guid correlationId, CancellationToken cancellationToken = default) => Task.FromResult(new RdsReadResult<RdsWindTaskPage>(new(Tasks.Count, 1, 100, 1, Tasks), 200, "ok", "/api/queryWindTask", correlationId, DateTimeOffset.UtcNow));
+        public Task<RdsReadResult<RdsRobotAlarmReport>> GetRobotAlarmsAsync(Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class FakeWorkSiteReconciler : IRdsWorkSiteReconciler

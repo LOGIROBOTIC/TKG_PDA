@@ -15,14 +15,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _employeeNumber = TextEditingController();
-  final _password = TextEditingController();
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
     _employeeNumber.dispose();
-    _password.clear();
-    _password.dispose();
     super.dispose();
   }
 
@@ -31,8 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     FocusScope.of(context).unfocus();
-    await widget.controller.login(_employeeNumber.text, _password.text);
-    _password.clear();
+    await widget.controller.login(_employeeNumber.text);
   }
 
   @override
@@ -86,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               TextFormField(
                                 key: const Key('employee-number-field'),
                                 controller: _employeeNumber,
-                                textInputAction: TextInputAction.next,
+                                textInputAction: TextInputAction.done,
                                 autocorrect: false,
                                 decoration: const InputDecoration(
                                   labelText: 'Sicil Numarası',
@@ -95,32 +90,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 validator: (value) =>
                                     (value?.trim().isEmpty ?? true)
                                     ? 'Sicil numarası zorunludur.'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                key: const Key('password-field'),
-                                controller: _password,
-                                obscureText: _obscurePassword,
-                                enableSuggestions: false,
-                                autocorrect: false,
-                                decoration: InputDecoration(
-                                  labelText: 'Şifre',
-                                  prefixIcon: const Icon(Icons.password),
-                                  suffixIcon: IconButton(
-                                    onPressed: () => setState(
-                                      () =>
-                                          _obscurePassword = !_obscurePassword,
-                                    ),
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility
-                                          : Icons.visibility_off,
-                                    ),
-                                  ),
-                                ),
-                                validator: (value) => (value?.isEmpty ?? true)
-                                    ? 'Şifre zorunludur.'
                                     : null,
                                 onFieldSubmitted: (_) => _login(),
                               ),

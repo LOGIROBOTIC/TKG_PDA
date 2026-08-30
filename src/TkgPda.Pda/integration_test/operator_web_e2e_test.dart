@@ -64,10 +64,6 @@ void main() {
         find.byKey(const Key('employee-number-field')),
         _employeeNumber,
       );
-      await tester.enterText(
-        find.byKey(const Key('password-field')),
-        _password,
-      );
       await tester.tap(find.byKey(const Key('login-button')));
       await tester.pumpAndSettle();
       check(first.isAuthenticated, isTrue, 'real login succeeded');

@@ -361,7 +361,7 @@ Future<_Harness> _harness(
     TkgPdaApp(key: ValueKey(controller), controller: controller),
   );
   await tester.pumpAndSettle();
-  await controller.login('employee-1', 'transient');
+  await controller.login('employee-1');
   await tester.pumpAndSettle();
   await controller.selectMachine(testMachine);
   await tester.pumpAndSettle();

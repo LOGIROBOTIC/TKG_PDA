@@ -31,6 +31,22 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Admin_login_with_wrong_password_is_rejected()
+    {
+        // Admin Web must remain password-protected: the passwordless sicil
+        // change is scoped to the device-bound Operator employee-number path
+        // only and must not weaken Admin Web authentication.
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync(RoleCodes.Admin);
+        using var client = fixture.Client();
+
+        var response = await client.PostAsJsonAsync("/api/v1/admin/auth/login", new LoginRequest(identity.Username, "wrong-password"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("INVALID_CREDENTIALS", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
     public async Task Non_admin_cannot_receive_admin_web_token()
     {
         await fixture.ResetAsync();

@@ -45,7 +45,7 @@ public static class ApiEndpoints
             .RequireAuthorization(PolicyNames.Operator);
 
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/ready", MarkTransportReadyAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+            .RequireAuthorization(PolicyNames.WarehousePreparation);
 
         endpoints.MapPut("/api/v1/machines/{machineId:guid}/slots/{slotId:guid}/load-state", UpdateLoadStateAsync)
             .RequireAuthorization(PolicyNames.Operator);

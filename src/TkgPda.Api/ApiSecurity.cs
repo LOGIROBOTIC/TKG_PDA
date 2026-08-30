@@ -17,6 +17,11 @@ public static class RoleCodes
 
     public static readonly string[] OperatorRoles = [Admin, Supervisor, LineOperator, WarehouseOperator];
     public static readonly string[] VariantManagerRoles = [Admin, Supervisor];
+
+    // WP-05A: marking a request READY is a warehouse preparation action, not
+    // an ordinary line-operator transport action. LineOperator is deliberately
+    // excluded here.
+    public static readonly string[] WarehousePreparationRoles = [Admin, Supervisor, WarehouseOperator];
 }
 
 public static class PolicyNames
@@ -24,6 +29,7 @@ public static class PolicyNames
     public const string Operator = "operator";
     public const string VariantManager = "variant-manager";
     public const string Administrator = "administrator";
+    public const string WarehousePreparation = "warehouse-preparation";
 }
 
 public static class ApiClaimNames

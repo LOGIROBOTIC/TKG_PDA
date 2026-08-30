@@ -72,10 +72,12 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         using var client = await fixture.LoginClientAsync(identity);
         var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: true), "mark-ready-http");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
+        using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
 
-        var first = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
+        var first = await warehouseClient.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
         var firstBody = await first.Content.ReadFromJsonAsync<TransportHttpResponse>();
-        var second = await client.PostAsync($"/api/v1/transport-requests/{created.Id}/ready", null);
+        var second = await warehouseClient.PostAsync($"/api/v1/transport-requests/{created.Id}/ready", null);
         var secondBody = await second.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
@@ -93,6 +95,66 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Line_operator_is_forbidden_from_marking_a_request_ready()
+    {
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
+        await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
+        var lineOperator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
+        using var client = await fixture.LoginClientAsync(lineOperator);
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: true), "line-operator-ready-denied");
+        var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
+
+        var response = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("ROLE_NOT_AUTHORIZED", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Warehouse_operator_can_mark_a_request_ready()
+    {
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
+        await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
+        var lineOperator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
+        using var creatorClient = await fixture.LoginClientAsync(lineOperator);
+        var createdResponse = await fixture.SendTransportAsync(creatorClient, Bring(context, slot, requiresPreparation: true), "warehouse-operator-ready");
+        var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
+        using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
+
+        var response = await warehouseClient.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
+        var body = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("READY", body!.ReadinessState);
+    }
+
+    [Fact]
+    public async Task Supervisor_can_mark_a_request_ready()
+    {
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
+        await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
+        var lineOperator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
+        using var creatorClient = await fixture.LoginClientAsync(lineOperator);
+        var createdResponse = await fixture.SendTransportAsync(creatorClient, Bring(context, slot, requiresPreparation: true), "supervisor-ready");
+        var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        var supervisor = await fixture.SeedIdentityAsync(role: RoleCodes.Supervisor);
+        using var supervisorClient = await fixture.LoginClientAsync(supervisor);
+
+        var response = await supervisorClient.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
+        var body = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("READY", body!.ReadinessState);
+    }
+
+    [Fact]
     public async Task Mark_ready_on_a_not_required_request_is_rejected()
     {
         await fixture.ResetAsync();
@@ -103,8 +165,10 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         using var client = await fixture.LoginClientAsync(identity);
         var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot), "not-required-ready-http");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
+        using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
 
-        var response = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
+        var response = await warehouseClient.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("READINESS_NOT_APPLICABLE", await ApiTestFixture.ErrorCodeAsync(response));
@@ -123,8 +187,10 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var cancelled = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/cancel", null);
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
+        var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
+        using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
 
-        var response = await client.PostAsync($"/api/v1/transport-requests/{created.Id}/ready", null);
+        var response = await warehouseClient.PostAsync($"/api/v1/transport-requests/{created.Id}/ready", null);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("REQUEST_TERMINAL", await ApiTestFixture.ErrorCodeAsync(response));

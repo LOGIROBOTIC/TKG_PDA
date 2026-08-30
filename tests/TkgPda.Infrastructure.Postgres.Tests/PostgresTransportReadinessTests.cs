@@ -65,6 +65,65 @@ public sealed class PostgresTransportReadinessTests
     }
 
     [PostgresFact]
+    public async Task A_higher_precedence_waiting_preparation_request_does_not_block_a_lower_precedence_eligible_request()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slots = await LogisticsSlotsAsync(context.LayoutId, 2);
+        await SetSlotAsync(slots[0], OccupancyState.Vacant, LoadState.Unknown);
+        await SetSlotAsync(slots[1], OccupancyState.Vacant, LoadState.Unknown);
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+        // A: numerically lower priority = higher dispatch precedence, but still WAITING_PREPARATION.
+        var waitingHighPrecedence = await store.CreateAndQueueAsync(Command(context, "sched-a-waiting", slots[0], requiresPreparation: true));
+        await ExecuteAsync("UPDATE ops.transport_requests SET priority = 1 WHERE id = @id", ("id", waitingHighPrecedence.Request.Id));
+        // B: lower dispatch precedence, but eligible (NOT_REQUIRED).
+        var eligibleLowPrecedence = await store.CreateAndQueueAsync(Command(context, "sched-b-eligible", slots[1]));
+        await ExecuteAsync("UPDATE ops.transport_requests SET priority = 50 WHERE id = @id", ("id", eligibleLowPrecedence.Request.Id));
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var executionStore = new PostgresRdsExecutionStore(dataSource);
+
+        var queued = await executionStore.ListQueuedRequestIdsAsync(100);
+
+        Assert.DoesNotContain(waitingHighPrecedence.Request.Id, queued);
+        Assert.Contains(eligibleLowPrecedence.Request.Id, queued);
+    }
+
+    [PostgresFact]
+    public async Task Eligible_requests_preserve_priority_ordering_then_fifo_ordering()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var slots = await LogisticsSlotsAsync(context.LayoutId, 4);
+        foreach (var slot in slots)
+        {
+            await SetSlotAsync(slot, OccupancyState.Vacant, LoadState.Unknown);
+        }
+        await using var store = new PostgresTransportWorkflowStore(_connectionString);
+
+        // Same priority, inserted in this order -> FIFO (queued_at) must preserve insertion order.
+        var fifoFirst = await store.CreateAndQueueAsync(Command(context, "sched-fifo-first", slots[0]));
+        var fifoSecond = await store.CreateAndQueueAsync(Command(context, "sched-fifo-second", slots[1]));
+        await ExecuteAsync("UPDATE ops.transport_requests SET priority = 50, queued_at = now() WHERE id = @id", ("id", fifoFirst.Request.Id));
+        await ExecuteAsync("UPDATE ops.transport_requests SET priority = 50, queued_at = now() + interval '1 second' WHERE id = @id", ("id", fifoSecond.Request.Id));
+
+        // Higher precedence (lower numeric priority) must sort before both, regardless of queued_at.
+        var highPrecedence = await store.CreateAndQueueAsync(Command(context, "sched-high-precedence", slots[2]));
+        await ExecuteAsync("UPDATE ops.transport_requests SET priority = 1, queued_at = now() + interval '2 seconds' WHERE id = @id", ("id", highPrecedence.Request.Id));
+
+        // A WAITING_PREPARATION request at the numerically lowest priority must still never appear.
+        var waitingTop = await store.CreateAndQueueAsync(Command(context, "sched-waiting-top", slots[3], requiresPreparation: true));
+        await ExecuteAsync("UPDATE ops.transport_requests SET priority = 0 WHERE id = @id", ("id", waitingTop.Request.Id));
+
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var executionStore = new PostgresRdsExecutionStore(dataSource);
+
+        var queued = await executionStore.ListQueuedRequestIdsAsync(100);
+
+        Assert.Equal([highPrecedence.Request.Id, fifoFirst.Request.Id, fifoSecond.Request.Id], queued);
+        Assert.DoesNotContain(waitingTop.Request.Id, queued);
+    }
+
+    [PostgresFact]
     public async Task Mark_ready_transitions_waiting_preparation_to_ready_and_sets_ready_at_once()
     {
         await ResetAsync();

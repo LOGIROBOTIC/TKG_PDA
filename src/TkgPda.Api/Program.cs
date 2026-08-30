@@ -158,6 +158,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(PolicyNames.VariantManager, policy => policy
         .RequireRole(RoleCodes.VariantManagerRoles)
         .RequireClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound));
+    options.AddPolicy(PolicyNames.WarehousePreparation, policy => policy
+        .RequireRole(RoleCodes.WarehousePreparationRoles)
+        .RequireClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound));
     options.AddPolicy(PolicyNames.Administrator, policy => policy
         .RequireRole(RoleCodes.Admin)
         .RequireClaim(ApiClaimNames.ClientType, ClientTypes.AdminWeb));

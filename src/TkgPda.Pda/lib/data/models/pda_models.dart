@@ -732,6 +732,42 @@ class TransportResult {
   );
 }
 
+/// A single [TransportCommand] bound to its own child idempotency key, as
+/// required by POST /api/v1/transport-batches. Each item stays an
+/// independent TransportRequest server-side; the batch is a pure grouping
+/// boundary (no batch-level status, no shared readiness).
+class TransportBatchItemCommand {
+  const TransportBatchItemCommand({
+    required this.command,
+    required this.idempotencyKey,
+  });
+
+  final TransportCommand command;
+  final String idempotencyKey;
+
+  JsonMap toJson() => {'idempotencyKey': idempotencyKey, ...command.toJson()};
+}
+
+class TransportBatchResult {
+  const TransportBatchResult({
+    required this.batchId,
+    required this.idempotentReplay,
+    required this.items,
+  });
+
+  final String batchId;
+  final bool idempotentReplay;
+  final List<TransportResult> items;
+
+  factory TransportBatchResult.fromJson(JsonMap json) => TransportBatchResult(
+    batchId: json['batchId'] as String? ?? '',
+    idempotentReplay: json['idempotentReplay'] as bool? ?? false,
+    items: _maps(
+      json['items'],
+    ).map(TransportResult.fromJson).toList(growable: false),
+  );
+}
+
 JsonMap _map(Object? value) => value is Map<String, dynamic> ? value : {};
 
 List<JsonMap> _maps(Object? value) => value is List

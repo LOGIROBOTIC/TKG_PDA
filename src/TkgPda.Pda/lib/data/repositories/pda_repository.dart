@@ -21,6 +21,11 @@ abstract interface class PdaDataSource {
     TransportCommand command,
     String idempotencyKey,
   );
+  Future<TransportBatchResult> createTransportBatch(
+    String machineId,
+    String batchIdempotencyKey,
+    List<TransportBatchItemCommand> items,
+  );
   Future<TransportResult> transport(String requestId);
   Future<TransportResult> cancel(String requestId);
   Future<void> updateLoadState({
@@ -127,6 +132,23 @@ class PdaRepository implements PdaDataSource {
       idempotencyKey: idempotencyKey,
     );
     return TransportResult.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<TransportBatchResult> createTransportBatch(
+    String machineId,
+    String batchIdempotencyKey,
+    List<TransportBatchItemCommand> items,
+  ) async {
+    final response = await _api.post(
+      '/api/v1/transport-batches',
+      body: {
+        'idempotencyKey': batchIdempotencyKey,
+        'machineId': machineId,
+        'items': items.map((item) => item.toJson()).toList(),
+      },
+    );
+    return TransportBatchResult.fromJson(_json(response.body));
   }
 
   @override

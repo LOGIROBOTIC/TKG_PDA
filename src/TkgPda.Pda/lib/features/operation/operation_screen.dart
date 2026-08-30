@@ -5,6 +5,7 @@ import '../../data/models/pda_models.dart';
 import '../../shared/presentation.dart';
 import '../../shared/widgets/feedback_banners.dart';
 import 'layout_canvas.dart';
+import 'multi_part_batch_screen.dart';
 import 'part_first_screen.dart';
 
 class OperationScreen extends StatelessWidget {
@@ -31,6 +32,15 @@ class OperationScreen extends StatelessWidget {
                 : '${controller.selectedMachine!.code} · Operasyon',
           ),
           actions: [
+            if (!controller.batchMode && controller.needsPartSelection)
+              IconButton(
+                key: const Key('enter-batch-selection'),
+                tooltip: 'Birden Fazla Parça Seç',
+                onPressed: controller.busy
+                    ? null
+                    : controller.enterBatchSelection,
+                icon: const Icon(Icons.playlist_add),
+              ),
             IconButton(
               tooltip: 'Güncelle',
               onPressed: controller.busy
@@ -50,9 +60,15 @@ class OperationScreen extends StatelessWidget {
                 NoticeBanner(message: notice),
               if (controller.hasAmbiguousSubmission)
                 _AmbiguousSubmissionBanner(controller: controller),
+              if (controller.hasAmbiguousBatchSubmission)
+                _AmbiguousBatchBanner(controller: controller),
+              if (controller.isConfiguringBatchItem)
+                _BatchConfiguringBanner(controller: controller),
               Expanded(
-                child: controller.needsPartSelection
-                    ? PartFirstSelector(controller: controller)
+                child: controller.batchMode && !controller.isConfiguringBatchItem
+                    ? MultiPartBatchWorkspace(controller: controller)
+                    : controller.needsPartSelection
+                    ? _PartFirstWithBatchSkip(controller: controller)
                     : operational == null
                     ? const Center(child: CircularProgressIndicator())
                     : _OperationContent(
@@ -66,6 +82,89 @@ class OperationScreen extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+class _BatchConfiguringBanner extends StatelessWidget {
+  const _BatchConfiguringBanner({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('batch-configuring-banner'),
+    width: double.infinity,
+    color: const Color(0xFFE0F2FE),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    child: Text(
+      'Grup: Parça ${controller.currentBatchItemPosition}/${controller.batchCart.length} yapılandırılıyor · '
+      '${controller.currentBatchItem?.effectivePart.partCode ?? ''}',
+      style: const TextStyle(fontWeight: FontWeight.w800),
+    ),
+  );
+}
+
+class _PartFirstWithBatchSkip extends StatelessWidget {
+  const _PartFirstWithBatchSkip({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Expanded(child: PartFirstSelector(controller: controller)),
+      if (controller.isConfiguringBatchItem &&
+          (controller.compatibleVariants?.isEmpty ?? false))
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: OutlinedButton.icon(
+            key: const Key('skip-invalid-batch-item'),
+            onPressed: controller.busy ? null : controller.skipInvalidBatchItem,
+            icon: const Icon(Icons.remove_circle_outline),
+            label: const Text('Bu Parçayı Kaldır ve Devam Et'),
+          ),
+        ),
+    ],
+  );
+}
+
+class _AmbiguousBatchBanner extends StatelessWidget {
+  const _AmbiguousBatchBanner({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('ambiguous-batch-banner'),
+    color: const Color(0xFFFFEDD5),
+    padding: const EdgeInsets.all(12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Son grup gönderiminin sonucu belirsiz. Yeni anahtar üretilmeyecek.',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            OutlinedButton(
+              key: const Key('retry-ambiguous-batch'),
+              onPressed: controller.busy ? null : controller.retryAmbiguousBatch,
+              child: const Text('Aynı Grubu Yeniden Dene'),
+            ),
+            OutlinedButton(
+              key: const Key('refresh-after-ambiguous-batch'),
+              onPressed: controller.busy
+                  ? null
+                  : () => controller.refreshContext(showBusy: true),
+              child: const Text('Sunucu Durumunu Yenile'),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }
 
@@ -716,7 +815,15 @@ class _ActionRow extends StatelessWidget {
       ),
     );
     if (confirmed == true) {
-      await controller.submitTransport(command);
+      if (controller.isConfiguringBatchItem) {
+        await controller.confirmBatchItemCommand(
+          command,
+          slot: slot,
+          action: action,
+        );
+      } else {
+        await controller.submitTransport(command);
+      }
     }
   }
 }

@@ -565,6 +565,18 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
         var cloneResponse = await SendAsync(admin, HttpMethod.Post, $"/api/v1/admin/layouts/{layout.Id}/versions", null, published!.ConcurrencyToken);
         var clone = await cloneResponse.Content.ReadFromJsonAsync<AdminLayoutRecord>();
 
+        // Customer Workflow — Empty Container Buffer: BRING_EMPTY now auto-allocates
+        // its source from a configured EMPTY_STORAGE slot, so the active layout needs
+        // one. Added after cloning so the draft clone's slot count is unaffected.
+        var bufferSlotId = await fixture.ScalarAsync<Guid>(
+            """
+            INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, display_order)
+            VALUES (@layout_id, 'P05-ACTIVE-BUFFER-1', 'Test Buffer', 'EMPTY_STORAGE', 9000)
+            RETURNING id
+            """,
+            ("layout_id", layout.Id));
+        await fixture.SetSlotAsync(bufferSlotId, "OCCUPIED", "EMPTY");
+
         var active = await fixture.SendTransportAsync(
             oper,
             new CreateTransportHttpRequest(machine.Id, variant.Id, layout.Id, null, null, null, null, "BRING_EMPTY", null, slot),

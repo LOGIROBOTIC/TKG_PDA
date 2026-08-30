@@ -257,6 +257,8 @@ class _OperationContent extends StatelessWidget {
       children: [
         _MachineHeader(contextData: contextData, controller: controller),
         const SizedBox(height: 14),
+        _DirectActions(controller: controller),
+        const SizedBox(height: 14),
         _ProductSection(contextData: contextData, controller: controller),
         const SizedBox(height: 14),
         _LayoutCard(contextData: contextData, controller: controller),
@@ -287,6 +289,8 @@ class _OperationContent extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 8, 24),
             children: [
               _MachineHeader(contextData: contextData, controller: controller),
+              const SizedBox(height: 14),
+              _DirectActions(controller: controller),
               const SizedBox(height: 14),
               _ProductSection(contextData: contextData, controller: controller),
               const SizedBox(height: 14),
@@ -491,6 +495,123 @@ class _MachineHeader extends StatelessWidget {
   }
 }
 
+/// Customer UX — Automatic Machine Slot Resolution: lets the operator start
+/// BRING_EMPTY/REMOVE_FULL/REMOVE_EMPTY directly once part+variant have
+/// resolved, without tapping a layout slot first. The backend resolves and
+/// reserves the machine-side slot from master.layout_slot_parts; this widget
+/// never picks a slot itself. Tapping a slot in the layout below still works
+/// as a secondary, view-oriented path (see [_SlotDetails]).
+class _DirectActions extends StatelessWidget {
+  const _DirectActions({required this.controller});
+
+  final AppController controller;
+
+  static const _operations = ['BRING_EMPTY', 'REMOVE_FULL', 'REMOVE_EMPTY'];
+
+  @override
+  Widget build(BuildContext context) {
+    final canOperate = controller.selectedMachine?.permissions.canOperate ?? false;
+    if (!canOperate) {
+      return const SizedBox.shrink();
+    }
+    final enabled = controller.mutationEnabled;
+    return Card(
+      key: const Key('direct-actions'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'İşlemler',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 4),
+            const Text('Konum otomatik olarak seçilecek.'),
+            const SizedBox(height: 12),
+            for (final operation in _operations)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    key: Key('direct-action-$operation'),
+                    onPressed: enabled ? () => _confirm(context, operation) : null,
+                    child: Text(actionLabel(operation)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirm(BuildContext context, String operation) async {
+    final TransportCommand command;
+    try {
+      command = controller.commandForDirect(operation);
+    } on StateError {
+      return;
+    }
+    final part = controller.selectedEffectivePart;
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Taşıma Talebini Onaylayın',
+                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 16),
+              _ConfirmationLine('Makine', controller.context!.machine.code),
+              _ConfirmationLine(
+                'Varyant',
+                knownOr(controller.context!.activeVariantCode),
+              ),
+              _ConfirmationLine('Parça', part?.partCode ?? 'Tanımlı değil'),
+              _ConfirmationLine('Konum', 'Otomatik seçilecek'),
+              _ConfirmationLine('İşlem', actionLabel(operation)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('İptal'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      key: const Key('confirm-direct-transport'),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Onayla'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      if (controller.isConfiguringBatchItem) {
+        await controller.confirmBatchItemCommand(command, operation: operation);
+      } else {
+        await controller.submitTransport(command);
+      }
+    }
+  }
+}
+
 class _ProductSection extends StatelessWidget {
   const _ProductSection({required this.contextData, required this.controller});
 
@@ -617,6 +738,23 @@ class _SlotDetails extends StatelessWidget {
                   ),
               ],
             ),
+            if (controller.slotWasAutoResolved) ...[
+              const SizedBox(height: 6),
+              const Row(
+                key: Key('slot-auto-resolved-indicator'),
+                children: [
+                  Icon(Icons.auto_awesome, size: 16, color: Color(0xFF15803D)),
+                  SizedBox(width: 6),
+                  Text(
+                    'Konum otomatik seçildi',
+                    style: TextStyle(
+                      color: Color(0xFF15803D),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -881,7 +1019,7 @@ class _ActionRow extends StatelessWidget {
         await controller.confirmBatchItemCommand(
           command,
           slot: slot,
-          action: action,
+          operation: action.action,
         );
       } else {
         await controller.submitTransport(command);

@@ -93,6 +93,7 @@ class AppController extends ChangeNotifier {
   ProductGroup? _selectedProductGroup;
   ProductGroupPart? _selectedPart;
   LayoutSlot? _selectedSlot;
+  bool _slotAutoResolved = false;
   bool _busy = false;
   bool _contextLoading = false;
   bool _offline = false;
@@ -114,6 +115,12 @@ class AppController extends ChangeNotifier {
   bool _compatibleVariantsLoading = false;
   String? _compatibleVariantsError;
   bool _partFirstResolved = false;
+
+  /// True once the effective part's variant has resolved (single-part flow
+  /// only) but the operator has not yet pressed "İşleme Devam Et" — RELATED/
+  /// ALT alternatives stay reachable during this window instead of
+  /// navigating straight to the operation screen.
+  bool _readyToContinue = false;
 
   // Customer UI — Multi-Part Transport Batch: cart state, independent of the
   // single-item part-first fields above (which drive whichever cart item is
@@ -147,6 +154,10 @@ class AppController extends ChangeNotifier {
   ProductGroup? get selectedProductGroup => _selectedProductGroup;
   ProductGroupPart? get selectedPart => _selectedPart;
   LayoutSlot? get selectedSlot => _selectedSlot;
+  /// True when [selectedSlot] became the current selection through backend
+  /// automatic machine-slot resolution rather than an operator tap — drives
+  /// the "Konum otomatik seçildi" indicator.
+  bool get slotWasAutoResolved => _slotAutoResolved && _selectedSlot != null;
   bool get busy => _busy;
   bool get offline => _offline;
   ApiProblem? get problem => _problem;
@@ -198,6 +209,10 @@ class AppController extends ChangeNotifier {
   /// WP-03B: true while a machine is selected but the operator has not yet
   /// completed the part-first -> compatible-variant resolution gate.
   bool get needsPartSelection => _selectedMachine != null && !_partFirstResolved;
+
+  /// Customer UX — Part Selection Flow: true once the effective part's
+  /// variant has resolved and a "İşleme Devam Et" action should appear.
+  bool get partFirstReadyToContinue => _readyToContinue;
 
   Future<void> initialize() async {
     _deviceCode = await _deviceCodeStore.read();
@@ -448,6 +463,7 @@ class AppController extends ChangeNotifier {
     _selectedEffectivePart = selection;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
+    _readyToContinue = false;
     notifyListeners();
     await _loadCompatibleVariants();
   }
@@ -465,6 +481,7 @@ class AppController extends ChangeNotifier {
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     _partFirstResolved = false;
+    _readyToContinue = false;
     notifyListeners();
   }
 
@@ -540,15 +557,15 @@ class AppController extends ChangeNotifier {
   /// once every item has a command).
   Future<void> confirmBatchItemCommand(
     TransportCommand command, {
-    required LayoutSlot slot,
-    required AvailableAction action,
+    LayoutSlot? slot,
+    required String operation,
   }) async {
     if (!isConfiguringBatchItem) return;
     final item = _batchCart[_batchConfiguringIndex];
     item.command = command;
-    item.slotDisplayName = slot.displayName;
-    item.slotCode = slot.code;
-    item.actionCode = action.action;
+    item.slotDisplayName = slot?.displayName ?? 'Otomatik seçilecek';
+    item.slotCode = slot?.code;
+    item.actionCode = operation;
     item.variantCode = _context?.activeVariantCode;
     _batchConfiguringIndex = -1;
     resetPartSelection();
@@ -758,7 +775,7 @@ class AppController extends ChangeNotifier {
   Future<void> _resolveVariant(CompatibleVariant variant) async {
     final current = _context;
     if (current != null && current.activeVariantId == variant.variantId) {
-      _partFirstResolved = true;
+      _markVariantResolved();
       notifyListeners();
       return;
     }
@@ -776,8 +793,31 @@ class AppController extends ChangeNotifier {
     }
     await switchVariant(option);
     if (_context?.activeVariantId == variant.variantId) {
-      _partFirstResolved = true;
+      _markVariantResolved();
     }
+    notifyListeners();
+  }
+
+  /// Customer UX — Part Selection Flow: while configuring one multi-part
+  /// batch item, resolution goes straight to the operation screen exactly as
+  /// before (existing, tested TransportBatch behavior is unchanged). In the
+  /// normal single-part flow it instead waits for an explicit
+  /// [confirmPartFirstSelection], so RELATED/ALT alternatives stay reachable.
+  void _markVariantResolved() {
+    if (isConfiguringBatchItem) {
+      _partFirstResolved = true;
+    } else {
+      _readyToContinue = true;
+    }
+  }
+
+  /// The operator's explicit "İşleme Devam Et" action once a variant has
+  /// resolved — not a second "use the main part" confirmation, just
+  /// navigation to the next workflow stage.
+  void confirmPartFirstSelection() {
+    if (!_readyToContinue) return;
+    _readyToContinue = false;
+    _partFirstResolved = true;
     notifyListeners();
   }
 
@@ -791,6 +831,7 @@ class AppController extends ChangeNotifier {
     _compatibleVariantsLoading = false;
     _compatibleVariantsError = null;
     _partFirstResolved = false;
+    _readyToContinue = false;
     _batchMode = false;
     _batchCart.clear();
     _batchConfiguringIndex = -1;
@@ -813,6 +854,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     _selectedSlot = slot;
+    _slotAutoResolved = false;
     notifyListeners();
   }
 
@@ -844,6 +886,37 @@ class AppController extends ChangeNotifier {
     );
   }
 
+  /// Customer UX — Automatic Machine Slot Resolution: builds a command with
+  /// no machine-side slot chosen, so the backend resolves and reserves it
+  /// atomically from master.layout_slot_parts using [partId]. Always called
+  /// with the part-first-resolved [_selectedEffectivePart], which is
+  /// guaranteed non-null once the operation screen is reachable at all.
+  TransportCommand commandForDirect(String operation) {
+    final current = _context;
+    final part = _selectedEffectivePart;
+    if (current == null || part == null) {
+      throw StateError('Aktif işlem bağlamı bulunmuyor.');
+    }
+    final variantId = current.activeVariantId;
+    final layoutId = current.activeLayoutId;
+    if (variantId == null || layoutId == null) {
+      throw StateError('Aktif varyant veya layout bulunmuyor.');
+    }
+    return TransportCommand(
+      machineId: current.machine.id,
+      variantId: variantId,
+      layoutId: layoutId,
+      navigationProfileId: current.activeNavigationProfileId,
+      productGroupId: _selectedProductGroup?.id,
+      partId: part.partId,
+      containerTypeId: _selectedPart?.containerTypeId,
+      operation: operation,
+      sourceSlotId: null,
+      destinationSlotId: null,
+      priority: 100,
+    );
+  }
+
   Future<TransportResult?> submitTransport(TransportCommand command) async {
     if (!_session.isAuthenticated ||
         _busy ||
@@ -861,6 +934,9 @@ class AppController extends ChangeNotifier {
           ? 'Mevcut talep doğrulandı.'
           : 'Taşıma talebi oluşturuldu: #${result.requestNo}';
       await refreshContext();
+      if (command.sourceSlotId == null && command.destinationSlotId == null) {
+        _highlightAutoResolvedSlot(result.id);
+      }
       _ambiguousCommand = null;
       return result;
     } on AmbiguousMutationException {
@@ -870,10 +946,15 @@ class AppController extends ChangeNotifier {
           'Gönderim sonucu belirsiz. Aynı komut aynı anahtarla yeniden denenebilir veya durum yenilenebilir.';
       return null;
     } on ApiProblem catch (problem) {
-      _problem = problem;
+      // refreshContext() unconditionally clears _problem on success, so it
+      // must run first — otherwise a refetch (409/422/428) would silently
+      // wipe the operator-facing message we are about to show, including
+      // the friendly no-eligible-slot text from automatic machine-slot
+      // resolution (BRING_EMPTY_SLOT_NOT_FOUND and friends).
       if (problem.shouldRefetch) {
         await refreshContext();
       }
+      _problem = problem;
       return null;
     } on StateError catch (error) {
       _notice = error.message;
@@ -881,6 +962,24 @@ class AppController extends ChangeNotifier {
     } finally {
       _setBusy(false);
     }
+  }
+
+  /// Customer UX — Automatic Machine Slot Resolution: after a slot-less
+  /// (direct-action) submission, mirrors the backend-resolved slot into
+  /// [selectedSlot] so the existing layout highlighting shows it without
+  /// requiring the operator to tap it.
+  void _highlightAutoResolvedSlot(String requestId) {
+    final current = _context;
+    if (current == null) return;
+    final request = _firstOrNull(
+      current.activeTransportRequests.where((r) => r.requestId == requestId),
+    );
+    final slotId = request?.destinationSlotId ?? request?.sourceSlotId;
+    if (slotId == null) return;
+    final slot = _firstOrNull(current.slots.where((s) => s.id == slotId));
+    if (slot == null) return;
+    _selectedSlot = slot;
+    _slotAutoResolved = true;
   }
 
   Future<TransportResult?> retryAmbiguousTransport() async {

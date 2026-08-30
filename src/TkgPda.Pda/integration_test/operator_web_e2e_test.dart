@@ -140,6 +140,14 @@ void main() {
         await first.selectCompatibleVariant(match);
         await tester.pumpAndSettle();
       }
+      // Customer UX — Part Selection Flow: the variant resolves internally
+      // but now pauses at partFirstReadyToContinue (RELATED/ALT stay
+      // reachable) instead of leaving the gate immediately — confirm to
+      // proceed, exactly as the "İşleme Devam Et" button does.
+      if (first.partFirstReadyToContinue) {
+        first.confirmPartFirstSelection();
+        await tester.pumpAndSettle();
+      }
       check(
         first.needsPartSelection,
         isFalse,
@@ -372,18 +380,23 @@ bool _enabledLoad(LayoutSlot slot, String action) => slot.loadStateActions.any(
 );
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
-  final right = find.descendant(
-    of: find.byKey(const Key('operation-wide-right')),
-    matching: find.byType(Scrollable),
-  );
-  if (right.evaluate().isNotEmpty) {
-    await tester.scrollUntilVisible(finder, 280, scrollable: right);
-  } else {
-    await tester.scrollUntilVisible(
-      finder,
-      280,
-      scrollable: find.byType(Scrollable).last,
-    );
+  // The wide layout splits content across two independent scrollables
+  // (operation-wide-left/-right); the target can live in either one
+  // depending on how much content precedes it, so try each in turn rather
+  // than assuming it is always the right column.
+  if (finder.evaluate().isNotEmpty) return;
+  final scrollableCount = find.byType(Scrollable).evaluate().length;
+  for (var index = 0; index < scrollableCount; index++) {
+    try {
+      await tester.scrollUntilVisible(
+        finder,
+        280,
+        scrollable: find.byType(Scrollable).at(index),
+      );
+      await tester.pumpAndSettle();
+      if (finder.evaluate().isNotEmpty) return;
+    } catch (_) {
+      // Not in this scrollable — try the next one.
+    }
   }
-  await tester.pumpAndSettle();
 }

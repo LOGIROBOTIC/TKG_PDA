@@ -180,7 +180,8 @@ void main() {
   );
 
   testWidgets(
-    'exactly one compatible variant auto-resolves on the first main-part click',
+    'exactly one compatible variant auto-resolves on the first main-part '
+    'click but waits for an explicit continue before leaving the gate',
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
@@ -189,9 +190,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(harness.controller.needsPartSelection, isFalse);
+      // Resolved internally, but still on the part-first gate: alternatives
+      // stay reachable until the operator explicitly continues.
+      expect(harness.controller.needsPartSelection, isTrue);
+      expect(harness.controller.partFirstReadyToContinue, isTrue);
       expect(harness.controller.context?.activeVariantId, testVariantV1Id);
       expect(repository.switchCount, 0); // already active — no switch needed
+      await _scrollTo(tester, const Key('part-first-continue'));
+      expect(find.byKey(const Key('part-first-continue')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('part-first-continue')));
+      await tester.pumpAndSettle();
+
+      expect(harness.controller.needsPartSelection, isFalse);
       expect(find.byKey(const Key('operation-content')), findsOneWidget);
       harness.dispose();
     },
@@ -242,6 +253,13 @@ void main() {
       expect(harness.controller.selectedEffectivePart?.partId, testAltPartId);
       expect(repository.switchCount, 1);
       expect(repository.lastSwitchVariantId, testVariantV2Id);
+      expect(harness.controller.needsPartSelection, isTrue);
+      expect(harness.controller.partFirstReadyToContinue, isTrue);
+
+      await _scrollTo(tester, const Key('part-first-continue'));
+      await tester.tap(find.byKey(const Key('part-first-continue')));
+      await tester.pumpAndSettle();
+
       expect(harness.controller.needsPartSelection, isFalse);
       harness.dispose();
     },
@@ -290,6 +308,13 @@ void main() {
 
     expect(repository.switchCount, 1);
     expect(repository.lastSwitchVariantId, testVariantV2Id);
+    expect(harness.controller.needsPartSelection, isTrue);
+    expect(harness.controller.partFirstReadyToContinue, isTrue);
+
+    await _scrollTo(tester, const Key('part-first-continue'));
+    await tester.tap(find.byKey(const Key('part-first-continue')));
+    await tester.pumpAndSettle();
+
     expect(harness.controller.needsPartSelection, isFalse);
     harness.dispose();
   });
@@ -373,6 +398,13 @@ void main() {
     await tester.tap(find.byKey(const Key('compatible-variants-retry')));
     await tester.pumpAndSettle();
 
+    expect(harness.controller.needsPartSelection, isTrue);
+    expect(harness.controller.partFirstReadyToContinue, isTrue);
+
+    await _scrollTo(tester, const Key('part-first-continue'));
+    await tester.tap(find.byKey(const Key('part-first-continue')));
+    await tester.pumpAndSettle();
+
     expect(harness.controller.needsPartSelection, isFalse);
     harness.dispose();
   });
@@ -396,8 +428,19 @@ void main() {
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
+      await _scrollTo(tester, const Key('part-first-continue'));
+      await tester.tap(find.byKey(const Key('part-first-continue')));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('operation-content')), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('slot-slot-vacant')),
+        300,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('operation-content')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.byKey(const Key('slot-slot-vacant')), findsOneWidget);
       harness.dispose();
     },
@@ -408,6 +451,9 @@ void main() {
   ) async {
     final harness = await _harness(tester);
     await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, const Key('part-first-continue'));
+    await tester.tap(find.byKey(const Key('part-first-continue')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('operation-content')), findsOneWidget);
 

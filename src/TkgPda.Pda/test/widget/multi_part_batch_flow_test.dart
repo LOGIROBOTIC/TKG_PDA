@@ -526,6 +526,8 @@ void main() {
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('part-first-continue')));
+      await tester.pumpAndSettle();
 
       await _selectSlot(tester, 'slot-vacant');
       await _tapAction(tester, 'action-BRING_EMPTY');

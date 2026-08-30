@@ -58,6 +58,10 @@ class PartFirstSelector extends StatelessWidget {
             const SizedBox(height: 18),
             _CompatibleVariantCard(controller: controller),
           ],
+          if (controller.partFirstReadyToContinue) ...[
+            const SizedBox(height: 18),
+            _ContinueAction(controller: controller),
+          ],
           const SizedBox(height: 40),
         ],
       ),
@@ -399,9 +403,33 @@ class _CompatibleVariantCard extends StatelessWidget {
         ),
       );
     }
-    // Exactly one compatible variant auto-resolves inside the controller;
-    // compatibleVariantsLoading stays true for that whole request (handled
-    // above), so reaching this branch only ever happens with 2+ variants.
+    // A single compatible variant is resolved internally by the controller
+    // (see _resolveVariant/_markVariantResolved) but no longer navigates
+    // away immediately — it pauses at partFirstReadyToContinue so RELATED/
+    // ALT alternatives above stay reachable. Show it as an informational,
+    // non-tappable confirmation rather than a one-item selectable list.
+    if (variants.length == 1) {
+      final variant = variants.single;
+      return Card(
+        key: const Key('single-compatible-variant'),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Color(0xFF15803D)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${variant.variantCode} · ${variant.variantName} (otomatik seçildi)',
+                  key: const Key('single-compatible-variant-text'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Card(
       key: const Key('multiple-compatible-variants'),
       child: Column(
@@ -427,6 +455,29 @@ class _CompatibleVariantCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The explicit navigation action for the "resolve then continue" part-first
+/// flow (task: "clear Continue/İşleme Devam action once selection is
+/// ready" — not a second "Ana Parçayı Kullan" confirmation, just forward
+/// navigation to the operation screen once part+variant are both settled).
+class _ContinueAction extends StatelessWidget {
+  const _ContinueAction({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: FilledButton.icon(
+      key: const Key('part-first-continue'),
+      onPressed: controller.busy
+          ? null
+          : controller.confirmPartFirstSelection,
+      icon: const Icon(Icons.arrow_forward),
+      label: const Text('İşleme Devam Et'),
+    ),
+  );
 }
 
 class _RetryState extends StatelessWidget {

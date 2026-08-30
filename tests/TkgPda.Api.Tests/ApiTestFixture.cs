@@ -378,6 +378,8 @@ public sealed class TestRdsReadClient : IRdsReadClient
     public DateTimeOffset? LastSuccessfulRead { get; private set; }
     public List<string> Calls { get; } = [];
     public IReadOnlyList<RdsWorkSiteSnapshot> WorkSites { get; set; } = [];
+    public RdsRobotAlarmReport RobotAlarms { get; set; } = new([], []);
+    public bool RobotAlarmsUnavailable { get; set; }
 
     public void Reset()
     {
@@ -385,6 +387,8 @@ public sealed class TestRdsReadClient : IRdsReadClient
         LastSuccessfulRead = null;
         Calls.Clear();
         WorkSites = [];
+        RobotAlarms = new([], []);
+        RobotAlarmsUnavailable = false;
     }
 
     public Task<RdsReadResult<IReadOnlyList<RdsWorkSiteSnapshot>>> GetWorkSitesAsync(Guid correlationId, CancellationToken cancellationToken = default)
@@ -399,5 +403,17 @@ public sealed class TestRdsReadClient : IRdsReadClient
         Calls.Add("/api/queryWindTask");
         LastSuccessfulRead = DateTimeOffset.UtcNow;
         return Task.FromResult(new RdsReadResult<RdsWindTaskPage>(new(0, query.CurrentPage, query.PageSize, 0, []), 200, "Success", "/api/queryWindTask", correlationId, LastSuccessfulRead.Value));
+    }
+
+    public Task<RdsReadResult<RdsRobotAlarmReport>> GetRobotAlarmsAsync(Guid correlationId, CancellationToken cancellationToken = default)
+    {
+        Calls.Add("/api/agv-report/core");
+        if (RobotAlarmsUnavailable)
+        {
+            throw new RdsReadException("RDS_UNAVAILABLE", "RDS read endpoint is unavailable.", "/api/agv-report/core", correlationId);
+        }
+
+        LastSuccessfulRead = DateTimeOffset.UtcNow;
+        return Task.FromResult(new RdsReadResult<RdsRobotAlarmReport>(RobotAlarms, 200, "Success", "/api/agv-report/core", correlationId, LastSuccessfulRead.Value));
     }
 }

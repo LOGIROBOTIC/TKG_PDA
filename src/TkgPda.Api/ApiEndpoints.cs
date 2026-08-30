@@ -53,8 +53,20 @@ public static class ApiEndpoints
         endpoints.MapPut("/api/v1/machines/{machineId:guid}/slots/{slotId:guid}/load-state", UpdateLoadStateAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
+        endpoints.MapGet("/api/v1/rds/robot-alarm-summary", RobotAlarmSummaryAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
         return endpoints;
     }
+
+    // Customer Monitoring — Robot Alarm Visibility: coarse fleet-wide signal
+    // only. No verified per-machine robot mapping exists yet, so this must
+    // not leak individual robot identities or diagnostic detail to Operator.
+    private static Task<RdsRobotAlarmOperatorSummary> RobotAlarmSummaryAsync(
+        HttpContext context,
+        RdsIntegrationService service,
+        CancellationToken cancellationToken) =>
+        service.GetRobotAlarmSummaryForOperatorAsync(CorrelationId(context), cancellationToken);
 
     private static async Task<IResult> LoginAsync(
         LoginRequest request,

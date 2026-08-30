@@ -425,12 +425,23 @@ class AppController extends ChangeNotifier {
 
   Future<void> reloadPartOptions() => _loadPartOptions();
 
-  void selectMainPartOption(MachineMainPartOption option) {
+  /// One click: the chosen main part becomes the effective part immediately
+  /// and its compatible variants start resolving. Its RELATED/ALT parts stay
+  /// visible below as alternatives the operator may switch to afterwards —
+  /// no second "use the main part" confirmation step.
+  Future<void> selectMainPartOption(MachineMainPartOption option) async {
     _selectedMainPart = option;
     _selectedEffectivePart = null;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     notifyListeners();
+    await selectEffectivePart(
+      EffectivePartSelection(
+        partId: option.partId,
+        partCode: option.partCode,
+        isMain: true,
+      ),
+    );
   }
 
   Future<void> selectEffectivePart(EffectivePartSelection selection) async {

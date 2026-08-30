@@ -755,16 +755,8 @@ Future<_Harness> _operationHarness(
   return harness;
 }
 
-Future<void> _resolveDefaultPartFirstSelection(AppController controller) async {
-  controller.selectMainPartOption(testMainPartOption);
-  await controller.selectEffectivePart(
-    EffectivePartSelection(
-      partId: testMainPartOption.partId,
-      partCode: testMainPartOption.partCode,
-      isMain: true,
-    ),
-  );
-}
+Future<void> _resolveDefaultPartFirstSelection(AppController controller) =>
+    controller.selectMainPartOption(testMainPartOption);
 
 Future<void> _loginFromUi(
   WidgetTester tester, {

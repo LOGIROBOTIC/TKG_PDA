@@ -123,14 +123,7 @@ Future<_Harness> _operationHarness(
   final harness = await _harness(tester, repository: repository);
   await harness.controller.selectMachine(testMachine);
   await tester.pumpAndSettle();
-  harness.controller.selectMainPartOption(testMainPartOption);
-  await harness.controller.selectEffectivePart(
-    EffectivePartSelection(
-      partId: testMainPartOption.partId,
-      partCode: testMainPartOption.partCode,
-      isMain: true,
-    ),
-  );
+  await harness.controller.selectMainPartOption(testMainPartOption);
   await tester.pumpAndSettle();
   return harness;
 }

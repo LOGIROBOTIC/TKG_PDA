@@ -41,6 +41,7 @@ const testMainPartId = '70000000-0000-0000-0000-000000000001';
 const testAltPartId = '70000000-0000-0000-0000-000000000002';
 const testRelatedPartId = '70000000-0000-0000-0000-000000000003';
 const testOrphanPartId = '70000000-0000-0000-0000-000000000004';
+const testAmbiguousMainPartId = '70000000-0000-0000-0000-000000000005';
 
 OperationalContext testContext({
   List<ActiveTransportRequest> activeRequests = const [],
@@ -231,18 +232,53 @@ final testSecondMainPartOption = MachineMainPartOption(
   relatedParts: const [],
 );
 
-final testPartOptions = [testMainPartOption, testSecondMainPartOption];
+/// A main part whose OWN compatible-variant lookup is ambiguous (two
+/// variants), so one-click selecting it leaves the part-first gate open —
+/// the case where its RELATED/ALT alternatives actually stay on screen and
+/// can be chosen instead. Shares [testMainPartOption]'s children so the
+/// existing child-part fixtures/variant mappings apply unchanged.
+final testAmbiguousMainPartOption = MachineMainPartOption(
+  partId: testAmbiguousMainPartId,
+  partCode: '71570BN000-10-HAOS',
+  description: null,
+  relatedParts: testMainPartOption.relatedParts,
+);
+
+final testPartOptions = [
+  testMainPartOption,
+  testSecondMainPartOption,
+  testAmbiguousMainPartOption,
+];
 
 /// Keyed by partId. Main part -> single, already-active variant (V1, no
-/// switch needed). Alt part -> single, DIFFERENT variant (V2, requires
-/// switchVariant). Related part -> two variants (requires user selection).
-/// Orphan part -> no mapping (empty list).
+/// switch needed). Ambiguous main part -> two variants (gate stays open).
+/// Alt part -> single, DIFFERENT variant (V2, requires switchVariant).
+/// Related part -> two variants (requires user selection). Orphan part ->
+/// no mapping (empty list).
 final testCompatibleVariantsByPart = <String, List<CompatibleVariant>>{
   testMainPartId: [
     const CompatibleVariant(
       variantId: testVariantV1Id,
       variantCode: 'V1',
       variantName: 'Varyant 1',
+      machineId: '30000000-0000-0000-0000-000000000001',
+      productGroupId: testProductGroupId,
+      relationType: 'MAIN',
+    ),
+  ],
+  testAmbiguousMainPartId: [
+    const CompatibleVariant(
+      variantId: testVariantV1Id,
+      variantCode: 'V1',
+      variantName: 'Varyant 1',
+      machineId: '30000000-0000-0000-0000-000000000001',
+      productGroupId: testProductGroupId,
+      relationType: 'MAIN',
+    ),
+    const CompatibleVariant(
+      variantId: testVariantV2Id,
+      variantCode: 'V2',
+      variantName: 'Varyant 2',
       machineId: '30000000-0000-0000-0000-000000000001',
       productGroupId: testProductGroupId,
       relationType: 'MAIN',

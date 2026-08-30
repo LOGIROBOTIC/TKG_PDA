@@ -476,16 +476,55 @@ void main() {
   );
 
   testWidgets(
+    'one-click main-part selection while configuring an item changes only the '
+    'effective selection, never the cart contents',
+    (tester) async {
+      final harness = await _harness(tester);
+      await _enterBatchMode(tester);
+      await _expandMain(tester, testMainPartOption);
+      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
+      await _addPart(tester, 'batch-add-related-$testOrphanPartId');
+
+      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
+      await tester.tap(find.byKey(const Key('batch-configure-start')));
+      await tester.pumpAndSettle();
+
+      // Item 1 (main) auto-resolves and is configured; item 2 (orphan) has
+      // zero compatible variants, so the part-first gate stays open with the
+      // main-part chips on screen.
+      await _selectSlot(tester, 'slot-vacant');
+      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _confirmTransport(tester);
+
+      final cartBefore = harness.controller.batchCart.length;
+      await _scrollUntilVisible(
+        tester,
+        Key('main-part-${testSecondMainPartOption.partId}'),
+      );
+      await tester.tap(
+        find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(harness.controller.batchCart.length, cartBefore);
+      expect(
+        harness.controller.selectedEffectivePart?.partId,
+        testSecondMainPartOption.partId,
+      );
+      harness.dispose();
+    },
+  );
+
+  testWidgets(
     'the existing single-part workflow (outside batch mode) still works',
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
-      // Never enters batch mode.
+      // Never enters batch mode. One click on the main part resolves its
+      // single compatible variant and opens the operation flow directly.
       await tester.tap(
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('effective-part-main')));
       await tester.pumpAndSettle();
 
       await _selectSlot(tester, 'slot-vacant');

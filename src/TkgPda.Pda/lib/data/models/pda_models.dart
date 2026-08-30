@@ -143,6 +143,85 @@ class VariantLayoutOption {
   );
 }
 
+/// WP-03B: a Related/Alt part of a [MachineMainPartOption], as returned by
+/// GET /api/v1/machines/{machineId}/part-options.
+class MachineRelatedPart {
+  const MachineRelatedPart({
+    required this.partId,
+    required this.partCode,
+    required this.description,
+    required this.relationType,
+  });
+
+  final String partId;
+  final String partCode;
+  final String? description;
+  final String relationType;
+
+  factory MachineRelatedPart.fromJson(JsonMap json) => MachineRelatedPart(
+    partId: json['partId'] as String,
+    partCode: json['partCode'] as String? ?? '',
+    description: json['description'] as String?,
+    relationType: json['relationType'] as String? ?? '',
+  );
+}
+
+/// WP-03B: a machine-level main-part selection option (part-first entry
+/// point), deduplicated across the machine's variants.
+class MachineMainPartOption {
+  const MachineMainPartOption({
+    required this.partId,
+    required this.partCode,
+    required this.description,
+    required this.relatedParts,
+  });
+
+  final String partId;
+  final String partCode;
+  final String? description;
+  final List<MachineRelatedPart> relatedParts;
+
+  factory MachineMainPartOption.fromJson(JsonMap json) =>
+      MachineMainPartOption(
+        partId: json['partId'] as String,
+        partCode: json['partCode'] as String? ?? '',
+        description: json['description'] as String?,
+        relatedParts: _maps(
+          json['relatedParts'],
+        ).map(MachineRelatedPart.fromJson).toList(growable: false),
+      );
+}
+
+/// WP-03B: a variant compatible with a selected part on an authorized
+/// machine, as returned by
+/// GET /api/v1/machines/{machineId}/parts/{partId}/compatible-variants.
+class CompatibleVariant {
+  const CompatibleVariant({
+    required this.variantId,
+    required this.variantCode,
+    required this.variantName,
+    required this.machineId,
+    required this.productGroupId,
+    required this.relationType,
+  });
+
+  final String variantId;
+  final String variantCode;
+  final String variantName;
+  final String machineId;
+  final String productGroupId;
+  final String relationType;
+
+  factory CompatibleVariant.fromJson(JsonMap json) => CompatibleVariant(
+    variantId: json['variantId'] as String,
+    variantCode: json['variantCode'] as String? ?? '',
+    variantName: json['variantName'] as String? ?? '',
+    machineId: json['machineId'] as String,
+    productGroupId: json['productGroupId'] as String,
+    relationType: json['relationType'] as String? ?? '',
+  );
+}
+
 class RdsWorkSiteProjection {
   const RdsWorkSiteProjection({
     required this.isMapped,

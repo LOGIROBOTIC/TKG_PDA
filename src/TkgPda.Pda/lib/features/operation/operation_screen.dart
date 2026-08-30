@@ -5,6 +5,7 @@ import '../../data/models/pda_models.dart';
 import '../../shared/presentation.dart';
 import '../../shared/widgets/feedback_banners.dart';
 import 'layout_canvas.dart';
+import 'part_first_screen.dart';
 
 class OperationScreen extends StatelessWidget {
   const OperationScreen({required this.controller, super.key});
@@ -50,7 +51,9 @@ class OperationScreen extends StatelessWidget {
               if (controller.hasAmbiguousSubmission)
                 _AmbiguousSubmissionBanner(controller: controller),
               Expanded(
-                child: operational == null
+                child: controller.needsPartSelection
+                    ? PartFirstSelector(controller: controller)
+                    : operational == null
                     ? const Center(child: CircularProgressIndicator())
                     : _OperationContent(
                         contextData: operational,
@@ -217,26 +220,45 @@ class _MachineHeader extends StatelessWidget {
               ),
             ],
           );
-          if (!contextData.machine.permissions.canChangeVariant) return summary;
-          final button = OutlinedButton.icon(
-            key: const Key('variant-selection-button'),
-            onPressed: controller.mutationEnabled
-                ? () => _selectVariant(context)
-                : null,
-            icon: const Icon(Icons.swap_horiz),
-            label: const Text('Varyant'),
-          );
+          final buttons = <Widget>[
+            OutlinedButton.icon(
+              key: const Key('change-part-button'),
+              onPressed: controller.busy
+                  ? null
+                  : controller.resetPartSelection,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('Parça Değiştir'),
+            ),
+            if (contextData.machine.permissions.canChangeVariant)
+              OutlinedButton.icon(
+                key: const Key('variant-selection-button'),
+                onPressed: controller.mutationEnabled
+                    ? () => _selectVariant(context)
+                    : null,
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Varyant'),
+              ),
+          ];
           if (constraints.maxWidth < 520) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [summary, const SizedBox(height: 12), button],
+              children: [
+                summary,
+                const SizedBox(height: 12),
+                for (final button in buttons) ...[
+                  button,
+                  if (button != buttons.last) const SizedBox(height: 8),
+                ],
+              ],
             );
           }
           return Row(
             children: [
               Expanded(child: summary),
-              const SizedBox(width: 12),
-              button,
+              for (final button in buttons) ...[
+                const SizedBox(width: 12),
+                button,
+              ],
             ],
           );
         },

@@ -6,6 +6,11 @@ abstract interface class PdaDataSource {
   Future<AuthenticatedUser> me();
   Future<List<MachineSummary>> machines();
   Future<OperationalContext> operationalContext(String machineId);
+  Future<List<MachineMainPartOption>> machinePartOptions(String machineId);
+  Future<List<CompatibleVariant>> compatibleVariants({
+    required String machineId,
+    required String partId,
+  });
   Future<void> switchVariant({
     required String machineId,
     required String variantId,
@@ -62,6 +67,33 @@ class PdaRepository implements PdaDataSource {
       '/api/v1/machines/$machineId/operational-context',
     );
     return OperationalContext.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<List<MachineMainPartOption>> machinePartOptions(
+    String machineId,
+  ) async {
+    final response = await _api.get('/api/v1/machines/$machineId/part-options');
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(MachineMainPartOption.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<CompatibleVariant>> compatibleVariants({
+    required String machineId,
+    required String partId,
+  }) async {
+    final response = await _api.get(
+      '/api/v1/machines/$machineId/parts/$partId/compatible-variants',
+    );
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(CompatibleVariant.fromJson)
+        .toList(growable: false);
   }
 
   @override

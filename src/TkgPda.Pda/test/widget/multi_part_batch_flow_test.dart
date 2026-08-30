@@ -93,6 +93,93 @@ void main() {
     harness.dispose();
   });
 
+  testWidgets(
+    'the main-part browse chip shows a count badge once one of its parts is added',
+    (tester) async {
+      final harness = await _harness(tester);
+      await _enterBatchMode(tester);
+
+      expect(
+        find.byKey(Key('batch-browse-main-count-${testMainPartOption.partId}')),
+        findsNothing,
+      );
+
+      await _expandMain(tester, testMainPartOption);
+      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
+      await _addPart(tester, 'batch-add-alt-$testAltPartId');
+
+      await _scrollUntilVisible(
+        tester,
+        Key('batch-browse-main-count-${testMainPartOption.partId}'),
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(
+                of: find.byKey(
+                  Key('batch-browse-main-count-${testMainPartOption.partId}'),
+                ),
+                matching: find.byType(Text),
+              ),
+            )
+            .data,
+        '2',
+      );
+      harness.dispose();
+    },
+  );
+
+  testWidgets(
+    'the AppBar title shows how many parts are selected while in batch mode',
+    (tester) async {
+      final harness = await _harness(tester);
+      expect(find.text('${testMachine.code} · 0 Parça Seçili'), findsNothing);
+
+      await _enterBatchMode(tester);
+      expect(find.text('${testMachine.code} · 0 Parça Seçili'), findsOneWidget);
+
+      await _expandMain(tester, testMainPartOption);
+      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
+      expect(find.text('${testMachine.code} · 1 Parça Seçili'), findsOneWidget);
+      harness.dispose();
+    },
+  );
+
+  testWidgets(
+    'the configuration progress dots reflect which cart items are done',
+    (tester) async {
+      final harness = await _harness(tester);
+      await _enterBatchMode(tester);
+      await _expandMain(tester, testMainPartOption);
+      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
+      await _addPart(tester, 'batch-add-alt-$testAltPartId');
+
+      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
+      await tester.tap(find.byKey(const Key('batch-configure-start')));
+      await tester.pumpAndSettle();
+
+      await _scrollUntilVisible(tester, const Key('batch-progress-dots'));
+      expect(find.byKey(const Key('batch-progress-dot-0')), findsOneWidget);
+      expect(find.byKey(const Key('batch-progress-dot-1')), findsOneWidget);
+      expect(harness.controller.batchCart[0].isConfigured, isFalse);
+
+      await _selectSlot(tester, 'slot-vacant');
+      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _confirmTransport(tester);
+
+      expect(harness.controller.batchCart[0].isConfigured, isTrue);
+      await _scrollUntilVisible(tester, const Key('batch-progress-dots'));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('batch-progress-dot-0')),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsOneWidget,
+      );
+      harness.dispose();
+    },
+  );
+
   testWidgets('the same part cannot be added twice', (tester) async {
     final harness = await _harness(tester);
     await _enterBatchMode(tester);

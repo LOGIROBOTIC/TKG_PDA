@@ -136,6 +136,17 @@ void main() {
     harness.dispose();
   });
 
+  testWidgets('an operator with no assigned machines sees an empty state', (
+    tester,
+  ) async {
+    final repository = FakePdaRepository()..machineValues = [];
+    final harness = await _loggedInHarness(tester, repository: repository);
+
+    expect(find.byKey(const Key('machine-list-empty')), findsOneWidget);
+    expect(find.textContaining('Size tanımlı makine bulunamadı'), findsOneWidget);
+    harness.dispose();
+  });
+
   testWidgets('machine selection loads operational context', (tester) async {
     final harness = await _loggedInHarness(tester);
 
@@ -238,6 +249,24 @@ void main() {
       find.byKey(const Key('action-BRING_EMPTY')),
     );
     expect(button.onPressed, isNotNull);
+    harness.dispose();
+  });
+
+  testWidgets('the selected slot on the layout canvas shows a clear marker', (
+    tester,
+  ) async {
+    final harness = await _operationHarness(tester);
+
+    expect(find.byKey(const Key('slot-selected-badge')), findsNothing);
+    // Select without the usual scroll-to-details step: the details panel
+    // appearing below can push the canvas itself out of the ListView's
+    // cache extent, which is irrelevant to what this test checks.
+    await tester.ensureVisible(find.byKey(const Key('slot-slot-vacant')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('slot-slot-vacant')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('slot-selected-badge')), findsOneWidget);
     harness.dispose();
   });
 
@@ -359,6 +388,48 @@ void main() {
     expect(repository.lastCommand!.operation, 'BRING_EMPTY');
     harness.dispose();
   });
+
+  testWidgets(
+    'the action button is disabled while a submission is in flight, '
+    'preventing duplicate submission',
+    (tester) async {
+      final repository = FakePdaRepository()
+        ..createCompleter = Completer<TransportResult>();
+      final harness = await _operationHarness(tester, repository: repository);
+
+      await _selectSlot(tester, 'slot-vacant');
+      await tester.tap(find.byKey(const Key('action-BRING_EMPTY')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm-transport')));
+      // A single frame — the pending completer never resolves, and the busy
+      // indicator is an indeterminate animation, so pumpAndSettle would hang.
+      await tester.pump();
+
+      expect(harness.controller.busy, isTrue);
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.byKey(const Key('action-BRING_EMPTY')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(repository.createCount, 1);
+
+      repository.createCompleter!.complete(
+        const TransportResult(
+          id: '90000000-0000-0000-0000-000000000001',
+          requestNo: 42,
+          status: 'QUEUED',
+          operation: 'BRING_EMPTY',
+          idempotentReplay: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.createCount, 1);
+      harness.dispose();
+    },
+  );
 
   testWidgets('ambiguous transport displays safe retry choices', (
     tester,
@@ -614,6 +685,25 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'the layout canvas grows taller on narrow/mobile widths for bigger touch targets',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final harness = await _operationHarness(tester);
+
+      await _scrollTo(tester, find.byType(AspectRatio));
+      final aspectRatio = tester.widget<AspectRatio>(
+        find.byType(AspectRatio),
+      );
+      expect(aspectRatio.aspectRatio, 1.0);
+      expect(tester.takeException(), isNull);
+      harness.dispose();
+    },
+  );
 }
 
 Future<_Harness> _harness(

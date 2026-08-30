@@ -32,6 +32,14 @@ class _BatchPartBrowser extends StatefulWidget {
 class _BatchPartBrowserState extends State<_BatchPartBrowser> {
   MachineMainPartOption? _expanded;
 
+  /// How many cart items came from this main part (itself or one of its
+  /// RELATED/ALT parts) — surfaced as a small count badge on the browse
+  /// chip so it is clear at a glance without expanding each one.
+  int _cartCountFor(AppController controller, MachineMainPartOption main) =>
+      controller.batchCart
+          .where((item) => item.mainPart.partId == main.partId)
+          .length;
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -79,6 +87,20 @@ class _BatchPartBrowserState extends State<_BatchPartBrowser> {
                   child: ChoiceChip(
                     key: Key('batch-browse-main-${option.partId}'),
                     selected: _expanded?.partId == option.partId,
+                    avatar: _cartCountFor(controller, option) > 0
+                        ? CircleAvatar(
+                            key: Key('batch-browse-main-count-${option.partId}'),
+                            backgroundColor: const Color(0xFF166534),
+                            child: Text(
+                              '${_cartCountFor(controller, option)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          )
+                        : null,
                     label: Text(
                       '${option.partCode} · ${knownOr(option.description)}',
                       overflow: TextOverflow.ellipsis,
@@ -296,8 +318,12 @@ class _AddPartChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ActionChip(
-    avatar: Icon(alreadyAdded ? Icons.check_circle : Icons.add_circle_outline),
+    avatar: Icon(
+      alreadyAdded ? Icons.check_circle : Icons.add_circle_outline,
+      color: alreadyAdded ? const Color(0xFF166534) : null,
+    ),
     label: Text(label, overflow: TextOverflow.ellipsis),
+    backgroundColor: alreadyAdded ? const Color(0xFFDCFCE7) : null,
     onPressed: alreadyAdded ? null : () => onAdd(),
   );
 }

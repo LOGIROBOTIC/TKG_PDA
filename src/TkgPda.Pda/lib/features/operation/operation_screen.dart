@@ -29,6 +29,9 @@ class OperationScreen extends StatelessWidget {
           title: Text(
             controller.selectedMachine == null
                 ? 'Makine Operasyonu'
+                : controller.batchMode
+                ? '${controller.selectedMachine!.code} · '
+                      '${controller.batchCart.length} Parça Seçili'
                 : '${controller.selectedMachine!.code} · Operasyon',
           ),
           actions: [
@@ -101,11 +104,67 @@ class _BatchConfiguringBanner extends StatelessWidget {
     width: double.infinity,
     color: const Color(0xFFE0F2FE),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    child: Text(
-      'Grup: Parça ${controller.currentBatchItemPosition}/${controller.batchCart.length} yapılandırılıyor · '
-      '${controller.currentBatchItem?.effectivePart.partCode ?? ''}',
-      style: const TextStyle(fontWeight: FontWeight.w800),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Grup: Parça ${controller.currentBatchItemPosition}/${controller.batchCart.length} yapılandırılıyor · '
+          '${controller.currentBatchItem?.effectivePart.partCode ?? ''}',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        _BatchProgressDots(controller: controller),
+      ],
     ),
+  );
+}
+
+/// One dot per cart item: filled check for already-configured items, a
+/// highlighted ring for the one being configured now, an empty ring for the
+/// rest still pending — a compact "which items are done" state at a glance.
+class _BatchProgressDots extends StatelessWidget {
+  const _BatchProgressDots({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    key: const Key('batch-progress-dots'),
+    spacing: 6,
+    runSpacing: 6,
+    children: [
+      for (final (index, item) in controller.batchCart.indexed)
+        Tooltip(
+          message: item.effectivePart.partCode,
+          child: Container(
+            key: Key('batch-progress-dot-$index'),
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: item.isConfigured
+                  ? const Color(0xFF166534)
+                  : Colors.white,
+              border: Border.all(
+                color: index == controller.currentBatchItemPosition - 1
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xFF94A3B8),
+                width: index == controller.currentBatchItemPosition - 1
+                    ? 3
+                    : 1,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: item.isConfigured
+                ? const Icon(Icons.check, size: 13, color: Colors.white)
+                : Text(
+                    '${index + 1}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+          ),
+        ),
+    ],
   );
 }
 
@@ -637,9 +696,7 @@ class _LoadStateActionRow extends StatelessWidget {
             child: Text(
               enabled
                   ? 'Sunucu bu durum bildirimine izin veriyor.'
-                  : action.disabledMessage ??
-                        action.disabledCode ??
-                        'Kullanılamıyor.',
+                  : disabledReason(action.disabledMessage),
             ),
           ),
         ],
@@ -726,7 +783,7 @@ class _ActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = action.enabled && controller.mutationEnabled;
     final disabledMessage = !action.enabled
-        ? action.disabledMessage ?? action.disabledCode
+        ? disabledReason(action.disabledMessage)
         : controller.offline
         ? 'Bağlantı yokken işlem yapılamaz.'
         : null;

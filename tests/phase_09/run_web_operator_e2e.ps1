@@ -239,6 +239,21 @@ SELECT id,
        CASE WHEN rn = 1 THEN 'UNKNOWN' WHEN rn = 2 THEN 'EMPTY' ELSE 'FULL' END
 FROM slots
 WHERE rn <= 3;
+
+-- Customer Workflow — Empty Container Buffer: BRING_EMPTY auto-allocates its
+-- source from a configured EMPTY_STORAGE slot. The real customer layout has
+-- none, so this test provisions one directly (test-only, not production
+-- master data) for the single BRING_EMPTY submission this test performs.
+INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, display_order)
+SELECT state.active_layout_id, 'P09-BUFFER-1', 'Phase 09 Test Buffer', 'EMPTY_STORAGE', 9000
+FROM ops.machine_runtime_state state
+JOIN master.machines m ON m.id = state.machine_id
+WHERE m.code = 'SH-01-A';
+
+INSERT INTO ops.slot_runtime_state (layout_slot_id, occupancy_state, load_state)
+SELECT s.id, 'OCCUPIED', 'EMPTY'
+FROM master.layout_slots s
+WHERE s.code = 'P09-BUFFER-1';
 '@
     $seedPath = Join-Path $tempRoot 'seed.sql'
     Set-Content -LiteralPath $seedPath -Value $seedSql -Encoding utf8NoBOM

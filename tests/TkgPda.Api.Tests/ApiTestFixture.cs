@@ -41,6 +41,7 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
                 integration.rds_tasks,
                 ops.transport_request_events,
                 ops.transport_requests,
+                ops.transport_batches,
                 ops.slot_runtime_state,
                 ops.machine_runtime_state
             RESTART IDENTITY CASCADE;

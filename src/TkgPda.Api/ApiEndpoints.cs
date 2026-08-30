@@ -35,6 +35,9 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/transport-requests", CreateTransportAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
+        endpoints.MapPost("/api/v1/transport-batches", CreateTransportBatchAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
         endpoints.MapGet("/api/v1/transport-requests/{requestId:guid}", GetTransportAsync)
             .RequireAuthorization();
 
@@ -263,6 +266,68 @@ public static class ApiEndpoints
             statusCode: result.WasIdempotentReplay ? StatusCodes.Status200OK : StatusCodes.Status201Created);
     }
 
+    private static async Task<IResult> CreateTransportBatchAsync(
+        CreateTransportBatchHttpRequest request,
+        HttpContext context,
+        MachineAccessService access,
+        TransportWorkflowService workflow,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = Device(context);
+        _ = await access.EnsureAsync(context.User, request.MachineId, MachineAccessKind.Operate, cancellationToken);
+
+        if (request.Items is null || request.Items.Count == 0)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "BATCH_ITEMS_REQUIRED", "A batch must contain at least one item.");
+        }
+
+        var items = new List<CreateTransportRequest>(request.Items.Count);
+        foreach (var item in request.Items)
+        {
+            var operation = ParseOperation(item.Operation);
+            EnsureTransportOperationAllowed(context.User, operation);
+            items.Add(new CreateTransportRequest(
+                item.IdempotencyKey,
+                RequestOrigin.Api,
+                context.User.UserId(),
+                item.MachineId,
+                item.VariantId,
+                item.LayoutId,
+                item.NavigationProfileId,
+                item.ProductGroupId,
+                item.PartId,
+                item.ContainerTypeId,
+                operation,
+                item.SourceSlotId,
+                item.DestinationSlotId,
+                item.Priority));
+        }
+
+        var batchCommand = new CreateTransportBatchRequest(
+            request.IdempotencyKey,
+            RequestOrigin.Api,
+            context.User.UserId(),
+            request.MachineId,
+            items);
+        var result = await workflow.CreateBatchAsync(batchCommand, cancellationToken);
+
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            result.WasIdempotentReplay ? "TRANSPORT_BATCH_REPLAYED" : "TRANSPORT_BATCH_CREATED",
+            "TRANSPORT_BATCH",
+            result.BatchId.ToString(),
+            new { result.BatchId, itemCount = result.Items.Count },
+            cancellationToken);
+
+        return Results.Json(
+            ToBatchResponse(result),
+            statusCode: result.WasIdempotentReplay ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+    }
+
     private static async Task<IResult> GetTransportAsync(
         Guid requestId,
         HttpContext context,
@@ -459,6 +524,12 @@ public static class ApiEndpoints
         request.Priority,
         replay,
         cancellationPending);
+
+    private static TransportBatchHttpResponse ToBatchResponse(TransportBatchResult result) => new(
+        result.BatchId,
+        result.MachineId,
+        result.WasIdempotentReplay,
+        result.Items.Select(item => ToResponse(item, result.WasIdempotentReplay)).ToArray());
 
     private static DeviceRecord Device(HttpContext context) =>
         context.Items.TryGetValue(ApiContextKeys.Device, out var value) && value is DeviceRecord device

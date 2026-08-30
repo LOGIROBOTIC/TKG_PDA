@@ -6,6 +6,16 @@ public interface ITransportWorkflowStore
 {
     Task<CreateTransportResult> CreateAndQueueAsync(CreateTransportRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// WP-04: creates a TransportBatch and its child TransportRequests
+    /// atomically (all-or-nothing) within a single transaction, reusing the
+    /// same per-item validation/business rules as
+    /// <see cref="CreateAndQueueAsync"/>. Replaying the same batch
+    /// idempotency key returns the existing batch instead of creating
+    /// duplicate children.
+    /// </summary>
+    Task<TransportBatchResult> CreateBatchAndQueueAsync(CreateTransportBatchRequest request, CancellationToken cancellationToken = default);
+
     Task<CancelTransportResult> CancelAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default);
 
     Task<TransportRequestSnapshot> RecordExecutionTransitionAsync(

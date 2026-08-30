@@ -137,6 +137,14 @@ public sealed class TransportWorkflowServiceTests
             return Task.FromResult(CreateResult);
         }
 
+        public Task<TransportBatchResult> CreateBatchAndQueueAsync(CreateTransportBatchRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TransportBatchResult(
+                Guid.NewGuid(),
+                request.IdempotencyKey,
+                request.MachineId,
+                request.Items.Select(_ => CreateResult.Request).ToArray(),
+                false));
+
         public Task<CancelTransportResult> CancelAsync(Guid requestId, Guid? actorUserId, CancellationToken cancellationToken = default)
         {
             CancelledRequestId = requestId;

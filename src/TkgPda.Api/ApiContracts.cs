@@ -33,6 +33,31 @@ public sealed record CreateTransportHttpRequest(
     Guid? DestinationSlotId,
     int Priority = 100);
 
+public sealed record CreateTransportBatchItemHttpRequest(
+    string IdempotencyKey,
+    Guid MachineId,
+    Guid VariantId,
+    Guid LayoutId,
+    Guid? NavigationProfileId,
+    Guid? ProductGroupId,
+    Guid? PartId,
+    Guid? ContainerTypeId,
+    string Operation,
+    Guid? SourceSlotId,
+    Guid? DestinationSlotId,
+    int Priority = 100);
+
+public sealed record CreateTransportBatchHttpRequest(
+    string IdempotencyKey,
+    Guid MachineId,
+    IReadOnlyList<CreateTransportBatchItemHttpRequest> Items);
+
+public sealed record TransportBatchHttpResponse(
+    Guid BatchId,
+    Guid MachineId,
+    bool IdempotentReplay,
+    IReadOnlyList<TransportHttpResponse> Items);
+
 public sealed record VariantSwitchHttpRequest(
     Guid VariantId,
     Guid LayoutId,

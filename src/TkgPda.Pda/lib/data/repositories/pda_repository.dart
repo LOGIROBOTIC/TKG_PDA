@@ -2,7 +2,7 @@ import '../../core/network/api_client.dart';
 import '../models/pda_models.dart';
 
 abstract interface class PdaDataSource {
-  Future<LoginSession> login(String employeeNumber, String password);
+  Future<LoginSession> login(String employeeNumber);
   Future<AuthenticatedUser> me();
   Future<List<MachineSummary>> machines();
   Future<OperationalContext> operationalContext(String machineId);
@@ -36,10 +36,13 @@ class PdaRepository implements PdaDataSource {
   final ApiClient _api;
 
   @override
-  Future<LoginSession> login(String employeeNumber, String password) async {
+  Future<LoginSession> login(String employeeNumber) async {
+    // Production Sicil login is passwordless: identity is established by
+    // employeeNumber + the already-authorized device, so no password (and
+    // no username) is ever sent for this flow.
     final response = await _api.post(
       '/api/v1/auth/login',
-      body: {'employeeNumber': employeeNumber, 'password': password},
+      body: {'employeeNumber': employeeNumber},
       mutation: false,
     );
     return LoginSession.fromJson(_json(response.body));

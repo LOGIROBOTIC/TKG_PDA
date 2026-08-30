@@ -171,7 +171,7 @@ void main() {
     );
 
     test(
-      'PdaRepository submits employeeNumber and never a username field',
+      'PdaRepository submits employeeNumber and never a username or password field',
       () async {
         late http.Request captured;
         final client = ApiClient(
@@ -208,11 +208,12 @@ void main() {
           }),
         );
 
-        await PdaRepository(client).login('001245', 'transient');
+        await PdaRepository(client).login('001245');
 
         final body = jsonDecode(captured.body) as Map<String, dynamic>;
         expect(body['employeeNumber'], '001245');
         expect(body.containsKey('username'), isFalse);
+        expect(body.containsKey('password'), isFalse);
       },
     );
 

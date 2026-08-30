@@ -1,5 +1,13 @@
 # Customer WP-01A — Operator Employee / Registry Identity Contract
 
+> **GÜNCEL DEĞİL — SÜPER SEDE EDİLDİ:** Bu belgede tarif edilen `employee
+> identity + password + device` sözleşmesi artık production Sicil girişi için
+> geçerli değildir. "Customer Auth — Passwordless Sicil Login" değişikliği ile
+> production Operator girişi `employeeNumber + device` olmuş, **şifre
+> kaldırılmıştır**. Bu belge yalnızca WP-01A'nın o zamanki tarihsel kararını
+> yansıtır; güncel sözleşme için `CLAUDE.md` içindeki "Current identity
+> contract" bölümüne bakın.
+
 **Kapsam:** Production Operator kimlik doğrulamasının müşteri **sicil numarası /
 employee number** ile yapılmasını sağlayan backend + veritabanı sözleşmesi.
 

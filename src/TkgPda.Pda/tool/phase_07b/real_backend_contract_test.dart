@@ -24,7 +24,6 @@ void main() {
 
   final deviceCode = _required(environment, 'TKG_REAL_API_DEVICE_CODE');
   final username = _required(environment, 'TKG_REAL_API_USERNAME');
-  final password = _required(environment, 'TKG_REAL_API_PASSWORD');
   final warehouseDevice = _required(
     environment,
     'TKG_REAL_API_WAREHOUSE_DEVICE_CODE',
@@ -50,7 +49,7 @@ void main() {
 
   setUpAll(() async {
     mainClient = _client(Uri.parse(baseUrl), deviceCode);
-    final login = await mainClient.repository.login(username, password);
+    final login = await mainClient.repository.login(username);
     mainClient.session.establish(login);
     machineList = await mainClient.repository.machines();
     machine = machineList.singleWhere((item) => item.code == machineCode);
@@ -228,7 +227,7 @@ void main() {
     final warehouse = _client(Uri.parse(baseUrl), warehouseDevice);
     addTearDown(warehouse.api.close);
     warehouse.session.establish(
-      await warehouse.repository.login(warehouseUsername, password),
+      await warehouse.repository.login(warehouseUsername),
     );
     final warehouseContext = await warehouse.repository.operationalContext(
       machine.id,
@@ -290,7 +289,7 @@ void main() {
     final inactive = _client(Uri.parse(baseUrl), inactiveDevice);
     addTearDown(inactive.api.close);
     await expectLater(
-      inactive.repository.login(username, password),
+      inactive.repository.login(username),
       throwsA(
         isA<ApiProblem>().having(
           (problem) => problem.code,

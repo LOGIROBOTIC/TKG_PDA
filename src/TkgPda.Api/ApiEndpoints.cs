@@ -81,8 +81,19 @@ public static class ApiEndpoints
             throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_LOGIN_REQUEST", "A username or employee number is required.");
         }
 
-        if ((username?.Length ?? employeeNumber!.Length) > 100
-            || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256)
+        // Production customer requirement: the employee-number (sicil) path is
+        // passwordless — identity is established by employeeNumber + an
+        // already-authorized device, and the employee number itself is not a
+        // secret. The legacy username path is unchanged and still requires a
+        // password.
+        if (employeeNumber is not null)
+        {
+            if (employeeNumber.Length > 100)
+            {
+                throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_LOGIN_REQUEST", "The employee number must fit the supported limit.");
+            }
+        }
+        else if (username!.Length > 100 || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256)
         {
             throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_LOGIN_REQUEST", "The identity and password are required and must fit the supported limits.");
         }
@@ -99,13 +110,22 @@ public static class ApiEndpoints
             throw new ApiException(StatusCodes.Status403Forbidden, "DEVICE_NOT_AUTHORIZED", "The client device is unknown, inactive or not a PDA.");
         }
 
-        var user = employeeNumber is not null
-            ? await dataStore.FindUserByEmployeeNumberAsync(EmployeeNumber.NormalizeForLookup(employeeNumber)!, cancellationToken)
-            : await dataStore.FindUserByUsernameAsync(username!, cancellationToken);
-        var passwordValid = user is null
-            ? passwordHasher.VerifyUnknownUser(request.Password)
-            : passwordHasher.Verify(request.Password, user.PasswordHash);
-        if (user is null || !user.IsActive || !passwordValid || user.Roles.Count == 0)
+        AuthUserRecord? user;
+        bool credentialsValid;
+        if (employeeNumber is not null)
+        {
+            user = await dataStore.FindUserByEmployeeNumberAsync(EmployeeNumber.NormalizeForLookup(employeeNumber)!, cancellationToken);
+            credentialsValid = true; // Passwordless sicil path: no password is verified.
+        }
+        else
+        {
+            user = await dataStore.FindUserByUsernameAsync(username!, cancellationToken);
+            credentialsValid = user is null
+                ? passwordHasher.VerifyUnknownUser(request.Password!)
+                : passwordHasher.Verify(request.Password!, user.PasswordHash);
+        }
+
+        if (user is null || !user.IsActive || !credentialsValid || user.Roles.Count == 0)
         {
             await WriteAuditAsync(
                 dataStore,

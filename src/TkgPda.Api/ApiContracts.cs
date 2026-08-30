@@ -2,7 +2,7 @@ using TkgPda.Application;
 
 namespace TkgPda.Api;
 
-public sealed record LoginRequest(string? Username, string Password, string? EmployeeNumber = null);
+public sealed record LoginRequest(string? Username, string? Password = null, string? EmployeeNumber = null);
 
 public sealed record LoginResponse(
     string AccessToken,

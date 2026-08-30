@@ -199,15 +199,44 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
     }
 
     [Fact]
-    public async Task Employee_number_login_wrong_password_is_rejected()
+    public async Task Employee_number_login_succeeds_without_a_password()
+    {
+        // Production customer requirement: the sicil path is passwordless.
+        // Identity is established by employeeNumber + an authorized device;
+        // the employee number itself is not a secret.
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, null, identity.EmployeeNo));
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(identity.UserId, login!.User.Id);
+    }
+
+    [Fact]
+    public async Task Employee_number_login_does_not_verify_a_supplied_password()
     {
         await fixture.ResetAsync();
         var identity = await fixture.SeedIdentityAsync();
 
-        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, "wrong-password", identity.EmployeeNo));
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(null, "definitely-the-wrong-password", identity.EmployeeNo));
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>();
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("INVALID_CREDENTIALS", await ApiTestFixture.ErrorCodeAsync(response));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(identity.UserId, login!.User.Id);
+    }
+
+    [Fact]
+    public async Task Username_login_without_a_password_is_rejected()
+    {
+        await fixture.ResetAsync();
+        var identity = await fixture.SeedIdentityAsync();
+
+        var response = await PostLoginAsync(identity.DeviceCode, new LoginRequest(identity.Username, null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_LOGIN_REQUEST", await ApiTestFixture.ErrorCodeAsync(response));
     }
 
     [Fact]

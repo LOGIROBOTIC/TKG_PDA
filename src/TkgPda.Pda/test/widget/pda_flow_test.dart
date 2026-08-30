@@ -644,7 +644,7 @@ Future<_Harness> _loggedInHarness(
   FakePdaRepository? repository,
 }) async {
   final harness = await _harness(tester, store: store, repository: repository);
-  await harness.controller.login('operator', 'transient');
+  await harness.controller.login('operator');
   await tester.pumpAndSettle();
   return harness;
 }
@@ -684,7 +684,6 @@ Future<void> _loginFromUi(
     find.byKey(const Key('employee-number-field')),
     employeeNumber,
   );
-  await tester.enterText(find.byKey(const Key('password-field')), 'transient');
   await tester.tap(find.byKey(const Key('login-button')));
   await tester.pumpAndSettle();
 }

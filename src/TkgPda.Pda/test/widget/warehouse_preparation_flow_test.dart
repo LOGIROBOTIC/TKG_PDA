@@ -21,17 +21,24 @@ void main() {
         ..warehouseRequestsValue = [testWarehousePreparationRequest];
       final harness = await _harness(tester, repository: repository);
 
-      expect(find.byKey(const Key('open-warehouse-preparation')), findsOneWidget);
+      expect(
+        find.byKey(const Key('open-warehouse-preparation')),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('open-warehouse-preparation')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('warehouse-preparation-list')), findsOneWidget);
+      expect(
+        find.byKey(const Key('warehouse-preparation-list')),
+        findsOneWidget,
+      );
       expect(
         find.byKey(
           Key('warehouse-item-${testWarehousePreparationRequest.requestId}'),
         ),
         findsOneWidget,
       );
+      expect(find.textContaining('SLOT-V'), findsNothing);
       harness.dispose();
     },
   );
@@ -64,7 +71,10 @@ void main() {
     await tester.tap(find.byKey(const Key('open-warehouse-preparation')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('warehouse-preparation-empty')), findsOneWidget);
+    expect(
+      find.byKey(const Key('warehouse-preparation-empty')),
+      findsOneWidget,
+    );
     harness.dispose();
   });
 
@@ -81,7 +91,10 @@ void main() {
     await tester.tap(find.byKey(const Key('open-warehouse-preparation')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('warehouse-preparation-error')), findsOneWidget);
+    expect(
+      find.byKey(const Key('warehouse-preparation-error')),
+      findsOneWidget,
+    );
 
     repository.warehouseRequestsError = null;
     repository.warehouseRequestsValue = [testWarehousePreparationRequest];
@@ -158,14 +171,15 @@ void main() {
         ),
         findsNothing,
       );
-      expect(find.byKey(const Key('warehouse-preparation-empty')), findsOneWidget);
+      expect(
+        find.byKey(const Key('warehouse-preparation-empty')),
+        findsOneWidget,
+      );
       harness.dispose();
     },
   );
 
-  testWidgets('a failed ready action keeps the item for retry', (
-    tester,
-  ) async {
+  testWidgets('a failed ready action keeps the item for retry', (tester) async {
     final repository = FakePdaRepository()
       ..loginUser = _warehouseUser
       ..warehouseRequestsValue = [testWarehousePreparationRequest]

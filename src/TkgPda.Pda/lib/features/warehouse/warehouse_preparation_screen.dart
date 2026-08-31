@@ -22,7 +22,9 @@ class WarehousePreparationScreen extends StatelessWidget {
         leading: IconButton(
           key: const Key('leave-warehouse-preparation'),
           tooltip: 'Makine listesi',
-          onPressed: controller.busy ? null : controller.leaveWarehousePreparation,
+          onPressed: controller.busy
+              ? null
+              : controller.leaveWarehousePreparation,
           icon: const Icon(Icons.arrow_back),
         ),
         title: const Text('Depo Hazırlık'),
@@ -149,12 +151,18 @@ class _RequestCard extends StatelessWidget {
             if (request.sourceSlotDisplayName != null)
               _InfoRow(
                 'Kaynak',
-                '${request.sourceSlotDisplayName} · ${knownOr(request.sourceSlotCode)}',
+                operatorLocationLabel(
+                  request.sourceSlotDisplayName,
+                  request.sourceSlotCode,
+                ),
               ),
             if (request.destinationSlotDisplayName != null)
               _InfoRow(
                 'Hedef',
-                '${request.destinationSlotDisplayName} · ${knownOr(request.destinationSlotCode)}',
+                operatorLocationLabel(
+                  request.destinationSlotDisplayName,
+                  request.destinationSlotCode,
+                ),
               ),
             _InfoRow('Talep No', '#${request.requestNo}'),
             const SizedBox(height: 12),

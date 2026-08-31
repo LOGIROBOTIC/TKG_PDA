@@ -167,10 +167,23 @@ class Phase02BPipelineTests(unittest.TestCase):
         pair_slots = {(row["machine_code"], row["layout_code"], row["slot_code"]) for row in pairs}
         self.assertTrue(unresolved_slots.isdisjoint(pair_slots))
 
+        logistics_slots = {
+            (item["machine_code"], item["layout_code"], item["code"])
+            for item in self.dataset["layout_slots"]
+            if item["slot_role"] != "MACHINE"
+        }
+        self.assertEqual(len(pairs), 143)
+        self.assertEqual(len(pair_slots), 124)
+        self.assertEqual(len(logistics_slots - pair_slots), 48)
+        self.assertEqual(len(unresolved_slots), 28)
+        self.assertEqual(len((logistics_slots - pair_slots) - unresolved_slots), 20)
+
         seed = (
             PROJECT_ROOT / "db/seeds/generated/002c_customer_layout_slot_part_assignments.sql"
         ).read_text(encoding="utf-8")
         self.assertIn(f"curated pairs: {len(pairs)}", seed)
+        self.assertIn("mapped logistics slots: 124", seed)
+        self.assertIn("unmapped logistics slots: 48 (28 unresolved evidence; 20 variant-mismatch-only)", seed)
         self.assertNotIn("INSERT INTO master.parts", seed)
         self.assertNotIn("INSERT INTO master.layout_slots", seed)
 

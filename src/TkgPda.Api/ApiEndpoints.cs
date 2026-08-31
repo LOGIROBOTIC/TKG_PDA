@@ -230,13 +230,22 @@ public static class ApiEndpoints
     private static async Task<IResult> CompatibleVariantsAsync(
         Guid machineId,
         Guid partId,
+        [FromQuery] Guid? mainPartId,
         HttpContext context,
         MachineAccessService access,
         IApiDataStore dataStore,
         CancellationToken cancellationToken)
     {
         _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.View, cancellationToken);
-        var variants = await dataStore.ListCompatibleVariantsAsync(machineId, partId, cancellationToken);
+        if (!mainPartId.HasValue || mainPartId.Value == Guid.Empty)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "MAIN_PART_CONTEXT_REQUIRED",
+                "Uyumlu varyant sorgusu için ana parça bağlamı gereklidir.");
+        }
+
+        var variants = await dataStore.ListCompatibleVariantsAsync(machineId, mainPartId.Value, partId, cancellationToken);
         return Results.Ok(variants);
     }
 

@@ -95,7 +95,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(Key('alt-part-$testAltPartId')), findsOneWidget);
-      expect(find.byKey(Key('related-part-$testRelatedPartId')), findsOneWidget);
+      expect(
+        find.byKey(Key('related-part-$testRelatedPartId')),
+        findsOneWidget,
+      );
       // testSecondMainPartOption has no related parts of its own — nothing
       // from an unrelated main part may leak into the selected one's card.
       expect(
@@ -127,9 +130,7 @@ void main() {
         testSecondMainPartOption.partId,
       );
       expect(
-        find.byKey(
-          Key('main-part-detail-${testSecondMainPartOption.partId}'),
-        ),
+        find.byKey(Key('main-part-detail-${testSecondMainPartOption.partId}')),
         findsOneWidget,
       );
       // The previous main part's alternatives are gone.
@@ -151,12 +152,17 @@ void main() {
 
       // Uses the RELATED part (resolves to 2 variants) rather than ALT (which
       // auto-resolves to a single variant and would unmount this screen).
-      await tester.ensureVisible(find.byKey(Key('related-part-$testRelatedPartId')));
+      await tester.ensureVisible(
+        find.byKey(Key('related-part-$testRelatedPartId')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('related-part-$testRelatedPartId')));
       await tester.pumpAndSettle();
 
-      expect(harness.controller.selectedEffectivePart?.partId, testRelatedPartId);
+      expect(
+        harness.controller.selectedEffectivePart?.partId,
+        testRelatedPartId,
+      );
       expect(harness.controller.selectedEffectivePart?.isMain, isFalse);
       final relatedChip = tester.widget<ChoiceChip>(
         find.byKey(Key('related-part-$testRelatedPartId')),
@@ -226,8 +232,15 @@ void main() {
         repository.compatibleVariantsRequestedPartIds,
         contains(testRelatedPartId),
       );
+      expect(
+        repository.compatibleVariantsRequestedMainPartIds,
+        contains(testAmbiguousMainPartId),
+      );
       await _scrollTo(tester, const Key('multiple-compatible-variants'));
-      expect(find.byKey(const Key('multiple-compatible-variants')), findsOneWidget);
+      expect(
+        find.byKey(const Key('multiple-compatible-variants')),
+        findsOneWidget,
+      );
       harness.dispose();
     },
   );
@@ -298,10 +311,18 @@ void main() {
     await tester.pumpAndSettle();
 
     await _scrollTo(tester, Key('compatible-variant-$testVariantV1Id'));
-    expect(find.byKey(Key('compatible-variant-$testVariantV1Id')), findsOneWidget);
-    expect(find.byKey(Key('compatible-variant-$testVariantV2Id')), findsOneWidget);
+    expect(
+      find.byKey(Key('compatible-variant-$testVariantV1Id')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(Key('compatible-variant-$testVariantV2Id')),
+      findsOneWidget,
+    );
 
-    await tester.ensureVisible(find.byKey(Key('compatible-variant-$testVariantV2Id')));
+    await tester.ensureVisible(
+      find.byKey(Key('compatible-variant-$testVariantV2Id')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(Key('compatible-variant-$testVariantV2Id')));
     await tester.pumpAndSettle();
@@ -371,7 +392,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
-    expect(find.byKey(Key('main-part-${testMainPartOption.partId}')), findsOneWidget);
+    expect(
+      find.byKey(Key('main-part-${testMainPartOption.partId}')),
+      findsOneWidget,
+    );
     harness.dispose();
   });
 
@@ -393,7 +417,9 @@ void main() {
     expect(find.byKey(const Key('compatible-variants-retry')), findsOneWidget);
 
     repository.compatibleVariantsError = null;
-    await tester.ensureVisible(find.byKey(const Key('compatible-variants-retry')));
+    await tester.ensureVisible(
+      find.byKey(const Key('compatible-variants-retry')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('compatible-variants-retry')));
     await tester.pumpAndSettle();

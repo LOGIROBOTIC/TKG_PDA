@@ -159,7 +159,9 @@ class _MainPartChip extends StatelessWidget {
             ),
         ],
       ),
-      onSelected: (_) => controller.selectMainPartOption(option),
+      onSelected: controller.busy
+          ? null
+          : (_) => controller.selectMainPartOption(option),
     );
   }
 }
@@ -181,7 +183,8 @@ class _EffectivePartCard extends StatelessWidget {
         .toList(growable: false);
     final other = main.relatedParts
         .where(
-          (part) => part.relationType != 'RELATED' && part.relationType != 'ALT_PART',
+          (part) =>
+              part.relationType != 'RELATED' && part.relationType != 'ALT_PART',
         )
         .toList(growable: false);
 
@@ -352,13 +355,15 @@ class _RelatedPartChip extends StatelessWidget {
         fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
       ),
     ),
-    onSelected: (_) => controller.selectEffectivePart(
-      EffectivePartSelection(
-        partId: part.partId,
-        partCode: part.partCode,
-        isMain: false,
-      ),
-    ),
+    onSelected: controller.busy
+        ? null
+        : (_) => controller.selectEffectivePart(
+            EffectivePartSelection(
+              partId: part.partId,
+              partCode: part.partCode,
+              isMain: false,
+            ),
+          ),
   );
 }
 
@@ -391,14 +396,17 @@ class _CompatibleVariantCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
     if (variants.isEmpty) {
-      return const Card(
-        key: Key('zero-compatible-variants'),
+      final batchVariantCode = controller.batchTargetVariantCode;
+      return Card(
+        key: const Key('zero-compatible-variants'),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
-            'Uyumlu varyant bulunamadı.',
-            key: Key('zero-variants-message'),
-            style: TextStyle(fontWeight: FontWeight.w700),
+            batchVariantCode == null
+                ? 'Uyumlu varyant bulunamadı.'
+                : 'Bu parça, grubun $batchVariantCode varyantıyla uyumlu değil.',
+            key: const Key('zero-variants-message'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
       );
@@ -446,6 +454,11 @@ class _CompatibleVariantCard extends StatelessWidget {
             ListTile(
               key: Key('compatible-variant-${variant.variantId}'),
               title: Text('${variant.variantCode} · ${variant.variantName}'),
+              trailing:
+                  controller.resolvedCompatibleVariant?.variantId ==
+                      variant.variantId
+                  ? const Icon(Icons.check_circle, color: Color(0xFF15803D))
+                  : null,
               onTap: controller.busy
                   ? null
                   : () => controller.selectCompatibleVariant(variant),
@@ -471,9 +484,7 @@ class _ContinueAction extends StatelessWidget {
     width: double.infinity,
     child: FilledButton.icon(
       key: const Key('part-first-continue'),
-      onPressed: controller.busy
-          ? null
-          : controller.confirmPartFirstSelection,
+      onPressed: controller.busy ? null : controller.confirmPartFirstSelection,
       icon: const Icon(Icons.arrow_forward),
       label: const Text('İşleme Devam Et'),
     ),

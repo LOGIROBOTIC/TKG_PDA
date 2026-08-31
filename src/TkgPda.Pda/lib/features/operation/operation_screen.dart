@@ -73,7 +73,8 @@ class OperationScreen extends StatelessWidget {
               if (controller.isConfiguringBatchItem)
                 _BatchConfiguringBanner(controller: controller),
               Expanded(
-                child: controller.batchMode && !controller.isConfiguringBatchItem
+                child:
+                    controller.batchMode && !controller.isConfiguringBatchItem
                     ? MultiPartBatchWorkspace(controller: controller)
                     : controller.needsPartSelection
                     ? _PartFirstWithBatchSkip(controller: controller)
@@ -143,16 +144,12 @@ class _BatchProgressDots extends StatelessWidget {
             height: 22,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: item.isConfigured
-                  ? const Color(0xFF166534)
-                  : Colors.white,
+              color: item.isConfigured ? const Color(0xFF166534) : Colors.white,
               border: Border.all(
                 color: index == controller.currentBatchItemPosition - 1
                     ? const Color(0xFFF59E0B)
                     : const Color(0xFF94A3B8),
-                width: index == controller.currentBatchItemPosition - 1
-                    ? 3
-                    : 1,
+                width: index == controller.currentBatchItemPosition - 1 ? 3 : 1,
               ),
             ),
             alignment: Alignment.center,
@@ -160,7 +157,10 @@ class _BatchProgressDots extends StatelessWidget {
                 ? const Icon(Icons.check, size: 13, color: Colors.white)
                 : Text(
                     '${index + 1}',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
           ),
         ),
@@ -215,7 +215,9 @@ class _AmbiguousBatchBanner extends StatelessWidget {
           children: [
             OutlinedButton(
               key: const Key('retry-ambiguous-batch'),
-              onPressed: controller.busy ? null : controller.retryAmbiguousBatch,
+              onPressed: controller.busy
+                  ? null
+                  : controller.retryAmbiguousBatch,
               child: const Text('Aynı Grubu Yeniden Dene'),
             ),
             OutlinedButton(
@@ -259,8 +261,6 @@ class _OperationContent extends StatelessWidget {
         const SizedBox(height: 14),
         _DirectActions(controller: controller),
         const SizedBox(height: 14),
-        _ProductSection(contextData: contextData, controller: controller),
-        const SizedBox(height: 14),
         _LayoutCard(contextData: contextData, controller: controller),
         if (controller.selectedSlot case final slot?) ...[
           const SizedBox(height: 14),
@@ -291,8 +291,6 @@ class _OperationContent extends StatelessWidget {
               _MachineHeader(contextData: contextData, controller: controller),
               const SizedBox(height: 14),
               _DirectActions(controller: controller),
-              const SizedBox(height: 14),
-              _ProductSection(contextData: contextData, controller: controller),
               const SizedBox(height: 14),
               _ActiveTransportSection(
                 requests: contextData.activeTransportRequests,
@@ -334,10 +332,24 @@ class _LayoutCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     child: Padding(
       padding: const EdgeInsets.all(14),
-      child: LayoutCanvas(
-        slots: contextData.slots,
-        selectedSlotId: controller.selectedSlot?.id,
-        onSlotSelected: controller.selectSlot,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Fiziksel Yerleşim',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Yalnız görüntüleme ve durum takibi içindir. Taşıma konumunu sunucu otomatik seçer.',
+          ),
+          const SizedBox(height: 12),
+          LayoutCanvas(
+            slots: contextData.slots,
+            selectedSlotId: controller.selectedSlot?.id,
+            onSlotSelected: controller.selectSlot,
+          ),
+        ],
       ),
     ),
   );
@@ -390,9 +402,7 @@ class _MachineHeader extends StatelessWidget {
           final buttons = <Widget>[
             OutlinedButton.icon(
               key: const Key('change-part-button'),
-              onPressed: controller.busy
-                  ? null
-                  : controller.resetPartSelection,
+              onPressed: controller.busy ? null : controller.resetPartSelection,
               icon: const Icon(Icons.inventory_2_outlined),
               label: const Text('Parça Değiştir'),
             ),
@@ -510,11 +520,14 @@ class _DirectActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canOperate = controller.selectedMachine?.permissions.canOperate ?? false;
+    final canOperate =
+        controller.selectedMachine?.permissions.canOperate ?? false;
     if (!canOperate) {
       return const SizedBox.shrink();
     }
     final enabled = controller.mutationEnabled;
+    final effectivePart = controller.selectedEffectivePart;
+    final mainPart = controller.selectedMainPart;
     return Card(
       key: const Key('direct-actions'),
       child: Padding(
@@ -527,6 +540,16 @@ class _DirectActions extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
+            Text(
+              effectivePart == null
+                  ? 'Parça seçimi bulunamadı.'
+                  : effectivePart.isMain || mainPart == null
+                  ? 'Parça: ${effectivePart.partCode}'
+                  : 'Ana parça: ${mainPart.partCode} · İşlem parçası: ${effectivePart.partCode}',
+              key: const Key('operation-effective-part'),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
             const Text('Konum otomatik olarak seçilecek.'),
             const SizedBox(height: 12),
             for (final operation in _operations)
@@ -536,7 +559,9 @@ class _DirectActions extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     key: Key('direct-action-$operation'),
-                    onPressed: enabled ? () => _confirm(context, operation) : null,
+                    onPressed: enabled
+                        ? () => _confirm(context, operation)
+                        : null,
                     child: Text(actionLabel(operation)),
                   ),
                 ),
@@ -610,95 +635,6 @@ class _DirectActions extends StatelessWidget {
       }
     }
   }
-}
-
-class _ProductSection extends StatelessWidget {
-  const _ProductSection({required this.contextData, required this.controller});
-
-  final OperationalContext contextData;
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Parça / Alt Parça',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 10),
-          if (contextData.productGroups.isEmpty)
-            const Text('Aktif varyant için parça grubu tanımlı değil.')
-          else
-            LayoutBuilder(
-              builder: (context, constraints) => Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final group in contextData.productGroups)
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: constraints.maxWidth,
-                      ),
-                      child: ChoiceChip(
-                        key: Key('product-group-${group.id}'),
-                        selected:
-                            controller.selectedProductGroup?.id == group.id,
-                        label: Text(
-                          '${group.mainPartCode} · ${knownOr(group.name)}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onSelected: (selected) => controller.selectProductGroup(
-                          selected ? group : null,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          if (controller.selectedProductGroup case final group?) ...[
-            const Divider(height: 28),
-            Text(
-              'Alt Parçalar · ${group.mainPartCode}',
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            if (group.parts.isEmpty)
-              const Text('Alt parça tanımlı değil.')
-            else
-              LayoutBuilder(
-                builder: (context, constraints) => Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final part in group.parts)
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: constraints.maxWidth,
-                        ),
-                        child: ChoiceChip(
-                          key: Key('product-part-${part.id}'),
-                          selected: controller.selectedPart?.id == part.id,
-                          label: Text(
-                            '${part.partCode}\nKasa: ${knownOr(part.containerCode)} · Lot: ${part.lotQuantity?.toStringAsFixed(0) ?? 'Tanımlı değil'}',
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 2,
-                          ),
-                          onSelected: (selected) =>
-                              controller.selectPart(selected ? part : null),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-          ],
-        ],
-      ),
-    ),
-  );
 }
 
 class _SlotDetails extends StatelessWidget {
@@ -786,14 +722,6 @@ class _SlotDetails extends StatelessWidget {
                   controller: controller,
                 ),
             ],
-            const Divider(height: 28),
-            const Text(
-              'Kullanılabilir İşlemler',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            for (final action in slot.availableActions)
-              _ActionRow(slot: slot, action: action, controller: controller),
           ],
         ),
       ),
@@ -903,128 +831,6 @@ class _RdsReadiness extends StatelessWidget {
           ),
       ],
     );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.slot,
-    required this.action,
-    required this.controller,
-  });
-
-  final LayoutSlot slot;
-  final AvailableAction action;
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = action.enabled && controller.mutationEnabled;
-    final disabledMessage = !action.enabled
-        ? disabledReason(action.disabledMessage)
-        : controller.offline
-        ? 'Bağlantı yokken işlem yapılamaz.'
-        : null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              key: Key('action-${action.action}'),
-              onPressed: enabled ? () => _confirm(context) : null,
-              child: Text(actionLabel(action.action)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 3,
-            child: Text(
-              enabled
-                  ? 'Sunucu işlemi uygun buldu.'
-                  : disabledMessage ?? 'Kullanılamıyor.',
-              key: Key('action-reason-${action.action}'),
-              style: TextStyle(
-                color: enabled
-                    ? const Color(0xFF166534)
-                    : const Color(0xFF7F1D1D),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirm(BuildContext context) async {
-    final command = controller.commandFor(slot, action);
-    final group = controller.selectedProductGroup;
-    final part = controller.selectedPart;
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Taşıma Talebini Onaylayın',
-                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 16),
-              _ConfirmationLine('Makine', controller.context!.machine.code),
-              _ConfirmationLine(
-                'Varyant',
-                knownOr(controller.context!.activeVariantCode),
-              ),
-              _ConfirmationLine(
-                'Parça',
-                group?.mainPartCode ?? 'Tanımlı değil',
-              ),
-              _ConfirmationLine('Alt Parça', part?.partCode ?? 'Tanımlı değil'),
-              _ConfirmationLine('Konum', '${slot.displayName} · ${slot.code}'),
-              _ConfirmationLine('İşlem', actionLabel(action.action)),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('İptal'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      key: const Key('confirm-transport'),
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Onayla'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (confirmed == true) {
-      if (controller.isConfiguringBatchItem) {
-        await controller.confirmBatchItemCommand(
-          command,
-          slot: slot,
-          operation: action.action,
-        );
-      } else {
-        await controller.submitTransport(command);
-      }
-    }
   }
 }
 

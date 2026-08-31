@@ -10,8 +10,9 @@ import 'package:tkg_pda/data/models/pda_models.dart';
 import '../support/fakes.dart';
 
 // Customer UI — Multi-Part Transport Batch: multiple effective parts
-// selected on the existing part-first flow, each independently resolved to
-// its own variant/slot/operation, then submitted as one TransportBatch (or,
+// selected on the existing part-first flow, resolved to the machine's active
+// variant and configured with an operation, then submitted as one
+// TransportBatch (or,
 // for exactly one item, through the existing single-request path).
 void main() {
   testWidgets('selecting multiple parts adds them all to the cart', (
@@ -163,8 +164,7 @@ void main() {
       expect(find.byKey(const Key('batch-progress-dot-1')), findsOneWidget);
       expect(harness.controller.batchCart[0].isConfigured, isFalse);
 
-      await _selectSlot(tester, 'slot-vacant');
-      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _tapAction(tester, 'direct-action-BRING_EMPTY');
       await _confirmTransport(tester);
 
       expect(harness.controller.batchCart[0].isConfigured, isTrue);
@@ -264,16 +264,12 @@ void main() {
 
       // Item 1 (main -> V1, already active) auto-resolves and is configured
       // first; item 2 (orphan) has zero compatible variants.
-      await _selectSlot(tester, 'slot-vacant');
-      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _tapAction(tester, 'direct-action-BRING_EMPTY');
       await _confirmTransport(tester);
 
       await _scrollUntilVisible(tester, const Key('zero-compatible-variants'));
       expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
-      expect(
-        find.byKey(const Key('skip-invalid-batch-item')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('skip-invalid-batch-item')), findsOneWidget);
       expect(harness.controller.canReviewBatch, isFalse);
 
       await _scrollUntilVisible(tester, const Key('skip-invalid-batch-item'));
@@ -288,9 +284,8 @@ void main() {
   );
 
   testWidgets(
-    'each cart item resolves its own compatible variant independently: '
-    'auto-resolve without a switch, auto-resolve with a switch, and a '
-    'manual choice among several variants',
+    'a batch freezes the first resolved variant and rejects an incompatible '
+    'later item without switching the machine',
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
@@ -308,47 +303,16 @@ void main() {
       expect(harness.controller.needsPartSelection, isFalse);
       expect(harness.controller.context?.activeVariantId, testVariantV1Id);
       expect(repository.switchCount, 0);
-      await _selectSlot(tester, 'slot-vacant');
-      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _tapAction(tester, 'direct-action-BRING_EMPTY');
       await _confirmTransport(tester);
 
-      // Item 2: ALT part -> single variant, different -> auto-switch.
-      expect(harness.controller.needsPartSelection, isFalse);
-      expect(harness.controller.context?.activeVariantId, testVariantV2Id);
-      expect(repository.switchCount, 1);
-      await _selectSlot(tester, 'slot-full');
-      await _tapAction(tester, 'action-REMOVE_FULL');
-      await _confirmTransport(tester);
-
-      // Item 3: RELATED part -> two variants -> requires an explicit choice.
-      expect(harness.controller.needsPartSelection, isTrue);
-      await _scrollUntilVisible(
-        tester,
-        const Key('multiple-compatible-variants'),
-      );
-      expect(
-        find.byKey(const Key('multiple-compatible-variants')),
-        findsOneWidget,
-      );
-      await _scrollUntilVisible(
-        tester,
-        Key('compatible-variant-$testVariantV1Id'),
-      );
-      await tester.tap(find.byKey(Key('compatible-variant-$testVariantV1Id')));
-      await tester.pumpAndSettle();
-      expect(harness.controller.needsPartSelection, isFalse);
-      await _selectSlot(tester, 'slot-empty');
-      await _tapAction(tester, 'action-REMOVE_EMPTY');
-      await _confirmTransport(tester);
-
-      expect(harness.controller.canReviewBatch, isTrue);
-      final cart = harness.controller.batchCart;
-      expect(cart[0].command!.variantId, testVariantV1Id);
-      expect(cart[0].command!.operation, 'BRING_EMPTY');
-      expect(cart[1].command!.variantId, testVariantV2Id);
-      expect(cart[1].command!.operation, 'REMOVE_FULL');
-      expect(cart[2].command!.variantId, testVariantV1Id);
-      expect(cart[2].command!.operation, 'REMOVE_EMPTY');
+      // Item 2: ALT part belongs only to V2. A machine has one active runtime
+      // variant, so a single batch cannot silently switch away from V1.
+      await _scrollUntilVisible(tester, const Key('zero-compatible-variants'));
+      expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
+      expect(repository.switchCount, 0);
+      expect(harness.controller.context?.activeVariantId, testVariantV1Id);
+      expect(harness.controller.canReviewBatch, isFalse);
       harness.dispose();
     },
   );
@@ -394,10 +358,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(harness.controller.hasAmbiguousBatchSubmission, isTrue);
-      expect(
-        find.byKey(const Key('ambiguous-batch-banner')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('ambiguous-batch-banner')), findsOneWidget);
       final firstBatchKey = repository.lastBatchIdempotencyKey;
       final firstItemKeys = repository.lastBatchItems!
           .map((item) => item.idempotencyKey)
@@ -444,36 +405,51 @@ void main() {
       expect(harness.controller.batchCart.length, 2);
       expect(harness.controller.problem?.code, 'DATABASE_UNAVAILABLE');
       expect(find.byKey(const Key('batch-review')), findsOneWidget);
+
+      await _scrollUntilVisible(
+        tester,
+        Key('batch-review-edit-${testMainPartOption.partId}'),
+      );
+      await tester.tap(
+        find.byKey(Key('batch-review-edit-${testMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(harness.controller.isConfiguringBatchItem, isTrue);
+      expect(
+        harness.controller.selectedEffectivePart?.partId,
+        testMainPartOption.partId,
+      );
+      expect(
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        findsOneWidget,
+      );
       harness.dispose();
     },
   );
 
-  testWidgets(
-    'exactly one configured cart item submits through the existing '
-    'single-request path, not the batch endpoint',
-    (tester) async {
-      final repository = FakePdaRepository();
-      final harness = await _harness(tester, repository: repository);
-      await _enterBatchMode(tester);
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-      await tester.tap(find.byKey(const Key('batch-configure-start')));
-      await tester.pumpAndSettle();
-      await _selectSlot(tester, 'slot-vacant');
-      await _tapAction(tester, 'action-BRING_EMPTY');
-      await _confirmTransport(tester);
+  testWidgets('exactly one configured cart item submits through the existing '
+      'single-request path, not the batch endpoint', (tester) async {
+    final repository = FakePdaRepository();
+    final harness = await _harness(tester, repository: repository);
+    await _enterBatchMode(tester);
+    await _expandMain(tester, testMainPartOption);
+    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
+    await _scrollUntilVisible(tester, const Key('batch-configure-start'));
+    await tester.tap(find.byKey(const Key('batch-configure-start')));
+    await tester.pumpAndSettle();
+    await _tapAction(tester, 'direct-action-BRING_EMPTY');
+    await _confirmTransport(tester);
 
-      await _scrollUntilVisible(tester, const Key('batch-submit'));
-      await tester.tap(find.byKey(const Key('batch-submit')));
-      await tester.pumpAndSettle();
+    await _scrollUntilVisible(tester, const Key('batch-submit'));
+    await tester.tap(find.byKey(const Key('batch-submit')));
+    await tester.pumpAndSettle();
 
-      expect(repository.createCount, 1);
-      expect(repository.batchCreateCount, 0);
-      expect(harness.controller.batchMode, isFalse);
-      harness.dispose();
-    },
-  );
+    expect(repository.createCount, 1);
+    expect(repository.batchCreateCount, 0);
+    expect(harness.controller.batchMode, isFalse);
+    harness.dispose();
+  });
 
   testWidgets(
     'one-click main-part selection while configuring an item changes only the '
@@ -492,8 +468,7 @@ void main() {
       // Item 1 (main) auto-resolves and is configured; item 2 (orphan) has
       // zero compatible variants, so the part-first gate stays open with the
       // main-part chips on screen.
-      await _selectSlot(tester, 'slot-vacant');
-      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _tapAction(tester, 'direct-action-BRING_EMPTY');
       await _confirmTransport(tester);
 
       final cartBefore = harness.controller.batchCart.length;
@@ -529,8 +504,7 @@ void main() {
       await tester.tap(find.byKey(const Key('part-first-continue')));
       await tester.pumpAndSettle();
 
-      await _selectSlot(tester, 'slot-vacant');
-      await _tapAction(tester, 'action-BRING_EMPTY');
+      await _tapAction(tester, 'direct-action-BRING_EMPTY');
       await _confirmTransport(tester);
 
       expect(repository.createCount, 1);
@@ -541,23 +515,21 @@ void main() {
   );
 }
 
-/// Adds main + ALT (both auto-resolve; no manual variant choice needed) and
-/// walks each through the operation screen to Review.
+/// Adds main + RELATED (both compatible with V1) and walks each through the
+/// operation screen to Review without exposing physical slot selection.
 Future<void> _configureTwoItemCart(WidgetTester tester) async {
   await _enterBatchMode(tester);
   await _expandMain(tester, testMainPartOption);
   await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-  await _addPart(tester, 'batch-add-alt-$testAltPartId');
+  await _addPart(tester, 'batch-add-related-$testRelatedPartId');
   await _scrollUntilVisible(tester, const Key('batch-configure-start'));
   await tester.tap(find.byKey(const Key('batch-configure-start')));
   await tester.pumpAndSettle();
 
-  await _selectSlot(tester, 'slot-vacant');
-  await _tapAction(tester, 'action-BRING_EMPTY');
+  await _tapAction(tester, 'direct-action-BRING_EMPTY');
   await _confirmTransport(tester);
 
-  await _selectSlot(tester, 'slot-full');
-  await _tapAction(tester, 'action-REMOVE_FULL');
+  await _tapAction(tester, 'direct-action-REMOVE_FULL');
   await _confirmTransport(tester);
 }
 
@@ -566,7 +538,10 @@ Future<void> _enterBatchMode(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _expandMain(WidgetTester tester, MachineMainPartOption main) async {
+Future<void> _expandMain(
+  WidgetTester tester,
+  MachineMainPartOption main,
+) async {
   await _scrollUntilVisible(tester, Key('batch-browse-main-${main.partId}'));
   await tester.tap(find.byKey(Key('batch-browse-main-${main.partId}')));
   await tester.pumpAndSettle();
@@ -585,16 +560,9 @@ Future<void> _tapAction(WidgetTester tester, String actionKey) async {
 }
 
 Future<void> _confirmTransport(WidgetTester tester) async {
-  await _scrollUntilVisible(tester, const Key('confirm-transport'));
-  await tester.tap(find.byKey(const Key('confirm-transport')));
+  await _scrollUntilVisible(tester, const Key('confirm-direct-transport'));
+  await tester.tap(find.byKey(const Key('confirm-direct-transport')));
   await tester.pumpAndSettle();
-}
-
-Future<void> _selectSlot(WidgetTester tester, String slotId) async {
-  await _scrollUntilVisible(tester, Key('slot-$slotId'));
-  await tester.tap(find.byKey(Key('slot-$slotId')));
-  await tester.pump();
-  await _scrollUntilVisible(tester, const Key('slot-details'));
 }
 
 /// Repeatedly scrolls the nearest [Scrollable] until [key] is onstage.

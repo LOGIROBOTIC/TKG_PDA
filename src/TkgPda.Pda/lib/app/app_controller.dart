@@ -21,7 +21,11 @@ enum AppStage {
 
 /// Roles allowed to see and use the warehouse preparation console — the same
 /// set the backend's WarehousePreparation authorization policy grants.
-const _warehousePreparationRoles = {'ADMIN', 'SUPERVISOR', 'WAREHOUSE_OPERATOR'};
+const _warehousePreparationRoles = {
+  'ADMIN',
+  'SUPERVISOR',
+  'WAREHOUSE_OPERATOR',
+};
 
 /// WP-03B: the part the operator has chosen as the effective part for
 /// compatible-variant resolution — either a main part itself or one of its
@@ -90,8 +94,6 @@ class AppController extends ChangeNotifier {
   List<MachineSummary> _machines = const [];
   MachineSummary? _selectedMachine;
   OperationalContext? _context;
-  ProductGroup? _selectedProductGroup;
-  ProductGroupPart? _selectedPart;
   LayoutSlot? _selectedSlot;
   bool _slotAutoResolved = false;
   bool _busy = false;
@@ -115,6 +117,8 @@ class AppController extends ChangeNotifier {
   bool _compatibleVariantsLoading = false;
   String? _compatibleVariantsError;
   bool _partFirstResolved = false;
+  CompatibleVariant? _resolvedCompatibleVariant;
+  int _partResolutionGeneration = 0;
 
   /// True once the effective part's variant has resolved (single-part flow
   /// only) but the operator has not yet pressed "İşleme Devam Et" — RELATED/
@@ -151,9 +155,8 @@ class AppController extends ChangeNotifier {
   List<MachineSummary> get machines => _machines;
   MachineSummary? get selectedMachine => _selectedMachine;
   OperationalContext? get context => _context;
-  ProductGroup? get selectedProductGroup => _selectedProductGroup;
-  ProductGroupPart? get selectedPart => _selectedPart;
   LayoutSlot? get selectedSlot => _selectedSlot;
+
   /// True when [selectedSlot] became the current selection through backend
   /// automatic machine-slot resolution rather than an operator tap — drives
   /// the "Konum otomatik seçildi" indicator.
@@ -181,6 +184,8 @@ class AppController extends ChangeNotifier {
   List<CompatibleVariant>? get compatibleVariants => _compatibleVariants;
   bool get compatibleVariantsLoading => _compatibleVariantsLoading;
   String? get compatibleVariantsError => _compatibleVariantsError;
+  CompatibleVariant? get resolvedCompatibleVariant =>
+      _resolvedCompatibleVariant;
 
   // Customer UI — Multi-Part Transport Batch.
   bool get batchMode => _batchMode;
@@ -195,6 +200,17 @@ class AppController extends ChangeNotifier {
   bool get canReviewBatch =>
       _batchCart.isNotEmpty && _batchCart.every((item) => item.isConfigured);
   bool get hasAmbiguousBatchSubmission => _batchSubmission.hasAmbiguousRequest;
+  String? get batchTargetVariantId => _firstOrNull(
+    _batchCart
+        .where((item) => item.isConfigured)
+        .map((item) => item.command!.variantId),
+  );
+  String? get batchTargetVariantCode => _firstOrNull(
+    _batchCart
+        .where((item) => item.isConfigured)
+        .map((item) => item.variantCode)
+        .whereType<String>(),
+  );
 
   // Customer UI — Warehouse Preparation Console.
   bool get canAccessWarehousePreparation =>
@@ -208,7 +224,8 @@ class AppController extends ChangeNotifier {
 
   /// WP-03B: true while a machine is selected but the operator has not yet
   /// completed the part-first -> compatible-variant resolution gate.
-  bool get needsPartSelection => _selectedMachine != null && !_partFirstResolved;
+  bool get needsPartSelection =>
+      _selectedMachine != null && !_partFirstResolved;
 
   /// Customer UX — Part Selection Flow: true once the effective part's
   /// variant has resolved and a "İşleme Devam Et" action should appear.
@@ -320,9 +337,7 @@ class AppController extends ChangeNotifier {
   Future<void> selectMachine(MachineSummary machine) async {
     _selectedMachine = machine;
     _context = null;
-    _selectedProductGroup = null;
-    _selectedPart = null;
-    _selectedSlot = null;
+    _clearSelectedSlot();
     _resetPartFirstState();
     _stage = AppStage.operation;
     notifyListeners();
@@ -333,9 +348,7 @@ class AppController extends ChangeNotifier {
     _stopPolling();
     _selectedMachine = null;
     _context = null;
-    _selectedProductGroup = null;
-    _selectedPart = null;
-    _selectedSlot = null;
+    _clearSelectedSlot();
     _resetPartFirstState();
     _stage = AppStage.machines;
     _clearFeedback();
@@ -400,7 +413,10 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> switchVariant(VariantLayoutOption option) async {
+  Future<void> switchVariant(
+    VariantLayoutOption option, {
+    bool preservePartSelection = false,
+  }) async {
     final machine = _selectedMachine;
     if (machine == null || !mutationEnabled) {
       return;
@@ -415,10 +431,11 @@ class AppController extends ChangeNotifier {
         navigationProfileId: null,
       );
       _context = null;
-      _selectedProductGroup = null;
-      _selectedPart = null;
-      _selectedSlot = null;
+      _clearSelectedSlot();
       await refreshContext();
+      if (!preservePartSelection) {
+        resetPartSelection();
+      }
       _notice = 'Üretim varyantı güncellendi.';
     } on ConnectivityException {
       _offline = true;
@@ -427,10 +444,10 @@ class AppController extends ChangeNotifier {
       _offline = true;
       _notice = 'Varyant değişikliğinin sonucu doğrulanamadı. Yenileyin.';
     } on ApiProblem catch (problem) {
-      _problem = problem;
       if (problem.shouldRefetch) {
         await refreshContext();
       }
+      _problem = problem;
     } finally {
       _setBusy(false);
     }
@@ -460,18 +477,24 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> selectEffectivePart(EffectivePartSelection selection) async {
+    final generation = ++_partResolutionGeneration;
     _selectedEffectivePart = selection;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
+    _resolvedCompatibleVariant = null;
     _readyToContinue = false;
+    _clearSelectedSlot();
     notifyListeners();
-    await _loadCompatibleVariants();
+    await _loadCompatibleVariants(generation);
   }
 
-  Future<void> retryCompatibleVariants() => _loadCompatibleVariants();
+  Future<void> retryCompatibleVariants() {
+    final generation = ++_partResolutionGeneration;
+    return _loadCompatibleVariants(generation);
+  }
 
   Future<void> selectCompatibleVariant(CompatibleVariant variant) =>
-      _resolveVariant(variant);
+      _resolveVariant(variant, _partResolutionGeneration);
 
   /// Returns to the part-first gate without leaving the machine or losing
   /// the already-loaded operational context/slots.
@@ -480,8 +503,11 @@ class AppController extends ChangeNotifier {
     _selectedEffectivePart = null;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
+    _resolvedCompatibleVariant = null;
     _partFirstResolved = false;
     _readyToContinue = false;
+    _partResolutionGeneration++;
+    _clearSelectedSlot();
     notifyListeners();
   }
 
@@ -508,7 +534,10 @@ class AppController extends ChangeNotifier {
 
   /// Adds [part] (main, RELATED or ALT) to the cart. Returns false without
   /// changing anything if that part is already selected.
-  bool addPartToBatch(MachineMainPartOption mainPart, EffectivePartSelection part) {
+  bool addPartToBatch(
+    MachineMainPartOption mainPart,
+    EffectivePartSelection part,
+  ) {
     if (_batchCart.any((item) => item.effectivePart.partId == part.partId)) {
       return false;
     }
@@ -584,15 +613,33 @@ class AppController extends ChangeNotifier {
 
   Future<void> _loadBatchItemForConfiguration(BatchCartItem item) async {
     _selectedMainPart = item.mainPart;
-    _selectedProductGroup = null;
-    _selectedPart = null;
-    _selectedSlot = null;
+    _clearSelectedSlot();
     _selectedEffectivePart = null;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
+    _resolvedCompatibleVariant = null;
     _partFirstResolved = false;
     notifyListeners();
     await selectEffectivePart(item.effectivePart);
+  }
+
+  /// Reopens one configured item without discarding the cart. This is the
+  /// correction path after a recoverable batch API error or an operator
+  /// review change; the item receives a fresh command while the other
+  /// independent requests retain their configuration.
+  Future<void> reconfigureBatchItem(String cartItemId) async {
+    final index = _batchCart.indexWhere(
+      (item) => item.cartItemId == cartItemId,
+    );
+    if (index == -1 || _busy) return;
+    final item = _batchCart[index];
+    item.command = null;
+    item.slotDisplayName = null;
+    item.slotCode = null;
+    item.actionCode = null;
+    item.variantCode = null;
+    _batchConfiguringIndex = index;
+    await _loadBatchItemForConfiguration(item);
   }
 
   /// Submits the configured cart. Exactly one item preserves the existing
@@ -740,42 +787,67 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadCompatibleVariants() async {
+  Future<void> _loadCompatibleVariants(int generation) async {
     final machine = _selectedMachine;
+    final mainPart = _selectedMainPart;
     final part = _selectedEffectivePart;
-    if (machine == null || part == null) return;
+    if (machine == null || mainPart == null || part == null) return;
     _compatibleVariantsLoading = true;
     _compatibleVariantsError = null;
     notifyListeners();
     try {
-      final variants = await _repository.compatibleVariants(
+      var variants = await _repository.compatibleVariants(
         machineId: machine.id,
+        mainPartId: mainPart.partId,
         partId: part.partId,
       );
+      if (generation != _partResolutionGeneration ||
+          _selectedEffectivePart?.partId != part.partId) {
+        return;
+      }
+      final batchVariantId = isConfiguringBatchItem
+          ? batchTargetVariantId
+          : null;
+      if (batchVariantId != null) {
+        variants = variants
+            .where((variant) => variant.variantId == batchVariantId)
+            .toList(growable: false);
+      }
       _compatibleVariants = variants;
       if (variants.length == 1) {
-        await _resolveVariant(variants.single);
+        await _resolveVariant(variants.single, generation);
       }
     } on ConnectivityException {
-      _compatibleVariantsError = 'Bağlantı yok — uyumlu varyantlar yüklenemedi.';
+      if (generation == _partResolutionGeneration) {
+        _compatibleVariantsError =
+            'Bağlantı yok — uyumlu varyantlar yüklenemedi.';
+      }
     } on ApiProblem catch (problem) {
-      _compatibleVariantsError = problem.operatorMessage;
+      if (generation == _partResolutionGeneration) {
+        _compatibleVariantsError = problem.operatorMessage;
+      }
     } finally {
-      _compatibleVariantsLoading = false;
-      notifyListeners();
+      if (generation == _partResolutionGeneration) {
+        _compatibleVariantsLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Reuses the existing authorized variant-selection mechanism
   /// ([switchVariant]) when the resolved variant differs from the machine's
   /// current active variant; never bypasses machine authorization or
-  /// canChangeVariant policy. Does not touch the existing (separate, manual)
-  /// product-group/part selection used for transport-command material
-  /// metadata — that flow is untouched by WP-03B.
-  Future<void> _resolveVariant(CompatibleVariant variant) async {
+  /// canChangeVariant policy. The resolved product-group identity is retained
+  /// on [CompatibleVariant] and later becomes transport-command material;
+  /// there is no second manual product-group selection path.
+  Future<void> _resolveVariant(
+    CompatibleVariant variant,
+    int generation,
+  ) async {
+    if (generation != _partResolutionGeneration) return;
     final current = _context;
     if (current != null && current.activeVariantId == variant.variantId) {
-      _markVariantResolved();
+      _markVariantResolved(variant);
       notifyListeners();
       return;
     }
@@ -791,9 +863,10 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await switchVariant(option);
-    if (_context?.activeVariantId == variant.variantId) {
-      _markVariantResolved();
+    await switchVariant(option, preservePartSelection: true);
+    if (generation == _partResolutionGeneration &&
+        _context?.activeVariantId == variant.variantId) {
+      _markVariantResolved(variant);
     }
     notifyListeners();
   }
@@ -803,7 +876,8 @@ class AppController extends ChangeNotifier {
   /// before (existing, tested TransportBatch behavior is unchanged). In the
   /// normal single-part flow it instead waits for an explicit
   /// [confirmPartFirstSelection], so RELATED/ALT alternatives stay reachable.
-  void _markVariantResolved() {
+  void _markVariantResolved(CompatibleVariant variant) {
+    _resolvedCompatibleVariant = variant;
     if (isConfiguringBatchItem) {
       _partFirstResolved = true;
     } else {
@@ -815,7 +889,7 @@ class AppController extends ChangeNotifier {
   /// resolved — not a second "use the main part" confirmation, just
   /// navigation to the next workflow stage.
   void confirmPartFirstSelection() {
-    if (!_readyToContinue) return;
+    if (!_readyToContinue || _resolvedCompatibleVariant == null) return;
     _readyToContinue = false;
     _partFirstResolved = true;
     notifyListeners();
@@ -831,22 +905,13 @@ class AppController extends ChangeNotifier {
     _compatibleVariantsLoading = false;
     _compatibleVariantsError = null;
     _partFirstResolved = false;
+    _resolvedCompatibleVariant = null;
+    _partResolutionGeneration++;
     _readyToContinue = false;
     _batchMode = false;
     _batchCart.clear();
     _batchConfiguringIndex = -1;
     _batchSubmission.clear();
-  }
-
-  void selectProductGroup(ProductGroup? group) {
-    _selectedProductGroup = group;
-    _selectedPart = null;
-    notifyListeners();
-  }
-
-  void selectPart(ProductGroupPart? part) {
-    _selectedPart = part;
-    notifyListeners();
   }
 
   void selectSlot(LayoutSlot? slot) {
@@ -858,34 +923,6 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  TransportCommand commandFor(LayoutSlot slot, AvailableAction action) {
-    final current = _context;
-    if (!action.enabled || current == null) {
-      throw StateError('Sunucu bu işlemi etkin göstermiyor.');
-    }
-    final variantId = current.activeVariantId;
-    final layoutId = current.activeLayoutId;
-    if (variantId == null || layoutId == null) {
-      throw StateError('Aktif varyant veya layout bulunmuyor.');
-    }
-    final remove =
-        action.action == 'REMOVE_FULL' || action.action == 'REMOVE_EMPTY';
-    return TransportCommand(
-      machineId: current.machine.id,
-      variantId: variantId,
-      layoutId: layoutId,
-      navigationProfileId: current.activeNavigationProfileId,
-      productGroupId: _selectedProductGroup?.id,
-      partId: _selectedPart?.partId,
-      containerTypeId:
-          _selectedPart?.containerTypeId ?? slot.currentContainerTypeId,
-      operation: action.action,
-      sourceSlotId: remove ? slot.id : null,
-      destinationSlotId: remove ? null : slot.id,
-      priority: 100,
-    );
-  }
-
   /// Customer UX — Automatic Machine Slot Resolution: builds a command with
   /// no machine-side slot chosen, so the backend resolves and reserves it
   /// atomically from master.layout_slot_parts using [partId]. Always called
@@ -894,7 +931,8 @@ class AppController extends ChangeNotifier {
   TransportCommand commandForDirect(String operation) {
     final current = _context;
     final part = _selectedEffectivePart;
-    if (current == null || part == null) {
+    final resolvedVariant = _resolvedCompatibleVariant;
+    if (current == null || part == null || resolvedVariant == null) {
       throw StateError('Aktif işlem bağlamı bulunmuyor.');
     }
     final variantId = current.activeVariantId;
@@ -902,14 +940,33 @@ class AppController extends ChangeNotifier {
     if (variantId == null || layoutId == null) {
       throw StateError('Aktif varyant veya layout bulunmuyor.');
     }
+    if (variantId != resolvedVariant.variantId) {
+      throw StateError('Seçilen parça aktif varyantla artık uyumlu değil.');
+    }
+    final productGroup = _firstOrNull(
+      current.productGroups.where(
+        (group) => group.id == resolvedVariant.productGroupId,
+      ),
+    );
+    if (productGroup == null) {
+      throw StateError(
+        'Seçilen parçanın ürün grubu aktif bağlamda bulunamadı.',
+      );
+    }
+    final relatedPart = _firstOrNull(
+      productGroup.parts.where((candidate) => candidate.partId == part.partId),
+    );
+    if (productGroup.mainPartId != part.partId && relatedPart == null) {
+      throw StateError('Seçilen parça ürün grubunda bulunamadı.');
+    }
     return TransportCommand(
       machineId: current.machine.id,
       variantId: variantId,
       layoutId: layoutId,
       navigationProfileId: current.activeNavigationProfileId,
-      productGroupId: _selectedProductGroup?.id,
+      productGroupId: productGroup.id,
       partId: part.partId,
-      containerTypeId: _selectedPart?.containerTypeId,
+      containerTypeId: relatedPart?.containerTypeId,
       operation: operation,
       sourceSlotId: null,
       destinationSlotId: null,
@@ -1088,25 +1145,19 @@ class AppController extends ChangeNotifier {
   }
 
   void _reconcileSelections(OperationalContext context) {
-    if (_selectedProductGroup != null) {
-      _selectedProductGroup = _firstOrNull(
-        context.productGroups.where(
-          (group) => group.id == _selectedProductGroup!.id,
-        ),
-      );
-    }
-    if (_selectedPart != null && _selectedProductGroup != null) {
-      _selectedPart = _firstOrNull(
-        _selectedProductGroup!.parts.where(
-          (part) => part.id == _selectedPart!.id,
-        ),
-      );
-    }
     if (_selectedSlot != null) {
       _selectedSlot = _firstOrNull(
         context.slots.where((slot) => slot.id == _selectedSlot!.id),
       );
+      if (_selectedSlot == null) {
+        _slotAutoResolved = false;
+      }
     }
+  }
+
+  void _clearSelectedSlot() {
+    _selectedSlot = null;
+    _slotAutoResolved = false;
   }
 
   void _schedulePolling() {
@@ -1133,9 +1184,7 @@ class AppController extends ChangeNotifier {
     _machines = const [];
     _selectedMachine = null;
     _context = null;
-    _selectedProductGroup = null;
-    _selectedPart = null;
-    _selectedSlot = null;
+    _clearSelectedSlot();
     _resetPartFirstState();
     _offline = false;
     _resumeValidationPending = false;

@@ -1302,15 +1302,23 @@ def generate_slot_part_seed_sql(dataset: dict[str, Any], pairs: list[dict[str, s
         )
         for row in pairs
     )
+    logistics_slots = [slot for slot in dataset["layout_slots"] if slot["slot_role"] != "MACHINE"]
+    mapped_slot_keys = {
+        (row["machine_code"], row["layout_code"], row["slot_code"])
+        for row in pairs
+    }
     unmapped = sum(
         1
-        for slot in dataset["layout_slots"]
-        if slot["slot_role"] != "MACHINE" and slot["part_association_unresolved"]
+        for slot in logistics_slots
+        if (slot["machine_code"], slot["layout_code"], slot["code"]) not in mapped_slot_keys
     )
+    unresolved = sum(1 for slot in logistics_slots if slot["part_association_unresolved"])
+    variant_mismatch_only = unmapped - unresolved
     return f"""-- TKG PDA Phase 02B generated Part <-> Layout Slot assignments
 -- schema_version: {dataset['schema_version']}
 -- source_digest: {dataset['source_digest']}
--- curated pairs: {len(pairs)}; logistics slots left unmapped (unresolved part evidence): {unmapped}
+-- curated pairs: {len(pairs)}; mapped logistics slots: {len(mapped_slot_keys)}
+-- unmapped logistics slots: {unmapped} ({unresolved} unresolved evidence; {variant_mismatch_only} variant-mismatch-only)
 -- Populated ONLY where the customer-derived source relationship is
 -- unambiguous (part_association_unresolved = false and the resolved part
 -- is not a variant mismatch); everything else remains unmapped rather than

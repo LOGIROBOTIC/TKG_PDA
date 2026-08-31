@@ -39,7 +39,10 @@ class ApiClient {
   final Duration _timeout;
   final Uuid _uuid;
 
-  Future<ApiResponse> get(String path) => _send('GET', path);
+  Future<ApiResponse> get(
+    String path, {
+    Map<String, String>? queryParameters,
+  }) => _send('GET', path, queryParameters: queryParameters);
 
   Future<ApiResponse> post(
     String path, {
@@ -63,8 +66,12 @@ class ApiClient {
     Object? body,
     String? idempotencyKey,
     bool mutation = false,
+    Map<String, String>? queryParameters,
   }) async {
-    final request = http.Request(method, _resolve(path));
+    final request = http.Request(
+      method,
+      _resolve(path, queryParameters: queryParameters),
+    );
     request.headers['Accept'] = 'application/json';
     request.headers['X-Correlation-ID'] = _uuid.v4();
     final deviceCode = _deviceCode();
@@ -110,12 +117,15 @@ class ApiClient {
     }
   }
 
-  Uri _resolve(String path) {
+  Uri _resolve(String path, {Map<String, String>? queryParameters}) {
     final basePath = _baseUri.path.endsWith('/')
         ? _baseUri.path.substring(0, _baseUri.path.length - 1)
         : _baseUri.path;
     final relative = path.startsWith('/') ? path : '/$path';
-    return _baseUri.replace(path: '$basePath$relative', query: null);
+    return _baseUri.replace(
+      path: '$basePath$relative',
+      queryParameters: queryParameters ?? const <String, String>{},
+    );
   }
 
   static Object? _decode(String body) {

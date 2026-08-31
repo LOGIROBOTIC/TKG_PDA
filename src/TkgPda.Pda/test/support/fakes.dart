@@ -97,6 +97,16 @@ OperationalContext testContext({
             'lotQuantity': null,
             'displayOrder': 1,
           },
+          {
+            'id': '80000000-0000-0000-0000-000000000002',
+            'partId': testRelatedPartId,
+            'partCode': '715B3CN500-60',
+            'containerTypeId': null,
+            'containerCode': null,
+            'relationType': 'RELATED',
+            'lotQuantity': null,
+            'displayOrder': 2,
+          },
         ],
       },
     ],
@@ -358,6 +368,7 @@ class FakePdaRepository implements PdaDataSource {
       testCompatibleVariantsByPart;
   Object? compatibleVariantsError;
   int compatibleVariantsCount = 0;
+  final List<String> compatibleVariantsRequestedMainPartIds = [];
   final List<String> compatibleVariantsRequestedPartIds = [];
   String? lastLoadState;
   String? lastIdempotencyKey;
@@ -420,9 +431,11 @@ class FakePdaRepository implements PdaDataSource {
   @override
   Future<List<CompatibleVariant>> compatibleVariants({
     required String machineId,
+    required String mainPartId,
     required String partId,
   }) async {
     compatibleVariantsCount++;
+    compatibleVariantsRequestedMainPartIds.add(mainPartId);
     compatibleVariantsRequestedPartIds.add(partId);
     if (compatibleVariantsError case final error?) throw error;
     return compatibleVariantsValue[partId] ?? const [];

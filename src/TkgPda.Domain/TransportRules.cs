@@ -24,6 +24,13 @@ public static class TransportRules
     {
         ValidateSuppliedSlot(request, reservedSlot);
 
+        if (reservedSlot.Role == SlotRole.EmptyStorage)
+        {
+            throw new WorkflowRuleException(
+                "EMPTY_STORAGE_MACHINE_SLOT_FORBIDDEN",
+                "EMPTY_STORAGE is reserved for backend buffer allocation and cannot be used as the machine-side transport slot.");
+        }
+
         var expected = request.TaskType switch
         {
             TransportTaskType.BringEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
@@ -148,12 +155,12 @@ public static class TransportRules
         {
             if (slot.KnownPartIds.Count > 0 && !slot.KnownPartIds.Contains(request.PartId.Value))
             {
-                throw new WorkflowRuleException("PART_CONFLICT", "The requested part conflicts with the slot's source-backed part evidence.");
+                throw new WorkflowRuleException("PART_CONFLICT", "Seçilen parça konumun tanımlı parça eşlemesiyle uyumlu değil.");
             }
 
             if (slot.State.CurrentPartId.HasValue && slot.State.CurrentPartId != request.PartId)
             {
-                throw new WorkflowRuleException("PART_CONFLICT", "The requested part conflicts with the slot's current known part.");
+                throw new WorkflowRuleException("PART_CONFLICT", "Seçilen parça konumdaki mevcut parçayla uyumlu değil.");
             }
         }
 

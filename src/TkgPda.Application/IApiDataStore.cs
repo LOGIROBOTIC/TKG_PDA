@@ -30,12 +30,14 @@ public interface IApiDataStore
 
     /// <summary>
     /// WP-02: resolves the variants on <paramref name="machineId"/> compatible
-    /// with <paramref name="partId"/>, derived only from existing master data
+    /// with <paramref name="partId"/> inside the explicitly selected
+    /// <paramref name="mainPartId"/> product-group context, derived only from existing master data
     /// (master.variants / master.product_groups / master.product_group_parts).
     /// Returns an empty list when the part has no mapping; never infers one.
     /// </summary>
     Task<IReadOnlyList<CompatibleVariantRecord>> ListCompatibleVariantsAsync(
         Guid machineId,
+        Guid mainPartId,
         Guid partId,
         CancellationToken cancellationToken = default);
 

@@ -11,8 +11,9 @@
 --   slot code. This is a first-class relational table, not a re-use of the
 --   existing master.layout_slots.metadata_json heuristic — that JSON field
 --   (canonical_part_codes / part_association_unresolved / confidence) is
---   automated Excel-extraction evidence with self-reported gaps and is used
---   only for PART_CONFLICT exclusion, never as a positive dispatch index.
+--   automated Excel-extraction evidence with self-reported gaps and is
+--   provenance/data-quality information only, never a runtime dispatch or
+--   PART_CONFLICT source.
 --
 -- Cardinality:
 --   Many-to-many. A physical slot may legitimately hold several customer

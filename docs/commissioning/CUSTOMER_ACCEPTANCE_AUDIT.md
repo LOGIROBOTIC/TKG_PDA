@@ -4,7 +4,15 @@
 
 **Kapsam:** mevcut müşteri kaynakları, normalize master/layout verisi, Flutter Operator akışı ve production commissioning kapıları
 
-**Sonuç:** Yazılım müşteri kabulüne hazır; production robot taşıması müşteri verisi ve saha/RDS commissioning tamamlanmadan hazır değil.
+## Hazırlık kararı
+
+| Kabul seviyesi | Durum | Açıklama |
+|---|---|---|
+| Yazılım / demo kabulü | **READY** | Operator akışı, yetkilendirme, iş kuralları ve simulator entegrasyon sınırı doğrulanmıştır |
+| Production fiziksel commissioning | **NOT YET READY** | Boş/dolu kasa alanları, eksik parça-konum teyitleri, saha ölçümleri ve production RDS/robot konfigürasyonu tamamlanmamıştır |
+| SAT / canlı robot kabulü | **BLOCKED BY CUSTOMER + SITE + RDS COMMISSIONING DATA** | Fiziksel robot yürütmesi simulator kanıtıyla PASS sayılamaz |
+
+Bu nedenle bu rapordaki **PASS**, yalnız ilgili yazılım davranışının uygulanıp doğrulandığını belirtir; production fiziksel sistemin son kabul için hazır olduğu anlamına gelmez.
 
 Bu denetim önceki phase raporlarını sayı kaynağı olarak tekrar etmez. Sekiz Excel dosyasının mevcut byte hash/size değerleri source manifestlerle; normalize çıktılar da generated seed ve deterministic pipeline testleriyle yeniden karşılaştırıldı. Proje dizininde müşteriye ait PDF veya DOCX bulunmadı; PDF kanıtı varmış gibi yorum yapılmadı. Ham dosyalar değiştirilmedi.
 
@@ -44,6 +52,20 @@ Excel'de geçen `Tüm Kasaları Kaldır`, dördüncü bir transport operation'a 
 | Container association'ı belirsiz slot | 80 | Değer uydurulmadı |
 | Physical footprint'ü bilinmeyen region | 183 | 172 lojistik + 11 MACHINE; normalize UI geometri mm değildir |
 
+### Veri boşluğu kategorileri
+
+Bu sayılar farklı soruları temsil eder ve birbiri yerine kullanılamaz:
+
+| Kategori | Adet | Anlamı |
+|---|---:|---|
+| Parça-konum teyidi eksik lojistik pozisyon | 48 | Bu fiziksel pozisyonlarda hangi parça/parçaların kullanılacağı henüz kesin değildir |
+| Kasa/palet ilişkisi belirsiz lojistik pozisyon | 80 | Pozisyonun kullanacağı kasa/palet tipi tekil ve güvenilir biçimde belirlenememiştir |
+| Güvenilir fiziksel ölçüsü olmayan layout region | 183 | Excel'deki ekran dikdörtgenleri mm ölçüsü, robot pozu veya güvenlik mesafesi değildir |
+| Eksik lot/planlama girdisi | 23 | Kutu lotu boş/geçersizdir; bağımlı hesaplar boş bırakılmıştır |
+| Excel formül hatası | 33 hücre | Hatalı formül sonucu değer uydurulmamıştır |
+
+Textual planlamada ayrıca 60 container mapping eksikliği bulunur. Bu, 80 fiziksel pozisyon sayısıyla aynı veri kümesi değildir ve iki sayı toplanarak tek bir toplam üretilmemelidir.
+
 Machine kodları tam olarak: `412B`, `GAR`, `PAH-01-A`, `PAH-02-A`, `SEALER`, `SH-01-A`, `SH-01-B`, `SH-01-P1--SH-01-P2`, `SH-02-P1 -SH-02-P2`.
 
 | Machine | Aktif variant | Layout | Assignment | Lojistik slot | Mapping'li slot | Mapping'siz | Container belirsiz |
@@ -73,6 +95,13 @@ On iki part kodunun birden fazla geçerli product-group bağlamında kullanılma
 Mevcut customer seed'de `EMPTY_STORAGE` rolünde slot yoktur; 172 lojistik slotun tamamı `OTHER` rolündedir. Dolayısıyla production `BRING_EMPTY`/`REMOVE_EMPTY`, müşteri buffer kararı ve saha commissioning olmadan yürütülemez. `REMOVE_FULL` için de kanıtlanmış full-container destination yoktur.
 
 ## 4. Operator UI kabul matrisi
+
+Durum yorumları:
+
+- **PASS:** yazılım davranışı uygulanmış ve doğrulanmıştır;
+- **PARTIAL:** yazılım vardır ancak tüm müşteri konfigürasyonu tamamlanmamıştır;
+- **BLOCKED_BY_CUSTOMER_DATA:** iş/fiziksel yer tanımı müşteri tarafından henüz kesinleştirilmemiştir;
+- **BLOCKED_BY_COMMISSIONING:** saha veya production RDS/robot doğrulaması yapılmamıştır.
 
 | Gereksinim | Kaynak/niyet | Mevcut uygulama | Durum | Gap / aksiyon |
 |---|---|---|---|---|
@@ -112,6 +141,6 @@ Layout tap yalnız inspection/status/load-state bilgisidir; tap edilen `selected
 
 ## 6. Production readiness sınırı
 
-Simulator üzerinde UUID/idempotency/callback/reconciliation ve dinamik `from/to` serialization kanıtlanmıştır. Bu kanıt production forklift workflow kanıtı değildir. `TKG_SIM_MOVE` ve `TKG_SIM_DYNAMIC_MOVE` development/commissioning-only'dir; WorkSite, forklift load/unload, physical CBD15 ve production `BRING_EMPTY / REMOVE_FULL / REMOVE_EMPTY` davranışını kanıtlamaz.
+Simulator üzerinde request kimliği/idempotency/callback/reconciliation ve dinamik `from/to` serialization kanıtlanmıştır. Bu kanıt production forklift workflow kanıtı değildir. `TKG_SIM_MOVE` ve `TKG_SIM_DYNAMIC_MOVE` development/commissioning-only'dir; WorkSite, forklift load/unload, physical CBD15 ve production `BRING_EMPTY / REMOVE_FULL / REMOVE_EMPTY` davranışını kanıtlamaz.
 
 Production dispatch ancak [CUSTOMER_DATA_REQUEST.md](CUSTOMER_DATA_REQUEST.md) ve [PRODUCTION_COMMISSIONING_CHECKLIST.md](PRODUCTION_COMMISSIONING_CHECKLIST.md) kapıları kapandıktan sonra açılmalıdır.

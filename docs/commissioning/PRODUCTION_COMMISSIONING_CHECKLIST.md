@@ -2,6 +2,14 @@
 
 Bu checklist fiziksel robot dispatch'inden önce tamamlanacak fail-closed kapıdır. `TKG_SIM_MOVE` ve `TKG_SIM_DYNAMIC_MOVE` yalnız development/simulator kanıtıdır; production iş akışı olarak kullanılamaz. Secret değerleri bu belgeye yazılmaz.
 
+## Hazırlık durumu
+
+- **Yazılım / demo kabulü:** READY
+- **Production fiziksel commissioning:** NOT YET READY
+- **SAT / canlı robot kabulü:** BLOCKED BY CUSTOMER + SITE + RDS COMMISSIONING DATA
+
+Bu checklist tamamlanmadan simulator sonuçları fiziksel robot kabulü olarak yorumlanamaz ve production dispatch açılamaz.
+
 ## 1. Kabul baseline'ı ve sorumlular
 
 - [ ] Kullanılacak Git commit/PR ve release artifact hash'i kaydedildi.
@@ -43,7 +51,7 @@ Bu checklist fiziksel robot dispatch'inden önce tamamlanacak fail-closed kapıd
 - [ ] Task definition'lar gerçek WorkSite/robot modeline uygun Fork/Jack/binTask davranışı kullanıyor; simulator `Wait` task'larını kullanmıyor.
 - [ ] Fork yükseklikleri, pickup/drop geometrisi ve recognition parametreleri signed commissioning kaynağından geldi.
 - [ ] Callback URL ulaşılabilirliği ve certificate/TLS zinciri test edildi.
-- [ ] Integration/callback key: **secure environment/configuration required**; Git/log/shared docs taraması temiz.
+- [ ] Integration/callback anahtarları: **Yetkili teknik kanal üzerinden güvenli environment/configuration sağlanacaktır**; Git/log/shared docs taraması temiz.
 - [ ] `Rds.Enabled` ve `Rds.DispatchEnabled` yalnız controlled test penceresinde, yetkili kişi tarafından açılıyor.
 
 ## 5. Dry-run ve kontrollü kabul

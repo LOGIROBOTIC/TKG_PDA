@@ -1,77 +1,143 @@
-# TKG PDA — Müşteri Bilgi ve Veri Talep Listesi
+# TKG PDA — Müşteri Bilgi Talep Listesi
 
-Bu belge, mevcut Excel paketinden kesin olarak çıkarılamayan bilgileri toplamak içindir. Bilinen kayıtları yeniden istemez; tahmin edilebilir gibi görünen fiziksel/RDS alanlara değer uydurmaz. Credential veya secret bu belgeye yazılmamalıdır.
+Bu liste, TKG PDA yazılım demosundan fiziksel robot devreye almaya geçebilmek için müşteriden teyit edilmesi gereken operasyon bilgilerini toplar. Yazılım/demo kabulüne hazırdır; production fiziksel commissioning ve canlı robot SAT henüz hazır değildir.
 
-## A. Müşteri teyidi gerekli
+Teknik saha ölçümleri ve robot/RDS ayarları müşteriden istenmez; bunlar Logirobotic ve yetkili RDS/IT ekiplerinin sorumluluğunda ayrı bölümlerde gösterilmiştir. Parola, anahtar veya benzeri gizli bilgiler bu dokümana yazılmamalıdır.
 
-1. **48 mapping'siz lojistik pozisyonun Part↔Slot karşılığı**
-   - Boş/belirsiz etiket: 28 pozisyon — 412B: 1, GAR: 11, SEALER: 8, SH-02-P1/P2: 8.
-   - Variant-mismatch-only kanıt: 20 pozisyon — SH-01-A V4: 2, SH-01-B V2: 4, SH-01-P1/P2 shared V1/V2: 14.
-   - SH-01-P1/P2 layout etiketlerinde BN400 ailesi, textual planning'de BN000 ailesi bulunduğu için 14 pozisyon otomatik eşlenmedi.
-   - Beklenen cevap: machine, variant, Excel bölgesi/pozisyon ve exact canonical part code. Bir pozisyon birden fazla part destekliyorsa hepsi ayrıca belirtilmeli.
+## Öncelik 1 — Temel taşımayı devreye almak için zorunlu
 
-2. **SEALER Variant 3 fiziksel yerleşimi**
-   - V3, `AMR Çalışma Planı.xlsx` içinde geçerli aktif master veridir.
-   - Mevcut ortak fiziksel plan yalnız V1/V2 için kanıtlıdır.
-   - Beklenen cevap: V3 mevcut layout'u mu paylaşır, yoksa ayrı onaylı yerleşim mi vardır? Ayrıysa görsel/Excel kaynak sağlanmalıdır.
+### 1. Boş kasa/palet bekleme alanları
 
-3. **Boş kasa/palet buffer gerçeği (`EMPTY_STORAGE`)**
-   - Mevcut customer seed'de EMPTY_STORAGE rolünde pozisyon yoktur.
-   - Her ilgili machine/alan için gerçek buffer konumu, pozisyon adedi, ortak mı machine'e özel mi olduğu ve izin verilen container tipleri istenir.
-   - Bu bilgi `BRING_EMPTY` source ve `REMOVE_EMPTY` destination için zorunludur.
+Her ilgili üretim alanı için müşteri şunları teyit etmelidir:
 
-4. **Dolu kasa/palet destination kuralı (`REMOVE_FULL`)**
-   - Dolu yük nereye bırakılacak?
-   - Tek ortak destination mı; machine, variant, part veya container'a göre değişir mi?
-   - Ara staging/warehouse onayı var mı?
-   - Bu karar olmadan production `REMOVE_FULL` route/task oluşturulamaz.
+- boş kasa/paletlerin robot tarafından alınacağı fiziksel alan;
+- bu alandaki pozisyon sayısı;
+- her pozisyonda kullanılmasına izin verilen kasa/palet tipleri;
+- alanın ortak mı, belirli bir makineye mi ait olduğu.
 
-5. **Container ve lot eksikleri**
-   - 80 layout pozisyonunda unique container association kanıtlanamamıştır.
-   - Textual importta 60 `UNKNOWN_CONTAINER_MAPPING`, 23 eksik/invalid lot ve 33 Excel formula error hücresi vardır.
-   - Açıklanması gereken raw container kodları: boş değer, `1284`, `1285`, `285C`, `ARABA`, `KCK`, `ORT`.
-   - Her kod için exact tip/ad, dış ölçüler, taşıma yönü/orientation, stacking/loading kuralı ve eksik lot miktarı istenir. `BYK`, `4311`, `4322`, `4622` gibi tanımlı kodlar için de production fiziksel footprint ayrıca sahada doğrulanmalıdır.
+Bu bilgi **Boş Kasa Getir** ve **Boş Kasayı Kaldır** operasyonları için zorunludur. Mevcut Excel paketinde bu alanlar kesin olarak tanımlı değildir.
 
-6. **Non-blocking part-code source farkı**
-   - Canonical kod `67115BN050-10-HAOS` olarak korunmuştur.
-   - SH-01-A V1 yerleşiminde görülen `HMTR` varyantının yazım/versiyon farkı olup olmadığı teyit edilmelidir. Bu teyit mevcut akışı durdurmaz.
+### 2. Dolu kasa/palet bırakma alanı
 
-7. **Warehouse preparation business rule**
-   - Hangi operation/machine/container kombinasyonları `WAITING_PREPARATION` ile başlamalı, hangileri `NOT_REQUIRED` olmalı?
-   - Hazır kararını hangi rol verir? Yazılım Warehouse/Supervisor yetkisini destekler; kural kaynaktan tahmin edilmemiştir.
+**Dolu Kasayı Kaldır** operasyonu için:
 
-Kaynakta 140 ilişkinin tamamı açıkça `Alt Parça` kanıtıdır; ayrı RELATED kaydı yoktur. Bu nedenle mevcut veri için ALT/RELATED yeniden sınıflandırma talebi bulunmaz. Müşteri ayrı RELATED semantiği istiyorsa yeni, açık kaynak vermelidir.
+- dolu kasa/palet fiziksel olarak nereye bırakılacak;
+- tek ortak hedef mi kullanılacak;
+- hedef makineye, parçaya veya kasa/palet tipine göre değişecek mi;
+- ara bekleme veya depo onayı gerekecek mi
 
-## B. Logirobotic sahada ölçmeli / devreye almalı
+teyit edilmelidir.
 
-| Veri | Neden gerekli |
-|---|---|
-| Her source/destination için fiziksel pickup/drop pozu | Robotun ekrandaki normalize dikdörtgeni gerçek docking hedefine çevirebilmesi için |
-| Yaklaşma yönü ve docking orientation | Çatalın/yükün doğru yönden ve çarpışmasız girmesi için |
-| Fork insertion yönü ve kullanılabilir fork/jack yüksekliği | Container/palet zararını ve yanlış load/unload aksiyonunu önlemek için |
-| Container/palet clearance ve güvenlik payı | Pose toleransı, raf/makine çarpışma sınırı için |
-| Koridor genişliği, dönüş ve kaçış alanı | Robot modeli/rota ve trafik uygunluğunu doğrulamak için |
-| Son layout koordinatları ve sahadaki pozisyon etiketi | UI slotu ile RDS WorkSite'ın aynı fiziksel yeri temsil ettiğini kanıtlamak için |
-| Her slotun ilk durumu: `VACANT`, `OCCUPIED+EMPTY`, `OCCUPIED+FULL` | İlk request öncesi hatalı operasyon açılmasını önlemek için |
-| Sensör/recognition gereksinimi ve tolerans | Varsa yük/pozisyon algılamasının task parametrelerini belirlemek için |
+### 3. Parçası teyit edilmesi gereken 48 lojistik pozisyon
 
-## C. RDS / robot konfigürasyonu gerekli
+48 fiziksel lojistik pozisyonunda hangi parça veya parçaların kullanılacağı kesinleştirilmelidir:
 
-1. Production RDS base URL/host, TLS veya ağ izolasyonu ve firewall/reverse-proxy kararı.
-2. Fiziksel CBD15 `uuid/vehicle_id`, robot grubu ve izin verilen task kapsamı. `sim_01/sim_02` production robot değildir.
-3. Production navigation profile/scene kimliği ve bunun hangi machine/layout kapsamına ait olduğu.
-4. Doğrulanmış physical WorkSite listesi ve 172 lojistik pozisyon içinden production'da kullanılacak slot→WorkSite mapping'leri.
-5. `BRING_EMPTY`, `REMOVE_FULL`, `REMOVE_EMPTY` için production WindTask label'ları, exact input parametre adları/tipleri ve binding'leri.
-6. Robot aksiyonu kararı: `ForkLoad/ForkUnload`, `JackLoad/JackUnload`, `binTask` veya onaylı başka mekanizma.
-7. Pickup/drop geometrisi, fork yükseklikleri ve varsa recognition parametreleri; bunlar guessed default olamaz.
-8. RDS `content` alanı için exact EMPTY/FULL değerleri ve WorkSite `filled/content` operasyon semantiği.
-9. TKG callback URL'i ve ulaşılabilirlik/TLS testi.
-10. Integration key ve callback key: **secure environment/configuration required**. Anahtarlar ortak dokümana, Git'e veya ekran görüntüsüne yazılmaz.
+| Makine/alan | Pozisyon adedi | Mevcut durum |
+|---|---:|---|
+| 412B | 1 | Parça etiketi boş/belirsiz |
+| GAR | 11 | Parça etiketi boş/belirsiz |
+| SEALER | 8 | Parça etiketi boş/belirsiz |
+| SH-02-P1 / SH-02-P2 | 8 | Parça etiketi boş/belirsiz |
+| SH-01-A V4 | 2 | Yerleşim ile üretim planındaki varyant/parça bağlamı uyuşmuyor |
+| SH-01-B V2 | 4 | Yerleşim ile üretim planındaki varyant/parça bağlamı uyuşmuyor |
+| SH-01-P1 / SH-01-P2 V1–V2 | 14 | Yerleşimde BN400, üretim planında BN000 ailesi bulunuyor |
+| **Toplam** | **48** | |
 
-## D. Opsiyonel / gelecek
+Her pozisyon için makine, varyant ve kullanılabilecek parça kodu/kodları teyit edilmelidir. Bir pozisyon birden fazla parça için kullanılıyorsa hepsi belirtilmelidir.
 
-- PLC sinyal entegrasyonu ve `Tüm Kasaları Kaldır` otomasyon tetikleme kuralı.
-- SAP/ERP emir, stok veya out-order entegrasyonu.
-- Alarm acknowledge/reset/clear/history; mevcut kapsam salt-okunur görünürlüktür.
-- Otomatik map/profile switching veya route/stitch yönetimi.
-- Confirmed source sağlanırsa yeni RELATED taxonomy veya yeni fiziksel layout versiyonları.
+### 4. SEALER V3 fiziksel yerleşimi
+
+SEALER V3, üretim planında geçerli bir varyanttır; ancak fiziksel yerleşimi kanıtlanmamıştır. Müşteri şunlardan birini teyit etmelidir:
+
+- V3, mevcut V1/V2 yerleşimini aynen kullanır; veya
+- V3 için ayrı bir onaylı yerleşim vardır ve kaynak dosya/görsel sağlanır.
+
+## Öncelik 2 — Fiziksel robot commissioning için zorunlu
+
+### 5. Kasa/palet tanımları ve operasyon kısıtları
+
+Mevcut kaynakta iki farklı eksik kategori vardır:
+
+- **80 fiziksel lojistik pozisyonunda** kullanılacak kasa/palet tipi kesin değildir.
+- **60 planlama kaydında** parçanın kasa/palet tipi boş veya belirsizdir.
+
+Bu sayılar aynı şeyi saymaz ve tek toplam olarak birleştirilmemelidir. Açıklanması gereken kaynak kodları: boş değer, `1284`, `1285`, `285C`, `ARABA`, `KCK`, `ORT`.
+
+Müşteriden, varsa onaylı kasa/palet teknik dokümanı ve operasyon kısıtları istenir:
+
+- kasa/palet tipi ve kullanıldığı parçalar;
+- nominal dış ölçüler;
+- hatta kullanılan yön/orientation;
+- çatal girişine izin verilen taraf;
+- istifleme ve yükleme kısıtları.
+
+Nihai ölçü, boşluk, robot yaklaşımı ve çatal geometrisi Logirobotic tarafından sahada ölçülecektir. Excel'deki ekran çizimleri fiziksel mm ölçüsü veya robot pozu kabul edilmeyecektir.
+
+### 6. Eksik lot ve planlama değerleri
+
+- 23 kayıtta kutu lotu boş veya geçersizdir.
+- 33 Excel hücresinde formül hatası bulunur.
+
+Günlük kasa/taşıma planlamasında kullanılacak kayıtlar için doğru lot değerleri müşteri tarafından teyit edilmelidir. Bilinmeyen değerler tahmin edilmeyecektir.
+
+## Öncelik 3 — İş süreci ve engelleyici olmayan teyitler
+
+### 7. Depo hazırlık kuralı
+
+- Hangi operasyon/makine/kasa kombinasyonlarında depo hazırlığı gerekir?
+- Hangi işler hazırlık beklemeden doğrudan sıraya alınabilir?
+- Hazır kararını depo operatörü mü, vardiya sorumlusu mu verir?
+
+### 8. HAOS/HMTR isim farkı
+
+`67115BN050-10-HAOS` mevcut ana kayıt olarak korunmuştur. SH-01-A V1 yerleşiminde görülen `HMTR` ifadesinin yazım/versiyon farkı olup olmadığı teyit edilmelidir. Bu konu mevcut yazılım/demo akışını durdurmaz.
+
+### 9. ALT / RELATED durumu
+
+Müşteri kaynağında 140 bağlamsal **ALT (alternatif parça)** ilişkisi vardır. Ayrı bir **RELATED (ilişkili parça)** ilişkisi kanıtlanmamıştır. Uygulama her iki modeli destekler; eksik veri uydurulmamıştır.
+
+Müşterinin gerçek sürecinde ALT'tan ayrı bir RELATED tanımı yoksa ek veri istenmez. Böyle bir ayrım kullanılıyorsa yalnız gerçek süreci gösteren kaynak paylaşılmalıdır.
+
+## Sorumluluk ayrımı
+
+### Müşteri teyit eder
+
+- boş ve dolu kasa/palet alanlarının operasyon amacını;
+- 48 pozisyonda kullanılan parçaları;
+- SEALER V3 yerleşim kararını;
+- kasa/palet tipi ile onaylı operasyon kısıtlarını;
+- eksik lot/planlama değerlerini;
+- depo hazırlık ve engelleyici olmayan isim kurallarını.
+
+### Logirobotic sahada ölçer ve konfigüre eder
+
+- nihai pickup/drop pozu ve yaklaşma yönünü;
+- docking orientation ve çatal giriş geometrisini;
+- gerçek fork/jack yüksekliğini;
+- fiziksel clearance, koridor ve manevra uygunluğunu;
+- her pozisyonun ilk doluluk/yük durumunu;
+- saha etiketi ile uygulamadaki konumun aynı yeri gösterdiğini;
+- uygulamadaki lojistik konumlarla RDS fiziksel durak noktalarının eşleştirilmesini ve robot kimliğini.
+
+### RDS / IT ekibi teknik kanaldan sağlar
+
+- production RDS ağ adresi, TLS ve erişim politikasını;
+- production navigation/scene ve robot kimliklerini;
+- onaylı fiziksel robot görevlerini ve parametre sözleşmesini;
+- callback erişimi ve ağ/firewall ayarlarını;
+- gerekli gizli anahtarları: **Yetkili teknik kanal üzerinden güvenli environment/configuration sağlanacaktır.**
+
+Parola, entegrasyon anahtarı, callback anahtarı veya oturum bilgisi bu müşteri dokümanına yazılmaz.
+
+## Toplantı / e-posta cevap tablosu
+
+| Konu | Makine/Alan | Talep edilen bilgi | Müşteri cevabı | Durum / Not |
+|---|---|---|---|---|
+| Boş kasa/palet bekleme alanı |  | Konum, pozisyon adedi, izin verilen kasa/paletler |  |  |
+| Dolu kasa/palet bırakma alanı |  | Ortak veya makine/parça/kasa bazlı hedef |  |  |
+| Parça-konum teyidi |  | Pozisyonda kullanılan parça kodu/kodları |  |  |
+| SEALER V3 | SEALER | V1/V2 ile ortak mı, ayrı yerleşim mi? |  |  |
+| Kasa/palet tanımı |  | Tip, nominal ölçü, orientation, çatal giriş tarafı, kısıt |  |  |
+| Lot/planlama değeri |  | Doğru kutu lotu veya formül sonucu |  |  |
+| Depo hazırlık |  | Hazırlık gereken işler ve onaylayan rol |  |  |
+| HAOS/HMTR | SH-01-A V1 | Doğru isim/versiyon teyidi |  |  |

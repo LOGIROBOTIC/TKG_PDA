@@ -51,7 +51,7 @@ public sealed record CompatibleVariantRecord(
 /// WP-03A: a Related/Alt part of a machine-level main part option. RelationType
 /// is the product_group_parts.relation_type (RELATED/ALT_PART/CONSUMABLE/OTHER).
 /// Any of these part IDs (main or related) is a valid partId for
-/// GET /api/v1/machines/{machineId}/parts/{partId}/compatible-variants.
+/// GET /api/v1/machines/{machineId}/parts/{partId}/compatible-variants?mainPartId=...
 /// </summary>
 public sealed record MachineRelatedPartRecord(
     Guid PartId,

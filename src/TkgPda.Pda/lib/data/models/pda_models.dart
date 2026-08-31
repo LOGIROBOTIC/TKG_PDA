@@ -181,20 +181,19 @@ class MachineMainPartOption {
   final String? description;
   final List<MachineRelatedPart> relatedParts;
 
-  factory MachineMainPartOption.fromJson(JsonMap json) =>
-      MachineMainPartOption(
-        partId: json['partId'] as String,
-        partCode: json['partCode'] as String? ?? '',
-        description: json['description'] as String?,
-        relatedParts: _maps(
-          json['relatedParts'],
-        ).map(MachineRelatedPart.fromJson).toList(growable: false),
-      );
+  factory MachineMainPartOption.fromJson(JsonMap json) => MachineMainPartOption(
+    partId: json['partId'] as String,
+    partCode: json['partCode'] as String? ?? '',
+    description: json['description'] as String?,
+    relatedParts: _maps(
+      json['relatedParts'],
+    ).map(MachineRelatedPart.fromJson).toList(growable: false),
+  );
 }
 
 /// WP-03B: a variant compatible with a selected part on an authorized
 /// machine, as returned by
-/// GET /api/v1/machines/{machineId}/parts/{partId}/compatible-variants.
+/// GET /api/v1/machines/{machineId}/parts/{partId}/compatible-variants?mainPartId=...
 class CompatibleVariant {
   const CompatibleVariant({
     required this.variantId,
@@ -783,8 +782,8 @@ class WarehousePreparationRequest {
         sourceSlotCode: json['sourceSlotCode'] as String?,
         sourceSlotDisplayName: json['sourceSlotDisplayName'] as String?,
         destinationSlotCode: json['destinationSlotCode'] as String?,
-        destinationSlotDisplayName: json['destinationSlotDisplayName']
-            as String?,
+        destinationSlotDisplayName:
+            json['destinationSlotDisplayName'] as String?,
         createdAt: _date(json['createdAt']) ?? DateTime.now(),
         queuedAt: _date(json['queuedAt']),
       );

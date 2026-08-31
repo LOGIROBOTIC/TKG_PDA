@@ -123,11 +123,9 @@ void main() {
       // part-options/compatible-variants endpoints (preferring the
       // already-active variant if the part resolves to more than one, so
       // this step does not itself trigger an unintended variant switch).
-      await first.selectEffectivePart(
-        EffectivePartSelection(
-          partId: context.productGroups.first.mainPartId,
-          partCode: context.productGroups.first.mainPartCode,
-          isMain: true,
+      await first.selectMainPartOption(
+        first.partOptions.firstWhere(
+          (option) => option.partId == context.productGroups.first.mainPartId,
         ),
       );
       await tester.pumpAndSettle();
@@ -138,6 +136,14 @@ void main() {
           orElse: () => variants.first,
         );
         await first.selectCompatibleVariant(match);
+        await tester.pumpAndSettle();
+      }
+      // Customer UX — Part Selection Flow: the variant resolves internally
+      // but now pauses at partFirstReadyToContinue (RELATED/ALT stay
+      // reachable) instead of leaving the gate immediately — confirm to
+      // proceed, exactly as the "İşleme Devam Et" button does.
+      if (first.partFirstReadyToContinue) {
+        first.confirmPartFirstSelection();
         await tester.pumpAndSettle();
       }
       check(
@@ -190,6 +196,28 @@ void main() {
         originalVariant.variantId,
         'variant restored through the real API',
       );
+      // A deliberate variant change invalidates the previous part choice.
+      // Re-resolve it before exercising the production operator flow.
+      await first.selectMainPartOption(
+        first.partOptions.firstWhere(
+          (option) => option.partId == context.productGroups.first.mainPartId,
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (first.needsPartSelection) {
+        final variants = first.compatibleVariants ?? const [];
+        await first.selectCompatibleVariant(
+          variants.firstWhere(
+            (option) => option.variantId == originalVariant.variantId,
+            orElse: () => variants.first,
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+      if (first.partFirstReadyToContinue) {
+        first.confirmPartFirstSelection();
+        await tester.pumpAndSettle();
+      }
 
       first.onPaused();
       check(first.mutationEnabled, isFalse, 'background disables mutations');
@@ -259,20 +287,25 @@ void main() {
       check(first.selectedSlot, isNull, 'MACHINE cannot be selected');
       first.selectSlot(vacant);
       await tester.pump();
-      await _reveal(tester, find.byKey(const Key('action-BRING_EMPTY')));
       check(
         find.byKey(const Key('action-BRING_EMPTY')),
-        findsOneWidget,
-        'action visible',
+        findsNothing,
+        'physical slot inspection does not expose transport commands',
       );
-      await tester.tap(find.byKey(const Key('action-BRING_EMPTY')));
+      await _reveal(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
+      check(
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        findsOneWidget,
+        'part-first operation visible',
+      );
+      await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
       await tester.pumpAndSettle();
       check(
         find.text('Taşıma Talebini Onaylayın'),
         findsOneWidget,
         'confirmation opens',
       );
-      await tester.tap(find.byKey(const Key('confirm-transport')));
+      await tester.tap(find.byKey(const Key('confirm-direct-transport')));
       await tester.pumpAndSettle();
       check(
         first.context!.activeTransportRequests.length,
@@ -337,7 +370,7 @@ void main() {
         0,
         'reload leaves sessionStorage empty',
       );
-      check(checks, 48, 'all frozen Phase 09 browser checks ran');
+      check(checks, 49, 'all frozen Phase 09 browser checks ran');
 
       first.dispose();
       second.dispose();
@@ -372,18 +405,31 @@ bool _enabledLoad(LayoutSlot slot, String action) => slot.loadStateActions.any(
 );
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
-  final right = find.descendant(
-    of: find.byKey(const Key('operation-wide-right')),
-    matching: find.byType(Scrollable),
-  );
-  if (right.evaluate().isNotEmpty) {
-    await tester.scrollUntilVisible(finder, 280, scrollable: right);
-  } else {
-    await tester.scrollUntilVisible(
-      finder,
-      280,
-      scrollable: find.byType(Scrollable).last,
-    );
+  // The wide layout splits content across two independent scrollables
+  // (operation-wide-left/-right); the target can live in either one
+  // depending on how much content precedes it, so try each in turn rather
+  // than assuming it is always the right column.
+  if (finder.evaluate().isNotEmpty) {
+    try {
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      return;
+    } catch (_) {
+      // Fall through to explicit scrollable discovery below.
+    }
   }
-  await tester.pumpAndSettle();
+  final scrollableCount = find.byType(Scrollable).evaluate().length;
+  for (var index = 0; index < scrollableCount; index++) {
+    try {
+      await tester.scrollUntilVisible(
+        finder,
+        280,
+        scrollable: find.byType(Scrollable).at(index),
+      );
+      await tester.pumpAndSettle();
+      if (finder.evaluate().isNotEmpty) return;
+    } catch (_) {
+      // Not in this scrollable — try the next one.
+    }
+  }
 }

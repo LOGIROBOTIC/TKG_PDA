@@ -626,6 +626,77 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
         }
     }
 
+    // Customer UX — Automatic Machine Slot Resolution: minimal Admin CRUD
+    // over master.layout_slot_parts (list/assign/remove) so a customer
+    // mapping correction no longer requires a direct SQL edit. No
+    // concurrency token — mirrors the RDS slot-mapping membership pattern.
+    [Fact]
+    public async Task Slot_part_mapping_supports_list_assign_and_remove_with_audit()
+    {
+        var (identity, client) = await AdminAsync();
+        using (client)
+        {
+            var machine = Assert.Single((await client.GetFromJsonAsync<AdminMachineRecord[]>("/api/v1/admin/machines"))!, value => value.Code == "SH-01-A");
+            var layout = await CreatePublishableLayoutAsync(client, machine.Id, "P05-SLOTPART-LAYOUT");
+            var slot = Assert.Single((await client.GetFromJsonAsync<AdminSlotRecord[]>($"/api/v1/admin/layouts/{layout.Id}/slots"))!);
+            var part = await CreatePartAsync(client, "P05-SLOTPART-1");
+
+            var empty = await client.GetFromJsonAsync<AdminSlotPartRecord[]>($"/api/v1/admin/layout-slots/{slot.Id}/parts");
+            Assert.Empty(empty!);
+
+            var assign = await client.PutAsync($"/api/v1/admin/layout-slots/{slot.Id}/parts/{part.Id}", null);
+            Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+
+            var assigned = await client.GetFromJsonAsync<AdminSlotPartRecord[]>($"/api/v1/admin/layout-slots/{slot.Id}/parts");
+            var mapping = Assert.Single(assigned!);
+            Assert.Equal(part.Id, mapping.PartId);
+            Assert.Equal("P05-SLOTPART-1", mapping.PartCode);
+
+            var assignAudit = await client.GetFromJsonAsync<AdminAuditRecord[]>("/api/v1/admin/audit-logs?entityType=LAYOUT_SLOT&limit=50");
+            var assignEntry = Assert.Single(assignAudit!, value => value.Action == "ADMIN_LAYOUT_SLOT_PART_ASSIGNED" && value.EntityId == slot.Id.ToString());
+            Assert.Equal(identity.UserId, assignEntry.ActorUserId);
+
+            // Assigning the same pair again is idempotent (ON CONFLICT DO NOTHING).
+            var reassign = await client.PutAsync($"/api/v1/admin/layout-slots/{slot.Id}/parts/{part.Id}", null);
+            Assert.Equal(HttpStatusCode.NoContent, reassign.StatusCode);
+            Assert.Single((await client.GetFromJsonAsync<AdminSlotPartRecord[]>($"/api/v1/admin/layout-slots/{slot.Id}/parts"))!);
+
+            var remove = await client.DeleteAsync($"/api/v1/admin/layout-slots/{slot.Id}/parts/{part.Id}");
+            Assert.Equal(HttpStatusCode.NoContent, remove.StatusCode);
+            Assert.Empty((await client.GetFromJsonAsync<AdminSlotPartRecord[]>($"/api/v1/admin/layout-slots/{slot.Id}/parts"))!);
+
+            var removeAudit = await client.GetFromJsonAsync<AdminAuditRecord[]>("/api/v1/admin/audit-logs?entityType=LAYOUT_SLOT&limit=50");
+            Assert.Single(removeAudit!, value => value.Action == "ADMIN_LAYOUT_SLOT_PART_REMOVED" && value.EntityId == slot.Id.ToString());
+
+            var removeAgain = await client.DeleteAsync($"/api/v1/admin/layout-slots/{slot.Id}/parts/{part.Id}");
+            Assert.Equal(HttpStatusCode.NotFound, removeAgain.StatusCode);
+            Assert.Equal("LAYOUT_SLOT_PART_NOT_FOUND", await ApiTestFixture.ErrorCodeAsync(removeAgain));
+        }
+    }
+
+    [Fact]
+    public async Task Slot_part_assignment_rejects_unknown_slot_or_inactive_part()
+    {
+        var (_, client) = await AdminAsync();
+        using (client)
+        {
+            var machine = Assert.Single((await client.GetFromJsonAsync<AdminMachineRecord[]>("/api/v1/admin/machines"))!, value => value.Code == "SH-01-A");
+            var layout = await CreatePublishableLayoutAsync(client, machine.Id, "P05-SLOTPART-INVALID-LAYOUT");
+            var slot = Assert.Single((await client.GetFromJsonAsync<AdminSlotRecord[]>($"/api/v1/admin/layouts/{layout.Id}/slots"))!);
+            var part = await CreatePartAsync(client, "P05-SLOTPART-2");
+
+            var missingSlot = await client.PutAsync($"/api/v1/admin/layout-slots/{Guid.NewGuid()}/parts/{part.Id}", null);
+            Assert.Equal(HttpStatusCode.NotFound, missingSlot.StatusCode);
+            Assert.Equal("LAYOUT_SLOT_NOT_FOUND", await ApiTestFixture.ErrorCodeAsync(missingSlot));
+
+            var deactivate = await SendAsync(client, HttpMethod.Put, $"/api/v1/admin/parts/{part.Id}", new UpdateAdminPartRequest(part.Description, false), part.ConcurrencyToken);
+            Assert.Equal(HttpStatusCode.OK, deactivate.StatusCode);
+            var inactivePart = await client.PutAsync($"/api/v1/admin/layout-slots/{slot.Id}/parts/{part.Id}", null);
+            Assert.Equal(HttpStatusCode.NotFound, inactivePart.StatusCode);
+            Assert.Equal("PART_NOT_FOUND", await ApiTestFixture.ErrorCodeAsync(inactivePart));
+        }
+    }
+
     private async Task<(TestIdentity Identity, HttpClient Client)> AdminAsync()
     {
         await fixture.ResetAsync();

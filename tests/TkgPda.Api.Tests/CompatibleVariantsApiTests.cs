@@ -13,11 +13,36 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     private const string MachineCode = "SH-01-A";
 
     [Fact]
+    public async Task Customer_seed_main_part_resolves_in_its_parent_context()
+    {
+        await fixture.ResetAsync();
+        var machineId = await fixture.ScalarAsync<Guid>(
+            "SELECT id FROM master.machines WHERE code = @machine_code",
+            ("machine_code", MachineCode));
+        var variantId = await fixture.ScalarAsync<Guid>(
+            "SELECT id FROM master.variants WHERE machine_id = @machine_id AND code = '1'",
+            ("machine_id", machineId));
+        var mainPartId = await fixture.ScalarAsync<Guid>(
+            """
+            SELECT main_part_id
+            FROM master.product_groups
+            WHERE variant_id = @variant_id AND is_active
+            ORDER BY display_order
+            LIMIT 1
+            """,
+            ("variant_id", variantId));
+
+        var variants = await QueryAsync(machineId, mainPartId, mainPartId);
+
+        Assert.Contains(variants, item => item.VariantId == variantId);
+    }
+
+    [Fact]
     public async Task Main_part_resolves_its_variant()
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.MainPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.MainPartId);
 
         var only = Assert.Single(variants);
         Assert.Equal(scene.V1Id, only.VariantId);
@@ -29,10 +54,11 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.RelatedPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.RelatedPartId);
 
         var only = Assert.Single(variants);
         Assert.Equal(scene.V1Id, only.VariantId);
+        Assert.Equal(scene.MainGroupId, only.ProductGroupId);
         Assert.Equal("RELATED", only.RelationType);
     }
 
@@ -41,7 +67,7 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.AltPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.AltPartId);
 
         var only = Assert.Single(variants);
         Assert.Equal(scene.V1Id, only.VariantId);
@@ -49,26 +75,54 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     }
 
     [Fact]
-    public async Task Part_compatible_with_multiple_variants_returns_all_of_them()
+    public async Task Main_part_used_by_multiple_variants_returns_all_contextual_variants()
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.SharedPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.SharedPartId, scene.SharedPartId);
 
         Assert.Equal(
-            new[] { scene.V2Id, scene.V1Id, scene.V3Id },
+            new[] { scene.V2Id, scene.V3Id },
             variants.Select(v => v.VariantId).ToArray());
     }
 
     [Fact]
-    public async Task Duplicate_relationship_paths_do_not_duplicate_the_variant()
+    public async Task Child_relationship_does_not_escape_the_selected_main_part_context()
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.DuplicatedPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.SharedPartId);
 
         var only = Assert.Single(variants);
         Assert.Equal(scene.V1Id, only.VariantId);
+        Assert.Equal(scene.MainGroupId, only.ProductGroupId);
+        Assert.Equal("RELATED", only.RelationType);
+    }
+
+    [Fact]
+    public async Task Duplicated_child_under_the_selected_main_returns_only_that_relationship()
+    {
+        var scene = await SeedSceneAsync();
+
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.DuplicatedPartId);
+
+        var only = Assert.Single(variants);
+        Assert.Equal(scene.V1Id, only.VariantId);
+        Assert.Equal(scene.MainGroupId, only.ProductGroupId);
+        Assert.Equal("RELATED", only.RelationType);
+    }
+
+    [Fact]
+    public async Task Same_child_under_another_main_preserves_that_product_group()
+    {
+        var scene = await SeedSceneAsync();
+
+        var variants = await QueryAsync(scene.MachineId, scene.SecondMainPartId, scene.DuplicatedPartId);
+
+        var only = Assert.Single(variants);
+        Assert.Equal(scene.V1Id, only.VariantId);
+        Assert.Equal(scene.SecondGroupId, only.ProductGroupId);
+        Assert.Equal("ALT_PART", only.RelationType);
     }
 
     [Fact]
@@ -76,9 +130,23 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.OrphanPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.OrphanPartId);
 
         Assert.Empty(variants);
+    }
+
+    [Fact]
+    public async Task Missing_main_part_context_is_rejected_explicitly()
+    {
+        var scene = await SeedSceneAsync();
+        var identity = await fixture.SeedIdentityAsync(machineCode: MachineCode);
+        using var client = await fixture.LoginClientAsync(identity);
+
+        var response = await client.GetAsync(
+            $"/api/v1/machines/{scene.MachineId}/parts/{scene.RelatedPartId}/compatible-variants");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("MAIN_PART_CONTEXT_REQUIRED", await ApiTestFixture.ErrorCodeAsync(response));
     }
 
     [Fact]
@@ -89,7 +157,7 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
         using var client = await fixture.LoginClientAsync(identity);
 
         var response = await client.GetAsync(
-            $"/api/v1/machines/{scene.MachineId}/parts/{scene.MainPartId}/compatible-variants");
+            $"/api/v1/machines/{scene.MachineId}/parts/{scene.MainPartId}/compatible-variants?mainPartId={scene.MainPartId}");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("MACHINE_ACCESS_DENIED", await ApiTestFixture.ErrorCodeAsync(response));
@@ -100,7 +168,7 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     {
         var scene = await SeedSceneAsync();
 
-        var variants = await QueryAsync(scene.MachineId, scene.MainPartId);
+        var variants = await QueryAsync(scene.MachineId, scene.MainPartId, scene.MainPartId);
 
         Assert.NotEmpty(variants);
     }
@@ -110,21 +178,21 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
     {
         var scene = await SeedSceneAsync();
 
-        var first = await QueryAsync(scene.MachineId, scene.SharedPartId);
-        var second = await QueryAsync(scene.MachineId, scene.SharedPartId);
+        var first = await QueryAsync(scene.MachineId, scene.SharedPartId, scene.SharedPartId);
+        var second = await QueryAsync(scene.MachineId, scene.SharedPartId, scene.SharedPartId);
 
         Assert.Equal(
             first.Select(v => v.VariantId).ToArray(),
             second.Select(v => v.VariantId).ToArray());
-        Assert.Equal(new[] { scene.V2Id, scene.V1Id, scene.V3Id }, first.Select(v => v.VariantId).ToArray());
+        Assert.Equal(new[] { scene.V2Id, scene.V3Id }, first.Select(v => v.VariantId).ToArray());
     }
 
-    private async Task<List<CompatibleVariantRecord>> QueryAsync(Guid machineId, Guid partId)
+    private async Task<List<CompatibleVariantRecord>> QueryAsync(Guid machineId, Guid mainPartId, Guid partId)
     {
         var identity = await fixture.SeedIdentityAsync(machineCode: MachineCode);
         using var client = await fixture.LoginClientAsync(identity);
 
-        var response = await client.GetAsync($"/api/v1/machines/{machineId}/parts/{partId}/compatible-variants");
+        var response = await client.GetAsync($"/api/v1/machines/{machineId}/parts/{partId}/compatible-variants?mainPartId={mainPartId}");
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<List<CompatibleVariantRecord>>()
             ?? throw new InvalidOperationException("Compatible-variants response was empty.");
@@ -136,6 +204,9 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
         Guid V2Id,
         Guid V3Id,
         Guid MainPartId,
+        Guid MainGroupId,
+        Guid SecondMainPartId,
+        Guid SecondGroupId,
         Guid RelatedPartId,
         Guid AltPartId,
         Guid SharedPartId,
@@ -164,7 +235,7 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
 
         // V1: one product group carries MAIN plus RELATED/ALT/duplicated children;
         // a second product group in the same variant carries the duplicated part
-        // again under a different relation, to prove dedup across group paths.
+        // under a different relation, proving parent-main context is preserved.
         var pg1 = await InsertProductGroupAsync(v1, mainPart);
         await InsertGroupPartAsync(pg1, relatedPart, "RELATED");
         await InsertGroupPartAsync(pg1, altPart, "ALT_PART");
@@ -178,7 +249,20 @@ public sealed class CompatibleVariantsApiTests(ApiTestFixture fixture) : IClassF
         await InsertProductGroupAsync(v2, sharedPart);
         await InsertProductGroupAsync(v3, sharedPart);
 
-        return new Scene(machineId, v1, v2, v3, mainPart, relatedPart, altPart, sharedPart, duplicatedPart, orphanPart);
+        return new Scene(
+            machineId,
+            v1,
+            v2,
+            v3,
+            mainPart,
+            pg1,
+            pg1SecondMain,
+            pg1B,
+            relatedPart,
+            altPart,
+            sharedPart,
+            duplicatedPart,
+            orphanPart);
     }
 
     private Task<Guid> InsertVariantAsync(Guid machineId, string code, int displayOrder) => fixture.ScalarAsync<Guid>(

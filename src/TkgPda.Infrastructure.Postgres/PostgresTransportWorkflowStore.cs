@@ -100,6 +100,29 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                 : request with { DestinationSlotId = allocatedBufferSlotId };
         }
 
+        // Customer UX — Automatic Machine Slot Resolution: when the operator
+        // did not pick a specific physical machine-side slot themselves,
+        // resolve one now from slots explicitly mapped (master.
+        // layout_slot_parts) to the request's part on the active layout —
+        // the Operator is never asked to understand SLOT-001/SLOT-002.
+        var suppliedReservedSlotId = request.TaskType == TransportTaskType.BringEmpty
+            ? request.DestinationSlotId
+            : request.SourceSlotId;
+        if (!suppliedReservedSlotId.HasValue)
+        {
+            if (!request.PartId.HasValue)
+            {
+                throw new WorkflowRuleException(
+                    "PART_REQUIRED_FOR_AUTOMATIC_SLOT_RESOLUTION",
+                    "Otomatik konum seçimi için geçerli bir parça gereklidir.");
+            }
+
+            var resolvedMachineSlotId = await ResolveMachineSlotAsync(connection, transaction, request, cancellationToken);
+            request = request.TaskType == TransportTaskType.BringEmpty
+                ? request with { DestinationSlotId = resolvedMachineSlotId }
+                : request with { SourceSlotId = resolvedMachineSlotId };
+        }
+
         var suppliedSlotIds = new[] { request.SourceSlotId, request.DestinationSlotId }
             .Where(static value => value.HasValue)
             .Select(static value => value!.Value)
@@ -158,7 +181,8 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             {
                 reserved_slot_id = request.ReservedSlotId,
                 reservation_kind = request.TaskType == TransportTaskType.BringEmpty ? "DESTINATION" : "SOURCE",
-                warehouse_endpoint_unresolved = request.TaskType == TransportTaskType.BringEmpty && !request.SourceSlotId.HasValue
+                machine_slot_id = request.ReservedSlotId,
+                empty_storage_slot_id = bufferSlotId
             });
 
         return new CreateTransportResult(created, WasIdempotentReplay: false);
@@ -633,7 +657,79 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
 
         if (request.PartId.HasValue)
         {
-            await EnsureExistsAsync(connection, transaction, "SELECT 1 FROM master.parts WHERE id = @id", request.PartId.Value, null, "PART_NOT_FOUND", "The supplied part does not exist.", cancellationToken);
+            await EnsureExistsAsync(
+                connection,
+                transaction,
+                "SELECT 1 FROM master.parts WHERE id = @id AND is_active",
+                request.PartId.Value,
+                null,
+                "PART_NOT_FOUND",
+                "Seçilen aktif parça bulunamadı.",
+                cancellationToken);
+
+            if (request.ProductGroupId.HasValue)
+            {
+                await using var membership = new NpgsqlCommand(
+                    """
+                    SELECT 1
+                    FROM master.product_groups pg
+                    WHERE pg.id = @product_group_id
+                      AND pg.variant_id = @variant_id
+                      AND pg.is_active
+                      AND (
+                          pg.main_part_id = @part_id
+                          OR EXISTS (
+                              SELECT 1
+                              FROM master.product_group_parts gpp
+                              WHERE gpp.product_group_id = pg.id
+                                AND gpp.part_id = @part_id
+                                AND gpp.is_active
+                          )
+                      )
+                    """,
+                    connection,
+                    transaction);
+                membership.Parameters.AddWithValue("product_group_id", request.ProductGroupId.Value);
+                membership.Parameters.AddWithValue("variant_id", request.VariantId);
+                membership.Parameters.AddWithValue("part_id", request.PartId.Value);
+                if (await membership.ExecuteScalarAsync(cancellationToken) is null)
+                {
+                    throw new WorkflowRuleException(
+                        "PART_PRODUCT_GROUP_CONFLICT",
+                        "Seçilen parça ürün grubu ve varyantla uyumlu değil.");
+                }
+            }
+            else
+            {
+                await using var membership = new NpgsqlCommand(
+                    """
+                    SELECT 1
+                    FROM master.product_groups pg
+                    WHERE pg.variant_id = @variant_id
+                      AND pg.is_active
+                      AND (
+                          pg.main_part_id = @part_id
+                          OR EXISTS (
+                              SELECT 1
+                              FROM master.product_group_parts gpp
+                              WHERE gpp.product_group_id = pg.id
+                                AND gpp.part_id = @part_id
+                                AND gpp.is_active
+                          )
+                      )
+                    LIMIT 1
+                    """,
+                    connection,
+                    transaction);
+                membership.Parameters.AddWithValue("variant_id", request.VariantId);
+                membership.Parameters.AddWithValue("part_id", request.PartId.Value);
+                if (await membership.ExecuteScalarAsync(cancellationToken) is null)
+                {
+                    throw new WorkflowRuleException(
+                        "PART_VARIANT_CONFLICT",
+                        "Seçilen parça aktif varyanta ait değil.");
+                }
+            }
         }
 
         if (request.ContainerTypeId.HasValue)
@@ -764,9 +860,10 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
                    rs.current_part_id,
                    rs.current_container_type_id,
                    COALESCE(ARRAY(
-                       SELECT p.id
-                       FROM jsonb_array_elements_text(COALESCE(s.metadata_json->'canonical_part_codes', '[]'::jsonb)) AS part_code(value)
-                       JOIN master.parts p ON p.part_code = part_code.value
+                       SELECT lsp.part_id
+                       FROM master.layout_slot_parts lsp
+                       WHERE lsp.layout_slot_id = s.id
+                       ORDER BY lsp.part_id
                    ), ARRAY[]::uuid[]) AS known_part_ids
             FROM master.layout_slots s
             JOIN master.layouts l ON l.id = s.layout_id
@@ -847,6 +944,63 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             : throw new WorkflowRuleException(
                 "EMPTY_BUFFER_UNAVAILABLE",
                 $"No configured EMPTY_STORAGE buffer slot is currently {expected.Occupancy.ToDatabase()}/{expected.Load.ToDatabase()} and available on this layout.");
+    }
+
+    /// <summary>
+    /// Customer UX — Automatic Machine Slot Resolution. Only slots explicitly
+    /// curated in master.layout_slot_parts for this part are eligible — the
+    /// unstructured metadata_json evidence on master.layout_slots is never
+    /// consulted here. Safe under concurrency via the same FOR UPDATE ...
+    /// SKIP LOCKED pattern as the EMPTY_STORAGE buffer allocator: two
+    /// concurrent callers competing for the same candidate set land on
+    /// different rows, or correctly find none left rather than double-
+    /// booking one. Ordering by the slot's own configured display order
+    /// keeps the choice deterministic.
+    /// </summary>
+    private static async Task<Guid> ResolveMachineSlotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CreateTransportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (notFoundCode, notFoundMessage) = request.TaskType switch
+        {
+            TransportTaskType.BringEmpty => ("BRING_EMPTY_SLOT_NOT_FOUND", "Bu parça için boş konum bulunamadı."),
+            TransportTaskType.RemoveFull => ("REMOVE_FULL_SLOT_NOT_FOUND", "Bu parça için dolu kasa bulunamadı."),
+            TransportTaskType.RemoveEmpty => ("REMOVE_EMPTY_SLOT_NOT_FOUND", "Bu parça için boş kasa bulunamadı."),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.TaskType, null)
+        };
+        var expected = TransportRules.ExpectedMachineSlotState(request.TaskType);
+
+        await using var command = new NpgsqlCommand(
+            $"""
+             SELECT ls.id
+             FROM master.layout_slots ls
+             JOIN master.layout_slot_parts lsp ON lsp.layout_slot_id = ls.id
+             JOIN ops.slot_runtime_state rs ON rs.layout_slot_id = ls.id
+             WHERE ls.layout_id = @layout_id
+               AND lsp.part_id = @part_id
+               AND ls.slot_role NOT IN ('MACHINE', 'EMPTY_STORAGE')
+               AND ls.is_enabled
+               AND rs.occupancy_state = @occupancy_state
+               AND rs.load_state = @load_state
+               AND NOT EXISTS (
+                   SELECT 1 FROM ops.transport_requests tr
+                   WHERE tr.status IN ({ActiveStatusesSql})
+                     AND (tr.source_slot_id = ls.id OR tr.destination_slot_id = ls.id)
+               )
+             ORDER BY ls.display_order, ls.code, ls.id
+             FOR UPDATE OF rs SKIP LOCKED
+             LIMIT 1
+             """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("layout_id", request.LayoutId);
+        AddNullableUuid(command, "part_id", request.PartId);
+        command.Parameters.AddWithValue("occupancy_state", expected.Occupancy.ToDatabase());
+        command.Parameters.AddWithValue("load_state", expected.Load.ToDatabase());
+        var slotId = await command.ExecuteScalarAsync(cancellationToken);
+        return slotId is Guid id ? id : throw new WorkflowRuleException(notFoundCode, notFoundMessage);
     }
 
     private static async Task EnsureSlotsAreAvailableAsync(
@@ -1100,11 +1254,16 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
     {
         // Customer Workflow — Empty Container Buffer: a retry that again omits
         // the buffer-side slot is still the same logical request even though
-        // the stored copy now carries whichever slot auto-allocation resolved
-        // the first time — only the reserved (machine) side must match
-        // exactly.
+        // the stored copy now carries whichever buffer and/or machine slot
+        // backend allocation resolved the first time. A retry that keeps an
+        // endpoint omitted is therefore equivalent; an explicitly supplied
+        // endpoint must still match exactly.
         var defersBufferSource = request.TaskType == TransportTaskType.BringEmpty && request.SourceSlotId is null;
         var defersBufferDestination = request.TaskType == TransportTaskType.RemoveEmpty && request.DestinationSlotId is null;
+        var defersMachineSource = request.TaskType is (TransportTaskType.RemoveFull or TransportTaskType.RemoveEmpty)
+            && request.SourceSlotId is null;
+        var defersMachineDestination = request.TaskType == TransportTaskType.BringEmpty
+            && request.DestinationSlotId is null;
 
         var equivalent = existing.Origin == request.Origin
             && existing.RequestedBy == request.RequestedBy
@@ -1116,8 +1275,8 @@ public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IA
             && existing.PartId == request.PartId
             && existing.ContainerTypeId == request.ContainerTypeId
             && existing.TaskType == request.TaskType
-            && (defersBufferSource || existing.SourceSlotId == request.SourceSlotId)
-            && (defersBufferDestination || existing.DestinationSlotId == request.DestinationSlotId)
+            && (defersBufferSource || defersMachineSource || existing.SourceSlotId == request.SourceSlotId)
+            && (defersBufferDestination || defersMachineDestination || existing.DestinationSlotId == request.DestinationSlotId)
             && existing.Priority == request.Priority;
 
         if (!equivalent)

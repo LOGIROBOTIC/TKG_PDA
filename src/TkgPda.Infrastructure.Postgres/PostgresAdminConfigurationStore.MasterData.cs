@@ -82,6 +82,89 @@ public sealed partial class PostgresAdminConfigurationStore
         return after;
     }
 
+    // Customer UX — Automatic Machine Slot Resolution: curated
+    // master.layout_slot_parts CRUD. No concurrency token — this is a pure
+    // membership set (like the RDS slot mapping), not a versioned resource.
+    public async Task<IReadOnlyList<AdminSlotPartRecord>> ListSlotPartsAsync(Guid slotId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT p.id, p.part_code, p.description
+            FROM master.layout_slot_parts lsp
+            JOIN master.parts p ON p.id = lsp.part_id
+            WHERE lsp.layout_slot_id = @slot_id
+            ORDER BY p.part_code
+            """,
+            connection);
+        command.Parameters.AddWithValue("slot_id", slotId);
+        var results = new List<AdminSlotPartRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new AdminSlotPartRecord(reader.GetGuid(0), reader.GetString(1), NullableString(reader, 2)));
+        }
+
+        return results;
+    }
+
+    public async Task AssignSlotPartAsync(Guid slotId, Guid partId, AdminMutationContext context, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (!await ExistsAsync(connection, transaction, "SELECT 1 FROM master.layout_slots WHERE id = @id", slotId, cancellationToken))
+        {
+            throw NotFound("LAYOUT_SLOT_NOT_FOUND", "The layout slot does not exist.");
+        }
+
+        if (!await ExistsAsync(connection, transaction, "SELECT 1 FROM master.parts WHERE id = @id AND is_active", partId, cancellationToken))
+        {
+            throw NotFound("PART_NOT_FOUND", "The active part does not exist.");
+        }
+
+        await using (var insert = new NpgsqlCommand(
+                         """
+                         INSERT INTO master.layout_slot_parts (layout_slot_id, part_id)
+                         VALUES (@slot_id, @part_id)
+                         ON CONFLICT (layout_slot_id, part_id) DO NOTHING
+                         """,
+                         connection,
+                         transaction))
+        {
+            insert.Parameters.AddWithValue("slot_id", slotId);
+            insert.Parameters.AddWithValue("part_id", partId);
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await InsertAuditAsync(
+            connection, transaction, context, "ADMIN_LAYOUT_SLOT_PART_ASSIGNED", "LAYOUT_SLOT", slotId.ToString(),
+            null, new { slotId, partId }, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task RemoveSlotPartAsync(Guid slotId, Guid partId, AdminMutationContext context, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var delete = new NpgsqlCommand(
+                         "DELETE FROM master.layout_slot_parts WHERE layout_slot_id = @slot_id AND part_id = @part_id",
+                         connection,
+                         transaction))
+        {
+            delete.Parameters.AddWithValue("slot_id", slotId);
+            delete.Parameters.AddWithValue("part_id", partId);
+            if (await delete.ExecuteNonQueryAsync(cancellationToken) != 1)
+            {
+                throw NotFound("LAYOUT_SLOT_PART_NOT_FOUND", "The slot-part assignment does not exist.");
+            }
+        }
+
+        await InsertAuditAsync(
+            connection, transaction, context, "ADMIN_LAYOUT_SLOT_PART_REMOVED", "LAYOUT_SLOT", slotId.ToString(),
+            new { slotId, partId }, null, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<AdminProductGroupRecord> CreateProductGroupAsync(
         CreateProductGroupCommand command,
         AdminMutationContext context,

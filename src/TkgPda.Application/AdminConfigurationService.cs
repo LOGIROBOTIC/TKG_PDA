@@ -162,6 +162,16 @@ public sealed class AdminConfigurationService(IAdminConfigurationStore store, IP
         }, context, cancellationToken);
     }
 
+    /// <summary>Customer UX — Automatic Machine Slot Resolution: curated master.layout_slot_parts CRUD.</summary>
+    public Task<IReadOnlyList<AdminSlotPartRecord>> ListSlotPartsAsync(Guid slotId, CancellationToken cancellationToken = default) =>
+        store.ListSlotPartsAsync(RequiredId(slotId), cancellationToken);
+
+    public Task AssignSlotPartAsync(Guid slotId, Guid partId, AdminMutationContext context, CancellationToken cancellationToken = default) =>
+        store.AssignSlotPartAsync(RequiredId(slotId), RequiredId(partId), context, cancellationToken);
+
+    public Task RemoveSlotPartAsync(Guid slotId, Guid partId, AdminMutationContext context, CancellationToken cancellationToken = default) =>
+        store.RemoveSlotPartAsync(RequiredId(slotId), RequiredId(partId), context, cancellationToken);
+
     public Task<IReadOnlyList<AdminPartRecord>> ListPartsAsync(CancellationToken cancellationToken = default) =>
         store.ListPartsAsync(cancellationToken);
 

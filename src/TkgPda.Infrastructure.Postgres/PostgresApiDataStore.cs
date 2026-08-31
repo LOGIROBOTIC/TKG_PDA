@@ -206,6 +206,7 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
 
     public async Task<IReadOnlyList<CompatibleVariantRecord>> ListCompatibleVariantsAsync(
         Guid machineId,
+        Guid mainPartId,
         Guid partId,
         CancellationToken cancellationToken = default)
     {
@@ -227,12 +228,14 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                        ON gpp.product_group_id = pg.id AND gpp.part_id = @part_id AND gpp.is_active
                 WHERE v.machine_id = @machine_id
                   AND v.is_active
+                  AND pg.main_part_id = @main_part_id
                   AND (pg.main_part_id = @part_id OR gpp.part_id = @part_id)
                 ORDER BY v.id, (pg.main_part_id = @part_id) DESC, pg.display_order
             ) resolved
             ORDER BY display_order, code
             """);
         command.Parameters.AddWithValue("machine_id", machineId);
+        command.Parameters.AddWithValue("main_part_id", mainPartId);
         command.Parameters.AddWithValue("part_id", partId);
         var result = new List<CompatibleVariantRecord>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

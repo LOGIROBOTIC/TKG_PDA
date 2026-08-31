@@ -34,25 +34,30 @@ class LayoutCanvas extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        AspectRatio(
-          aspectRatio: 1.55,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: const Color(0xFFE2E8F0),
-              border: Border.all(color: const Color(0xFF64748B), width: 2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 3,
-              boundaryMargin: const EdgeInsets.all(80),
-              child: LayoutBuilder(
-                builder: (context, constraints) => Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    for (final slot in positioned)
-                      _positionedSlot(context, constraints, slot),
-                  ],
+        LayoutBuilder(
+          builder: (context, outerConstraints) => AspectRatio(
+            // Narrower screens (phones/PDAs) get a taller canvas so each
+            // slot keeps a usable touch target in absolute pixels, without
+            // changing the slots' relative x/y/width/height proportions.
+            aspectRatio: outerConstraints.maxWidth < 480 ? 1.0 : 1.55,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFFE2E8F0),
+                border: Border.all(color: const Color(0xFF64748B), width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 3,
+                boundaryMargin: const EdgeInsets.all(80),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Stack(
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      for (final slot in positioned)
+                        _positionedSlot(context, constraints, slot),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -153,7 +158,19 @@ class LayoutCanvas extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: slot.transportEligible ? () => onSlotSelected(slot) : null,
-          child: child,
+          child: selected
+              ? Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    child,
+                    const Positioned(
+                      top: -6,
+                      right: -6,
+                      child: _SelectedBadge(),
+                    ),
+                  ],
+                )
+              : child,
         ),
       ),
     );
@@ -173,4 +190,23 @@ class LayoutCanvas extends StatelessWidget {
       slot.height != null &&
       slot.width! > 0 &&
       slot.height! > 0;
+}
+
+/// A small, unambiguous "this is the selected slot" marker that survives
+/// regardless of the slot's own occupancy color.
+class _SelectedBadge extends StatelessWidget {
+  const _SelectedBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('slot-selected-badge'),
+    width: 20,
+    height: 20,
+    decoration: const BoxDecoration(
+      color: Color(0xFF7C2D12),
+      shape: BoxShape.circle,
+      border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 2)),
+    ),
+    child: const Icon(Icons.check, size: 13, color: Colors.white),
+  );
 }

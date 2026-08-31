@@ -49,6 +49,36 @@ class MachineListScreen extends StatelessWidget {
             Expanded(
               child: controller.busy && controller.machines.isEmpty
                   ? const Center(child: CircularProgressIndicator())
+                  : controller.machines.isEmpty
+                  ? RefreshIndicator(
+                      onRefresh: controller.reloadMachines,
+                      child: ListView(
+                        key: const Key('machine-list-empty'),
+                        padding: const EdgeInsets.all(24),
+                        children: const [
+                          SizedBox(height: 60),
+                          Icon(
+                            Icons.precision_manufacturing_outlined,
+                            size: 56,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'Size tanımlı makine bulunamadı.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Erişim gerekiyorsa yöneticinizle iletişime geçin.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
                   : RefreshIndicator(
                       onRefresh: controller.reloadMachines,
                       child: ListView.separated(

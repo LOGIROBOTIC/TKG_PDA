@@ -24,6 +24,13 @@ public static class TransportRules
     {
         ValidateSuppliedSlot(request, reservedSlot);
 
+        if (reservedSlot.Role == SlotRole.EmptyStorage)
+        {
+            throw new WorkflowRuleException(
+                "EMPTY_STORAGE_MACHINE_SLOT_FORBIDDEN",
+                "EMPTY_STORAGE is reserved for backend buffer allocation and cannot be used as the machine-side transport slot.");
+        }
+
         var expected = request.TaskType switch
         {
             TransportTaskType.BringEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
@@ -101,6 +108,22 @@ public static class TransportRules
         };
 
     /// <summary>
+    /// Customer UX — Automatic Machine Slot Resolution: the machine-side
+    /// occupancy/load state an eligible, part-mapped slot must currently be
+    /// in for this operation. BRING_EMPTY needs an empty destination to fill;
+    /// REMOVE_FULL/REMOVE_EMPTY need a source already holding what they take
+    /// away. Mirrors ValidateReservation's own per-operation expectation, but
+    /// as a plain lookup the SQL-side resolver can use directly.
+    /// </summary>
+    public static (OccupancyState Occupancy, LoadState Load) ExpectedMachineSlotState(TransportTaskType taskType) => taskType switch
+    {
+        TransportTaskType.BringEmpty => (OccupancyState.Vacant, LoadState.Unknown),
+        TransportTaskType.RemoveFull => (OccupancyState.Occupied, LoadState.Full),
+        TransportTaskType.RemoveEmpty => (OccupancyState.Occupied, LoadState.Empty),
+        _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, null)
+    };
+
+    /// <summary>
     /// A buffer slot must be configured master data (slot_role =
     /// EMPTY_STORAGE) — never inferred from name, WorkSite, machine code or
     /// coordinates — and must currently be in the state this operation
@@ -132,12 +155,12 @@ public static class TransportRules
         {
             if (slot.KnownPartIds.Count > 0 && !slot.KnownPartIds.Contains(request.PartId.Value))
             {
-                throw new WorkflowRuleException("PART_CONFLICT", "The requested part conflicts with the slot's source-backed part evidence.");
+                throw new WorkflowRuleException("PART_CONFLICT", "Seçilen parça konumun tanımlı parça eşlemesiyle uyumlu değil.");
             }
 
             if (slot.State.CurrentPartId.HasValue && slot.State.CurrentPartId != request.PartId)
             {
-                throw new WorkflowRuleException("PART_CONFLICT", "The requested part conflicts with the slot's current known part.");
+                throw new WorkflowRuleException("PART_CONFLICT", "Seçilen parça konumdaki mevcut parçayla uyumlu değil.");
             }
         }
 

@@ -31,8 +31,10 @@ try {
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\002_operator_employee_identity.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\003_transport_batch.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\004_transport_request_readiness.sql')))
+    Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql')))
+    Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql')))
     $env:TKG_PDA_API_TEST_CONNECTION_STRING = "Host=127.0.0.1;Port=$Port;Database=$database;Username=postgres;Pooling=true"
     Invoke-Checked 'dotnet' @('test', (Join-Path $projectRoot 'tests\TkgPda.Api.Tests\TkgPda.Api.Tests.csproj'), '--configuration', 'Release', '--no-restore', '--filter', 'FullyQualifiedName~LiveRdsPostgresSyncTests', '--logger', 'console;verbosity=normal')
     $verification = (& $psql @common -Atc "SELECT json_build_object('postgresql_version', current_setting('server_version'), 'remaining_live_fixture_rows', (SELECT count(*) FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08A-LIVE-%'), 'result', 'PASS');") | ConvertFrom-Json

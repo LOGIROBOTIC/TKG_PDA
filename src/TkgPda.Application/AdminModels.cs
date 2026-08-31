@@ -110,6 +110,14 @@ public sealed record AdminProductGroupPartRecord(
     int DisplayOrder,
     bool IsActive);
 
+/// <summary>
+/// Customer UX — Automatic Machine Slot Resolution: a curated part <->
+/// layout slot assignment (master.layout_slot_parts), so a customer
+/// correction no longer requires a SQL edit. Carries no execution/runtime
+/// state — occupancy/load remain exclusively in ops.slot_runtime_state.
+/// </summary>
+public sealed record AdminSlotPartRecord(Guid PartId, string PartCode, string? Description);
+
 public sealed record AdminProductGroupRecord(
     Guid Id,
     Guid VariantId,

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
 import '../../data/models/pda_models.dart';
-import '../../shared/presentation.dart';
 
 /// WP-03B: the part-first gate shown after a machine is selected and before
 /// the existing variant/layout/slot/operation flow. Reuses the existing
@@ -36,7 +35,7 @@ class PartFirstSelector extends StatelessWidget {
       onRefresh: controller.reloadPartOptions,
       child: ListView(
         key: const Key('part-first-selector'),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         children: [
           const Text(
             'Parça Seçimi',
@@ -44,24 +43,51 @@ class PartFirstSelector extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text('İşlem yapılacak ana parçayı seçin.'),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
+          const _SectionLabel('Ana Parçalar'),
+          const SizedBox(height: 10),
           if (controller.partOptions.isEmpty)
             const Text('Bu makine için tanımlı parça bulunamadı.')
           else
             _MainPartChips(controller: controller),
           if (controller.selectedMainPart case final main?) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             _EffectivePartCard(main: main, controller: controller),
           ],
           if (controller.selectedEffectivePart != null) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             _CompatibleVariantCard(controller: controller),
+          ],
+          if (controller.partFirstReadyToContinue) ...[
+            const SizedBox(height: 18),
+            _ContinueAction(controller: controller),
           ],
           const SizedBox(height: 40),
         ],
       ),
     );
   }
+}
+
+/// A consistent, visually subordinate section heading used to keep
+/// "Ana Parçalar" and "Alternatif / İlgili Parçalar" clearly separated.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  // Deliberately not upper-cased: Dart's invariant toUpperCase() mangles the
+  // Turkish dotted i ("İlgili" -> "İLGILI").
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0.4,
+      color: Color(0xFF475569),
+    ),
+  );
 }
 
 class _MainPartChips extends StatelessWidget {
@@ -72,26 +98,72 @@ class _MainPartChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 10,
+      runSpacing: 10,
       children: [
         for (final option in controller.partOptions)
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-            child: ChoiceChip(
-              key: Key('main-part-${option.partId}'),
-              selected: controller.selectedMainPart?.partId == option.partId,
-              label: Text(
-                '${option.partCode} · ${knownOr(option.description)}',
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-              onSelected: (_) => controller.selectMainPartOption(option),
-            ),
+            child: _MainPartChip(option: option, controller: controller),
           ),
       ],
     ),
   );
+}
+
+/// One click selects the main part as the effective part and starts the
+/// compatible-variant lookup — there is no second confirmation chip. The
+/// part code leads; an unknown description is simply omitted rather than
+/// repeating "Tanımlı değil" on every chip.
+class _MainPartChip extends StatelessWidget {
+  const _MainPartChip({required this.option, required this.controller});
+
+  final MachineMainPartOption option;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = controller.selectedMainPart?.partId == option.partId;
+    final description = option.description?.trim();
+    return ChoiceChip(
+      key: Key('main-part-${option.partId}'),
+      selected: selected,
+      backgroundColor: Colors.white,
+      selectedColor: const Color(0xFFFDE68A),
+      side: BorderSide(
+        color: selected ? const Color(0xFFB45309) : const Color(0xFFCBD5E1),
+        width: selected ? 2.5 : 1,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      label: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            option.partCode,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+            ),
+          ),
+          if (description != null && description.isNotEmpty)
+            Text(
+              description,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF475569),
+              ),
+            ),
+        ],
+      ),
+      onSelected: controller.busy
+          ? null
+          : (_) => controller.selectMainPartOption(option),
+    );
+  }
 }
 
 class _EffectivePartCard extends StatelessWidget {
@@ -111,9 +183,14 @@ class _EffectivePartCard extends StatelessWidget {
         .toList(growable: false);
     final other = main.relatedParts
         .where(
-          (part) => part.relationType != 'RELATED' && part.relationType != 'ALT_PART',
+          (part) =>
+              part.relationType != 'RELATED' && part.relationType != 'ALT_PART',
         )
         .toList(growable: false);
+
+    final usingMain = effective?.isMain ?? false;
+    final hasAlternatives =
+        related.isNotEmpty || alt.isNotEmpty || other.isNotEmpty;
 
     return Card(
       key: Key('main-part-detail-${main.partId}'),
@@ -122,26 +199,44 @@ class _EffectivePartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Parça · ${main.partCode}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ChoiceChip(
-              key: const Key('effective-part-main'),
-              selected: effective?.isMain ?? false,
-              label: Text('Ana Parçayı Kullan · ${main.partCode}'),
-              onSelected: (_) => controller.selectEffectivePart(
-                EffectivePartSelection(
-                  partId: main.partId,
-                  partCode: main.partCode,
-                  isMain: true,
+            // The parent main part stays visible for context even after an
+            // alternative below is chosen.
+            Row(
+              children: [
+                const Icon(Icons.inventory_2_outlined, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Seçili Ana Parça · ${main.partCode}',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              usingMain
+                  ? 'Bu ana parça ile devam ediliyor.'
+                  : 'Alternatif kullanılıyor: ${effective?.partCode ?? ''}',
+              key: const Key('effective-part-summary'),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF475569),
               ),
             ),
+            if (hasAlternatives) ...[
+              const Divider(height: 26),
+              const _SectionLabel('Alternatif / İlgili Parçalar'),
+              const SizedBox(height: 4),
+              const Text(
+                'Gerekirse bunlardan biriyle devam edebilirsiniz.',
+                style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+              ),
+            ],
             if (related.isNotEmpty) ...[
               const SizedBox(height: 14),
               const Text(
@@ -207,30 +302,68 @@ class _RelatedPartChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 10,
+      runSpacing: 10,
       children: [
         for (final part in parts)
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-            child: ChoiceChip(
-              key: Key('$keyPrefix-part-${part.partId}'),
+            child: _RelatedPartChip(
+              chipKey: Key('$keyPrefix-part-${part.partId}'),
+              part: part,
               selected:
                   effective != null &&
                   !effective!.isMain &&
                   effective!.partId == part.partId,
-              label: Text(part.partCode, overflow: TextOverflow.ellipsis),
-              onSelected: (_) => controller.selectEffectivePart(
-                EffectivePartSelection(
-                  partId: part.partId,
-                  partCode: part.partCode,
-                  isMain: false,
-                ),
-              ),
+              controller: controller,
             ),
           ),
       ],
     ),
+  );
+}
+
+class _RelatedPartChip extends StatelessWidget {
+  const _RelatedPartChip({
+    required this.chipKey,
+    required this.part,
+    required this.selected,
+    required this.controller,
+  });
+
+  final Key chipKey;
+  final MachineRelatedPart part;
+  final bool selected;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => ChoiceChip(
+    key: chipKey,
+    selected: selected,
+    backgroundColor: Colors.white,
+    selectedColor: const Color(0xFFFDE68A),
+    side: BorderSide(
+      color: selected ? const Color(0xFFB45309) : const Color(0xFFCBD5E1),
+      width: selected ? 2.5 : 1,
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    label: Text(
+      part.partCode,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+      ),
+    ),
+    onSelected: controller.busy
+        ? null
+        : (_) => controller.selectEffectivePart(
+            EffectivePartSelection(
+              partId: part.partId,
+              partCode: part.partCode,
+              isMain: false,
+            ),
+          ),
   );
 }
 
@@ -263,21 +396,48 @@ class _CompatibleVariantCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
     if (variants.isEmpty) {
-      return const Card(
-        key: Key('zero-compatible-variants'),
+      final batchVariantCode = controller.batchTargetVariantCode;
+      return Card(
+        key: const Key('zero-compatible-variants'),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
-            'Uyumlu varyant bulunamadı.',
-            key: Key('zero-variants-message'),
-            style: TextStyle(fontWeight: FontWeight.w700),
+            batchVariantCode == null
+                ? 'Uyumlu varyant bulunamadı.'
+                : 'Bu parça, grubun $batchVariantCode varyantıyla uyumlu değil.',
+            key: const Key('zero-variants-message'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
       );
     }
-    // Exactly one compatible variant auto-resolves inside the controller;
-    // compatibleVariantsLoading stays true for that whole request (handled
-    // above), so reaching this branch only ever happens with 2+ variants.
+    // A single compatible variant is resolved internally by the controller
+    // (see _resolveVariant/_markVariantResolved) but no longer navigates
+    // away immediately — it pauses at partFirstReadyToContinue so RELATED/
+    // ALT alternatives above stay reachable. Show it as an informational,
+    // non-tappable confirmation rather than a one-item selectable list.
+    if (variants.length == 1) {
+      final variant = variants.single;
+      return Card(
+        key: const Key('single-compatible-variant'),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Color(0xFF15803D)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${variant.variantCode} · ${variant.variantName} (otomatik seçildi)',
+                  key: const Key('single-compatible-variant-text'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Card(
       key: const Key('multiple-compatible-variants'),
       child: Column(
@@ -294,6 +454,11 @@ class _CompatibleVariantCard extends StatelessWidget {
             ListTile(
               key: Key('compatible-variant-${variant.variantId}'),
               title: Text('${variant.variantCode} · ${variant.variantName}'),
+              trailing:
+                  controller.resolvedCompatibleVariant?.variantId ==
+                      variant.variantId
+                  ? const Icon(Icons.check_circle, color: Color(0xFF15803D))
+                  : null,
               onTap: controller.busy
                   ? null
                   : () => controller.selectCompatibleVariant(variant),
@@ -303,6 +468,27 @@ class _CompatibleVariantCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The explicit navigation action for the "resolve then continue" part-first
+/// flow (task: "clear Continue/İşleme Devam action once selection is
+/// ready" — not a second "Ana Parçayı Kullan" confirmation, just forward
+/// navigation to the operation screen once part+variant are both settled).
+class _ContinueAction extends StatelessWidget {
+  const _ContinueAction({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: FilledButton.icon(
+      key: const Key('part-first-continue'),
+      onPressed: controller.busy ? null : controller.confirmPartFirstSelection,
+      icon: const Icon(Icons.arrow_forward),
+      label: const Text('İşleme Devam Et'),
+    ),
+  );
 }
 
 class _RetryState extends StatelessWidget {

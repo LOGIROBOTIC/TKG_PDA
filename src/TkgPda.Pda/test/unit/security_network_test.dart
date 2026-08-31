@@ -170,6 +170,31 @@ void main() {
       },
     );
 
+    test('GET query parameters are encoded separately from the path', () async {
+      late http.Request captured;
+      final client = ApiClient(
+        baseUri: Uri.parse('https://api.example.test/root'),
+        deviceCode: () => testDeviceCode,
+        accessToken: () => 'memory-token',
+        onUnauthorized: () {},
+        httpClient: MockClient((request) async {
+          captured = request;
+          return http.Response('{}', 200);
+        }),
+      );
+
+      await client.get(
+        '/api/v1/machines/m1/parts/p1/compatible-variants',
+        queryParameters: {'mainPartId': 'main-1'},
+      );
+
+      expect(
+        captured.url.path,
+        '/root/api/v1/machines/m1/parts/p1/compatible-variants',
+      );
+      expect(captured.url.queryParameters['mainPartId'], 'main-1');
+    });
+
     test(
       'PdaRepository submits employeeNumber and never a username or password field',
       () async {

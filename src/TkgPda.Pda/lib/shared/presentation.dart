@@ -57,3 +57,9 @@ String readinessLabel(String? code) => switch (code) {
 
 String knownOr(String? value) =>
     value == null || value.trim().isEmpty ? 'Tanımlı değil' : value;
+
+/// The backend always supplies a friendly Turkish `disabledMessage` today.
+/// This is defensive hardening only, so a raw uppercase code (e.g.
+/// `SLOT_BUSY`) is never shown to the operator if that ever stops being true.
+String disabledReason(String? disabledMessage) =>
+    disabledMessage ?? 'Bu işlem şu anda kullanılamıyor.';

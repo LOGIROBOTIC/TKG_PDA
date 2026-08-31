@@ -9,6 +9,7 @@ abstract interface class PdaDataSource {
   Future<List<MachineMainPartOption>> machinePartOptions(String machineId);
   Future<List<CompatibleVariant>> compatibleVariants({
     required String machineId,
+    required String mainPartId,
     required String partId,
   });
   Future<void> switchVariant({
@@ -99,10 +100,12 @@ class PdaRepository implements PdaDataSource {
   @override
   Future<List<CompatibleVariant>> compatibleVariants({
     required String machineId,
+    required String mainPartId,
     required String partId,
   }) async {
     final response = await _api.get(
       '/api/v1/machines/$machineId/parts/$partId/compatible-variants',
+      queryParameters: {'mainPartId': mainPartId},
     );
     final values = response.body is List ? response.body as List : const [];
     return values

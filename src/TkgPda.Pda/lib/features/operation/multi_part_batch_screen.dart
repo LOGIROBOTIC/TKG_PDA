@@ -5,7 +5,7 @@ import '../../data/models/pda_models.dart';
 import '../../shared/presentation.dart';
 
 /// Customer UI — Multi-Part Transport Batch: the "Select Parts" and
-/// "Review -> Submit Batch" steps of the wizard. Per-item variant/slot
+/// "Review -> Submit Batch" steps of the wizard. Per-item variant/operation
 /// configuration reuses the existing [PartFirstSelector] / operation-screen
 /// widgets directly (driven by [AppController.isConfiguringBatchItem]) and
 /// is therefore NOT part of this file.
@@ -31,6 +31,14 @@ class _BatchPartBrowser extends StatefulWidget {
 
 class _BatchPartBrowserState extends State<_BatchPartBrowser> {
   MachineMainPartOption? _expanded;
+
+  /// How many cart items came from this main part (itself or one of its
+  /// RELATED/ALT parts) — surfaced as a small count badge on the browse
+  /// chip so it is clear at a glance without expanding each one.
+  int _cartCountFor(AppController controller, MachineMainPartOption main) =>
+      controller.batchCart
+          .where((item) => item.mainPart.partId == main.partId)
+          .length;
 
   @override
   Widget build(BuildContext context) {
@@ -79,8 +87,24 @@ class _BatchPartBrowserState extends State<_BatchPartBrowser> {
                   child: ChoiceChip(
                     key: Key('batch-browse-main-${option.partId}'),
                     selected: _expanded?.partId == option.partId,
+                    avatar: _cartCountFor(controller, option) > 0
+                        ? CircleAvatar(
+                            key: Key(
+                              'batch-browse-main-count-${option.partId}',
+                            ),
+                            backgroundColor: const Color(0xFF166534),
+                            child: Text(
+                              '${_cartCountFor(controller, option)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          )
+                        : null,
                     label: Text(
-                      '${option.partCode} · ${knownOr(option.description)}',
+                      _partDisplay(option.partCode, option.description),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 2,
                     ),
@@ -296,8 +320,12 @@ class _AddPartChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ActionChip(
-    avatar: Icon(alreadyAdded ? Icons.check_circle : Icons.add_circle_outline),
+    avatar: Icon(
+      alreadyAdded ? Icons.check_circle : Icons.add_circle_outline,
+      color: alreadyAdded ? const Color(0xFF166534) : null,
+    ),
     label: Text(label, overflow: TextOverflow.ellipsis),
+    backgroundColor: alreadyAdded ? const Color(0xFFDCFCE7) : null,
     onPressed: alreadyAdded ? null : () => onAdd(),
   );
 }
@@ -344,12 +372,26 @@ class _BatchReview extends StatelessWidget {
               '${knownOr(item.slotDisplayName)} · '
               'Varyant ${knownOr(item.variantCode)}',
             ),
-            trailing: IconButton(
-              key: Key('batch-review-remove-${item.effectivePart.partId}'),
-              tooltip: 'Kaldır',
-              onPressed: () =>
-                  controller.removePartFromBatch(item.cartItemId),
-              icon: const Icon(Icons.delete_outline),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: Key('batch-review-edit-${item.effectivePart.partId}'),
+                  tooltip: 'Yapılandırmayı Değiştir',
+                  onPressed: controller.busy
+                      ? null
+                      : () => controller.reconfigureBatchItem(item.cartItemId),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+                IconButton(
+                  key: Key('batch-review-remove-${item.effectivePart.partId}'),
+                  tooltip: 'Kaldır',
+                  onPressed: controller.busy
+                      ? null
+                      : () => controller.removePartFromBatch(item.cartItemId),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
             ),
           ),
         ),
@@ -367,4 +409,9 @@ class _BatchReview extends StatelessWidget {
       const SizedBox(height: 40),
     ],
   );
+}
+
+String _partDisplay(String code, String? description) {
+  final value = description?.trim();
+  return value == null || value.isEmpty ? code : '$code · $value';
 }

@@ -46,6 +46,13 @@ public static class AdminEndpoints
         admin.MapPost("/layouts/{layoutId:guid}/slots", CreateSlotAsync);
         admin.MapPut("/layouts/{layoutId:guid}/slots/{slotId:guid}", UpdateSlotAsync);
 
+        // Customer UX — Automatic Machine Slot Resolution: curated
+        // master.layout_slot_parts CRUD, so a customer correction no longer
+        // requires a SQL edit.
+        admin.MapGet("/layout-slots/{slotId:guid}/parts", (Guid slotId, AdminConfigurationService service, CancellationToken ct) => service.ListSlotPartsAsync(slotId, ct));
+        admin.MapPut("/layout-slots/{slotId:guid}/parts/{partId:guid}", AssignSlotPartAsync);
+        admin.MapDelete("/layout-slots/{slotId:guid}/parts/{partId:guid}", RemoveSlotPartAsync);
+
         admin.MapGet("/parts", (AdminConfigurationService service, CancellationToken ct) => service.ListPartsAsync(ct));
         admin.MapPost("/parts", CreatePartAsync);
         admin.MapPut("/parts/{partId:guid}", UpdatePartAsync);
@@ -333,6 +340,18 @@ public static class AdminEndpoints
             MutationContext(context),
             ct);
         return Versioned(context, updated, updated.ConcurrencyToken);
+    }
+
+    private static async Task<IResult> AssignSlotPartAsync(Guid slotId, Guid partId, HttpContext context, AdminConfigurationService service, CancellationToken ct)
+    {
+        await service.AssignSlotPartAsync(slotId, partId, MutationContext(context), ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> RemoveSlotPartAsync(Guid slotId, Guid partId, HttpContext context, AdminConfigurationService service, CancellationToken ct)
+    {
+        await service.RemoveSlotPartAsync(slotId, partId, MutationContext(context), ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> CreatePartAsync(CreateAdminPartRequest request, HttpContext context, AdminConfigurationService service, CancellationToken ct)

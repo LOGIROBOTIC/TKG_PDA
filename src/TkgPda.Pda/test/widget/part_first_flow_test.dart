@@ -36,18 +36,69 @@ void main() {
   });
 
   testWidgets(
+    'one click on a main part makes it the effective part and starts the '
+    'compatible-variant lookup, with no second confirmation chip',
+    (tester) async {
+      final repository = FakePdaRepository();
+      final harness = await _harness(tester, repository: repository);
+
+      await tester.tap(
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(harness.controller.selectedEffectivePart?.isMain, isTrue);
+      expect(
+        harness.controller.selectedEffectivePart?.partId,
+        testAmbiguousMainPartOption.partId,
+      );
+      expect(
+        repository.compatibleVariantsRequestedPartIds,
+        contains(testAmbiguousMainPartOption.partId),
+      );
+      // The redundant "Ana Parçayı Kullan" step is gone entirely.
+      expect(find.byKey(const Key('effective-part-main')), findsNothing);
+      expect(find.textContaining('Ana Parçayı Kullan'), findsNothing);
+      harness.dispose();
+    },
+  );
+
+  testWidgets('the clicked main part is visibly marked as selected', (
+    tester,
+  ) async {
+    final harness = await _harness(tester);
+
+    await tester.tap(
+      find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+    );
+    await tester.pumpAndSettle();
+
+    final selectedChip = tester.widget<ChoiceChip>(
+      find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+    );
+    final otherChip = tester.widget<ChoiceChip>(
+      find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
+    );
+    expect(selectedChip.selected, isTrue);
+    expect(otherChip.selected, isFalse);
+    harness.dispose();
+  });
+
+  testWidgets(
     'selecting a main part shows only its own contextual RELATED/ALT options',
     (tester) async {
       final harness = await _harness(tester);
 
       await tester.tap(
-        find.byKey(Key('main-part-${testMainPartOption.partId}')),
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('effective-part-main')), findsOneWidget);
       expect(find.byKey(Key('alt-part-$testAltPartId')), findsOneWidget);
-      expect(find.byKey(Key('related-part-$testRelatedPartId')), findsOneWidget);
+      expect(
+        find.byKey(Key('related-part-$testRelatedPartId')),
+        findsOneWidget,
+      );
       // testSecondMainPartOption has no related parts of its own — nothing
       // from an unrelated main part may leak into the selected one's card.
       expect(
@@ -58,51 +109,85 @@ void main() {
     },
   );
 
-  testWidgets('the selected effective part shows a visible selected state', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'selecting another main part replaces the previous contextual options',
+    (tester) async {
+      final harness = await _harness(tester);
 
-    // Uses the RELATED part (resolves to 2 variants) rather than ALT (which
-    // auto-resolves to a single variant and would unmount this screen).
-    await tester.ensureVisible(find.byKey(Key('related-part-$testRelatedPartId')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(Key('related-part-$testRelatedPartId')));
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key('alt-part-$testAltPartId')), findsOneWidget);
 
-    final relatedChip = tester.widget<ChoiceChip>(
-      find.byKey(Key('related-part-$testRelatedPartId')),
-    );
-    final mainChip = tester.widget<ChoiceChip>(
-      find.byKey(const Key('effective-part-main')),
-    );
-    expect(relatedChip.selected, isTrue);
-    expect(mainChip.selected, isFalse);
-    harness.dispose();
-  });
+      await tester.tap(
+        find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
 
-  testWidgets('the main part itself can be the effective selected part', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('effective-part-main')));
-    await tester.pumpAndSettle();
-
-    expect(harness.controller.selectedEffectivePart?.isMain, isTrue);
-    expect(
-      harness.controller.selectedEffectivePart?.partId,
-      testMainPartOption.partId,
-    );
-    harness.dispose();
-  });
+      expect(
+        harness.controller.selectedEffectivePart?.partId,
+        testSecondMainPartOption.partId,
+      );
+      expect(
+        find.byKey(Key('main-part-detail-${testSecondMainPartOption.partId}')),
+        findsOneWidget,
+      );
+      // The previous main part's alternatives are gone.
+      expect(find.byKey(Key('alt-part-$testAltPartId')), findsNothing);
+      expect(find.byKey(Key('related-part-$testRelatedPartId')), findsNothing);
+      harness.dispose();
+    },
+  );
 
   testWidgets(
-    'exactly one compatible variant auto-resolves without an extra prompt',
+    'selecting a RELATED part changes the effective part and keeps the parent '
+    'main-part context visible',
+    (tester) async {
+      final harness = await _harness(tester);
+      await tester.tap(
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
+
+      // Uses the RELATED part (resolves to 2 variants) rather than ALT (which
+      // auto-resolves to a single variant and would unmount this screen).
+      await tester.ensureVisible(
+        find.byKey(Key('related-part-$testRelatedPartId')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('related-part-$testRelatedPartId')));
+      await tester.pumpAndSettle();
+
+      expect(
+        harness.controller.selectedEffectivePart?.partId,
+        testRelatedPartId,
+      );
+      expect(harness.controller.selectedEffectivePart?.isMain, isFalse);
+      final relatedChip = tester.widget<ChoiceChip>(
+        find.byKey(Key('related-part-$testRelatedPartId')),
+      );
+      expect(relatedChip.selected, isTrue);
+      // Parent context stays on screen while the alternative is in use.
+      expect(
+        find.byKey(
+          Key('main-part-detail-${testAmbiguousMainPartOption.partId}'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('effective-part-summary')))
+            .data,
+        contains('715B3CN500-60'),
+      );
+      harness.dispose();
+    },
+  );
+
+  testWidgets(
+    'exactly one compatible variant auto-resolves on the first main-part '
+    'click but waits for an explicit continue before leaving the gate',
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
@@ -111,12 +196,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('effective-part-main')));
+      // Resolved internally, but still on the part-first gate: alternatives
+      // stay reachable until the operator explicitly continues.
+      expect(harness.controller.needsPartSelection, isTrue);
+      expect(harness.controller.partFirstReadyToContinue, isTrue);
+      expect(harness.controller.context?.activeVariantId, testVariantV1Id);
+      expect(repository.switchCount, 0); // already active — no switch needed
+      await _scrollTo(tester, const Key('part-first-continue'));
+      expect(find.byKey(const Key('part-first-continue')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('part-first-continue')));
       await tester.pumpAndSettle();
 
       expect(harness.controller.needsPartSelection, isFalse);
-      expect(harness.controller.context?.activeVariantId, testVariantV1Id);
-      expect(repository.switchCount, 0); // already active — no switch needed
       expect(find.byKey(const Key('operation-content')), findsOneWidget);
       harness.dispose();
     },
@@ -128,10 +220,11 @@ void main() {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
       await tester.tap(
-        find.byKey(Key('main-part-${testMainPartOption.partId}')),
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
 
+      await _scrollTo(tester, Key('related-part-$testRelatedPartId'));
       await tester.tap(find.byKey(Key('related-part-$testRelatedPartId')));
       await tester.pumpAndSettle();
 
@@ -139,7 +232,15 @@ void main() {
         repository.compatibleVariantsRequestedPartIds,
         contains(testRelatedPartId),
       );
-      expect(find.byKey(const Key('multiple-compatible-variants')), findsOneWidget);
+      expect(
+        repository.compatibleVariantsRequestedMainPartIds,
+        contains(testAmbiguousMainPartId),
+      );
+      await _scrollTo(tester, const Key('multiple-compatible-variants'));
+      expect(
+        find.byKey(const Key('multiple-compatible-variants')),
+        findsOneWidget,
+      );
       harness.dispose();
     },
   );
@@ -151,7 +252,7 @@ void main() {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
       await tester.tap(
-        find.byKey(Key('main-part-${testMainPartOption.partId}')),
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
 
@@ -162,8 +263,16 @@ void main() {
         repository.compatibleVariantsRequestedPartIds,
         contains(testAltPartId),
       );
+      expect(harness.controller.selectedEffectivePart?.partId, testAltPartId);
       expect(repository.switchCount, 1);
       expect(repository.lastSwitchVariantId, testVariantV2Id);
+      expect(harness.controller.needsPartSelection, isTrue);
+      expect(harness.controller.partFirstReadyToContinue, isTrue);
+
+      await _scrollTo(tester, const Key('part-first-continue'));
+      await tester.tap(find.byKey(const Key('part-first-continue')));
+      await tester.pumpAndSettle();
+
       expect(harness.controller.needsPartSelection, isFalse);
       harness.dispose();
     },
@@ -173,12 +282,16 @@ void main() {
     tester,
   ) async {
     final harness = await _harness(tester);
-    await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
+    await tester.tap(
+      find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+    );
     await tester.pumpAndSettle();
 
+    await _scrollTo(tester, Key('related-part-$testOrphanPartId'));
     await tester.tap(find.byKey(Key('related-part-$testOrphanPartId')));
     await tester.pumpAndSettle();
 
+    await _scrollTo(tester, const Key('zero-compatible-variants'));
     expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
     expect(find.text('Uyumlu varyant bulunamadı.'), findsOneWidget);
     // Non-destructive: still on the gate, free to pick a different part.
@@ -192,21 +305,37 @@ void main() {
   ) async {
     final repository = FakePdaRepository();
     final harness = await _harness(tester, repository: repository);
-    await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(Key('related-part-$testRelatedPartId')));
+    await tester.tap(
+      find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(Key('compatible-variant-$testVariantV1Id')), findsOneWidget);
-    expect(find.byKey(Key('compatible-variant-$testVariantV2Id')), findsOneWidget);
+    await _scrollTo(tester, Key('compatible-variant-$testVariantV1Id'));
+    expect(
+      find.byKey(Key('compatible-variant-$testVariantV1Id')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(Key('compatible-variant-$testVariantV2Id')),
+      findsOneWidget,
+    );
 
-    await tester.ensureVisible(find.byKey(Key('compatible-variant-$testVariantV2Id')));
+    await tester.ensureVisible(
+      find.byKey(Key('compatible-variant-$testVariantV2Id')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(Key('compatible-variant-$testVariantV2Id')));
     await tester.pumpAndSettle();
 
     expect(repository.switchCount, 1);
     expect(repository.lastSwitchVariantId, testVariantV2Id);
+    expect(harness.controller.needsPartSelection, isTrue);
+    expect(harness.controller.partFirstReadyToContinue, isTrue);
+
+    await _scrollTo(tester, const Key('part-first-continue'));
+    await tester.tap(find.byKey(const Key('part-first-continue')));
+    await tester.pumpAndSettle();
+
     expect(harness.controller.needsPartSelection, isFalse);
     harness.dispose();
   });
@@ -263,7 +392,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
-    expect(find.byKey(Key('main-part-${testMainPartOption.partId}')), findsOneWidget);
+    expect(
+      find.byKey(Key('main-part-${testMainPartOption.partId}')),
+      findsOneWidget,
+    );
     harness.dispose();
   });
 
@@ -280,15 +412,23 @@ void main() {
     final harness = await _harness(tester, repository: repository);
     await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('effective-part-main')));
-    await tester.pumpAndSettle();
 
+    await _scrollTo(tester, const Key('compatible-variants-retry'));
     expect(find.byKey(const Key('compatible-variants-retry')), findsOneWidget);
 
     repository.compatibleVariantsError = null;
-    await tester.ensureVisible(find.byKey(const Key('compatible-variants-retry')));
+    await tester.ensureVisible(
+      find.byKey(const Key('compatible-variants-retry')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('compatible-variants-retry')));
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.needsPartSelection, isTrue);
+    expect(harness.controller.partFirstReadyToContinue, isTrue);
+
+    await _scrollTo(tester, const Key('part-first-continue'));
+    await tester.tap(find.byKey(const Key('part-first-continue')));
     await tester.pumpAndSettle();
 
     expect(harness.controller.needsPartSelection, isFalse);
@@ -314,10 +454,19 @@ void main() {
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('effective-part-main')));
+      await _scrollTo(tester, const Key('part-first-continue'));
+      await tester.tap(find.byKey(const Key('part-first-continue')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('operation-content')), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('slot-slot-vacant')),
+        300,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('operation-content')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.byKey(const Key('slot-slot-vacant')), findsOneWidget);
       harness.dispose();
     },
@@ -329,7 +478,8 @@ void main() {
     final harness = await _harness(tester);
     await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('effective-part-main')));
+    await _scrollTo(tester, const Key('part-first-continue'));
+    await tester.tap(find.byKey(const Key('part-first-continue')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('operation-content')), findsOneWidget);
 
@@ -342,6 +492,21 @@ void main() {
     expect(harness.controller.context, isNotNull);
     harness.dispose();
   });
+}
+
+/// Scrolls the part-first list until [key] is built and visible. The card
+/// stack (main chips -> alternatives -> compatible variants) can extend past
+/// the test viewport, so lower sections are not built until scrolled to.
+Future<void> _scrollTo(WidgetTester tester, Key key) async {
+  await tester.scrollUntilVisible(
+    find.byKey(key),
+    300,
+    scrollable: find.descendant(
+      of: find.byKey(const Key('part-first-selector')),
+      matching: find.byType(Scrollable),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<_Harness> _harness(

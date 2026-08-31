@@ -34,6 +34,11 @@ public interface IAdminConfigurationStore
     Task<AdminSlotRecord> CreateSlotAsync(Guid layoutId, CreateSlotCommand command, long expectedLayoutVersion, AdminMutationContext context, CancellationToken cancellationToken = default);
     Task<AdminSlotRecord> UpdateSlotAsync(Guid layoutId, Guid slotId, UpdateSlotCommand command, AdminMutationContext context, CancellationToken cancellationToken = default);
 
+    /// <summary>Customer UX — Automatic Machine Slot Resolution: curated master.layout_slot_parts CRUD.</summary>
+    Task<IReadOnlyList<AdminSlotPartRecord>> ListSlotPartsAsync(Guid slotId, CancellationToken cancellationToken = default);
+    Task AssignSlotPartAsync(Guid slotId, Guid partId, AdminMutationContext context, CancellationToken cancellationToken = default);
+    Task RemoveSlotPartAsync(Guid slotId, Guid partId, AdminMutationContext context, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AdminPartRecord>> ListPartsAsync(CancellationToken cancellationToken = default);
     Task<AdminPartRecord> CreatePartAsync(CreatePartCommand command, AdminMutationContext context, CancellationToken cancellationToken = default);
     Task<AdminPartRecord> UpdatePartAsync(Guid partId, UpdatePartCommand command, AdminMutationContext context, CancellationToken cancellationToken = default);

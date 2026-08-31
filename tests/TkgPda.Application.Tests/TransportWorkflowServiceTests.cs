@@ -45,17 +45,23 @@ public sealed class TransportWorkflowServiceTests
         Assert.NotNull(store.CreatedCommand.DestinationSlotId);
     }
 
+    // Customer UX — Automatic Machine Slot Resolution: omitting the
+    // machine-side source is no longer rejected up front. The store now
+    // resolves and reserves it atomically from master.layout_slot_parts
+    // (PostgresTransportWorkflowStore.ResolveMachineSlotAsync) — the
+    // application layer just passes the null through unchanged.
     [Theory]
     [InlineData(TransportTaskType.RemoveFull)]
     [InlineData(TransportTaskType.RemoveEmpty)]
-    public async Task Removal_requires_a_source_slot(TransportTaskType taskType)
+    public async Task Removal_accepts_an_unresolved_machine_side_source(TransportTaskType taskType)
     {
-        var service = new TransportWorkflowService(new FakeStore());
+        var store = new FakeStore();
+        var service = new TransportWorkflowService(store);
+        var command = Command(taskType) with { SourceSlotId = null };
 
-        var error = await Assert.ThrowsAsync<WorkflowRuleException>(() =>
-            service.CreateAsync(Command(taskType) with { SourceSlotId = null }));
+        await service.CreateAsync(command);
 
-        Assert.Equal("SOURCE_REQUIRED", error.Code);
+        Assert.Null(store.CreatedCommand!.SourceSlotId);
     }
 
     [Fact]

@@ -107,6 +107,27 @@ public sealed class TransportDomainTests
         Assert.Equal("MACHINE_REGION_FORBIDDEN", error.Code);
     }
 
+    [Theory]
+    [InlineData(TransportTaskType.BringEmpty, OccupancyState.Vacant, LoadState.Unknown)]
+    [InlineData(TransportTaskType.RemoveFull, OccupancyState.Occupied, LoadState.Full)]
+    [InlineData(TransportTaskType.RemoveEmpty, OccupancyState.Occupied, LoadState.Empty)]
+    public void Empty_storage_can_never_be_the_machine_side_endpoint(
+        TransportTaskType taskType,
+        OccupancyState occupancy,
+        LoadState load)
+    {
+        var request = Request(taskType);
+        var slot = Slot(request.ReservedSlotId, occupancy, load) with
+        {
+            Role = SlotRole.EmptyStorage,
+        };
+
+        var error = Assert.Throws<WorkflowRuleException>(() =>
+            TransportRules.ValidateReservation(request, slot));
+
+        Assert.Equal("EMPTY_STORAGE_MACHINE_SLOT_FORBIDDEN", error.Code);
+    }
+
     [Fact]
     public void Unknown_part_and_container_associations_do_not_block()
     {

@@ -22,6 +22,9 @@ Primary database/import references:
 - Leave missing source inputs and uncomputable derived metrics as `NULL`.
 - Do not invent container mappings, physical slots, RDS WorkSite IDs or navigation identifiers.
 - Reusable physical layouts/navigation profiles may be assigned to more than one variant.
+- Dedicated `Hyundai STP` container images are authoritative for the explicitly labelled nominal container categories/dimensions recorded in Phase 02A; they are not robot geometry.
+
+The complete cross-source A/B/C decision is recorded in [CUSTOMER_SOURCE_RECONCILIATION.md](../../commissioning/CUSTOMER_SOURCE_RECONCILIATION.md). After reconciliation, only `1285` remains a nonblank container code with unresolved category; blank planning mappings remain `NULL`.
 
 Known incomplete-planning part rows that must not be dropped are `715A2BN400-50`, `715B2BN400-50`, `90174-12022`, `90179-10234`, `90179-14075`, `72613-02210` and `57658-K0020`.
 

@@ -1,6 +1,6 @@
 # TKG PDA — Müşteri Kabul ve Devreye Alma Hazırlık Denetimi
 
-**Denetim baseline'ı:** `71425246a4ecfbe7e07da6db5c749a11181f70d8`
+**Kaynak uzlaştırma baseline'ı:** `8f15b40fe902f28668291131b9978521e7e04fc0`
 
 **Kapsam:** mevcut müşteri kaynakları, normalize master/layout verisi, Flutter Operator akışı ve production commissioning kapıları
 
@@ -14,7 +14,7 @@
 
 Bu nedenle bu rapordaki **PASS**, yalnız ilgili yazılım davranışının uygulanıp doğrulandığını belirtir; production fiziksel sistemin son kabul için hazır olduğu anlamına gelmez.
 
-Bu denetim önceki phase raporlarını sayı kaynağı olarak tekrar etmez. Sekiz Excel dosyasının mevcut byte hash/size değerleri source manifestlerle; normalize çıktılar da generated seed ve deterministic pipeline testleriyle yeniden karşılaştırıldı. Proje dizininde müşteriye ait PDF veya DOCX bulunmadı; PDF kanıtı varmış gibi yorum yapılmadı. Ham dosyalar değiştirilmedi.
+Bu denetim önceki phase raporlarını sayı kaynağı olarak tekrar etmez. Sekiz Excel ile üç customer container görselinin mevcut byte hash/size değerleri source manifestlerle; normalize çıktılar da generated seed ve deterministic pipeline testleriyle yeniden karşılaştırıldı. Proje dizininde müşteriye ait PDF veya DOCX bulunmadı; PDF kanıtı varmış gibi yorum yapılmadı. Ham dosyalar değiştirilmedi. Ayrıntılı A/B/C kararı [CUSTOMER_SOURCE_RECONCILIATION.md](CUSTOMER_SOURCE_RECONCILIATION.md) içindedir.
 
 ## 1. Müşteri kaynak matrisi
 
@@ -28,6 +28,7 @@ Bu denetim önceki phase raporlarını sayı kaynağı olarak tekrar etmez. Seki
 | `SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx` | SH-01-A V1–V5 | variant bazlı fiziksel yerleşim ve parça etiketi | bazı variant-context uyumsuzluklarının müşteri kararı |
 | `SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx` | SH-01-B V1–V3 | variant bazlı fiziksel yerleşim ve parça etiketi | bazı variant-context uyumsuzluklarının müşteri kararı |
 | `SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx` | SH-01-P1/P2, SH-02-P1/P2, SEALER | paylaşılan fiziksel plan; SEALER V1/V2 kanıtı | SH-01-P tarafındaki BN400/BN000 uyuşmazlığı; SH-02 boş etiketler; SEALER V3 layout |
+| `Hyundai STP` container görselleri | 1284, 285C, BYK/ORT/KCK | container category ve nominal container-master ölçüleri | robot yaklaşımı, clearance, fork/docking geometrisi; 1285 |
 
 Excel'de geçen `Tüm Kasaları Kaldır`, dördüncü bir transport operation'a çevrilmedi. Gerekirse birbirinden bağımsız mevcut taleplerin `TransportBatch` ile gruplanmasıdır.
 
@@ -43,14 +44,14 @@ Excel'de geçen `Tüm Kasaları Kaldır`, dördüncü bir transport operation'a 
 | Contextual ALT relationship | 140 | Kaynaklar bunları `Alt Parça` olarak tanımlar |
 | RELATED relationship | 0 | Müşteri kaynağında ayrı ve kanıtlanmış RELATED sınıfı yoktur |
 | Planning row | 191 | Hesaplanamayan alanlar `NULL` kalır |
-| Container master | 10 | Bilinmeyen kategori/footprint tahmin edilmez |
+| Container master | 10 | 1284/BYK/ORT/KCK nominal ölçülü; yalnız 1285 kategorisi hâlâ unresolved |
 | Layout | 21 | Bazı variant'lar aynı fiziksel layout'u paylaşır |
 | Variant-layout assignment | 24 | Zorunlu 1:1 ilişki yoktur |
 | Extracted layout region | 183 | 172 lojistik pozisyonu + 11 display-only MACHINE bölgesi |
 | Explicit Part↔Slot row | 143 | 124 farklı lojistik slotu kapsar |
 | Part mapping'i olmayan lojistik slot | 48 | 28 boş/belirsiz + 20 variant-mismatch-only kanıt |
-| Container association'ı belirsiz slot | 80 | Değer uydurulmadı |
-| Physical footprint'ü bilinmeyen region | 183 | 172 lojistik + 11 MACHINE; normalize UI geometri mm değildir |
+| Container association'ı belirsiz slot | 74 | Exact-part cross-context kanıtıyla altı SEALER slotu kapandı |
+| Physical footprint'ü bilinmeyen region | 129 | 118 lojistik + 11 MACHINE; 54 slot source-backed nominal container ölçüsü taşır |
 
 ### Veri boşluğu kategorileri
 
@@ -59,12 +60,12 @@ Bu sayılar farklı soruları temsil eder ve birbiri yerine kullanılamaz:
 | Kategori | Adet | Anlamı |
 |---|---:|---|
 | Parça-konum teyidi eksik lojistik pozisyon | 48 | Bu fiziksel pozisyonlarda hangi parça/parçaların kullanılacağı henüz kesin değildir |
-| Kasa/palet ilişkisi belirsiz lojistik pozisyon | 80 | Pozisyonun kullanacağı kasa/palet tipi tekil ve güvenilir biçimde belirlenememiştir |
-| Güvenilir fiziksel ölçüsü olmayan layout region | 183 | Excel'deki ekran dikdörtgenleri mm ölçüsü, robot pozu veya güvenlik mesafesi değildir |
+| Kasa/palet ilişkisi belirsiz lojistik pozisyon | 74 | Pozisyonun kullanacağı kasa/palet tipi tekil ve güvenilir biçimde belirlenememiştir |
+| Güvenilir fiziksel ölçüsü olmayan layout region | 129 | 118 lojistik + 11 MACHINE region; UI dikdörtgeni robot pozu değildir |
 | Eksik lot/planlama girdisi | 23 | Kutu lotu boş/geçersizdir; bağımlı hesaplar boş bırakılmıştır |
 | Excel formül hatası | 33 hücre | Hatalı formül sonucu değer uydurulmamıştır |
 
-Textual planlamada ayrıca 60 container mapping eksikliği bulunur. Bu, 80 fiziksel pozisyon sayısıyla aynı veri kümesi değildir ve iki sayı toplanarak tek bir toplam üretilmemelidir.
+Textual planlamada ayrıca 60 blank container mapping bulunur. Bu, 74 fiziksel pozisyon sayısıyla aynı veri kümesi değildir ve iki sayı toplanarak tek bir toplam üretilmemelidir.
 
 Machine kodları tam olarak: `412B`, `GAR`, `PAH-01-A`, `PAH-02-A`, `SEALER`, `SH-01-A`, `SH-01-B`, `SH-01-P1--SH-01-P2`, `SH-02-P1 -SH-02-P2`.
 
@@ -74,7 +75,7 @@ Machine kodları tam olarak: `412B`, `GAR`, `PAH-01-A`, `PAH-02-A`, `SEALER`, `S
 | GAR | 1, 2, 3 | 3 | 3 | 25 | 14 | 11 | 13 |
 | PAH-01-A | 1, 2 | 2 | 2 | 13 | 13 | 0 | 0 |
 | PAH-02-A | 1, 2 | 2 | 2 | 13 | 13 | 0 | 0 |
-| SEALER | 1, 2, 3 | 1 | 2 | 14 | 6 | 8 | 14 |
+| SEALER | 1, 2, 3 | 1 | 2 | 14 | 6 | 8 | 8 |
 | SH-01-A | 1, 2, 3, 4, 5 | 5 | 5 | 36 | 34 | 2 | 18 |
 | SH-01-B | 1, 2, 3 | 3 | 3 | 24 | 20 | 4 | 12 |
 | SH-01-P1--SH-01-P2 | 1, 2 | 1 | 2 | 14 | 0 | 14 | 14 |

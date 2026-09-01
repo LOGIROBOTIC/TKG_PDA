@@ -18,7 +18,7 @@ Bu checklist tamamlanmadan simulator sonuçları fiziksel robot kabulü olarak y
 - [ ] 9 machine ve 25 aktif variant listesi müşteri tarafından onaylandı.
 - [ ] SEALER V3 için physical-layout kararı kapandı.
 - [ ] 48 mapping'siz lojistik pozisyonun her biri onaylandı veya açıkça kapsam dışı bırakıldı.
-- [ ] 80 container association gap'i ve eksik lotlar operation bazında kapandı/kapsam dışı kaydedildi.
+- [ ] 74 container association gap'i ve eksik lotlar operation bazında kapandı/kapsam dışı kaydedildi.
 
 ## 2. Lojistik business kuralları
 

@@ -81,6 +81,7 @@ public static class AdminEndpoints
         admin.MapDelete("/layout-slots/{slotId:guid}/rds-mapping", RemoveRdsMappingAsync);
         admin.MapGet("/rds/task-templates", (IRdsExecutionStore store, CancellationToken ct) => store.ListTaskTemplatesAsync(ct));
         admin.MapPost("/rds/task-templates/validate", ValidateRdsTaskTemplateAsync);
+        admin.MapPost("/rds/commissioning/capture", CaptureRdsCommissioningDiscoveryAsync);
 
         return endpoints;
     }
@@ -90,6 +91,58 @@ public static class AdminEndpoints
 
     private static Task<IReadOnlyList<RdsRobotAlarmAdminRecord>> ListRdsRobotAlarmsAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
         service.ListRobotAlarmsForAdminAsync(CorrelationId(context), ct);
+
+    private static async Task<RdsCommissioningCaptureResult> CaptureRdsCommissioningDiscoveryAsync(
+        RdsCommissioningCaptureApiRequest request,
+        HttpContext context,
+        RdsCommissioningDiscoveryService service,
+        IApiDataStore dataStore,
+        CancellationToken ct)
+    {
+        if (!request.ConfirmReadOnlyDiscovery)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "RDSCORE_DISCOVERY_CONFIRMATION_REQUIRED",
+                "An explicit read-only discovery confirmation is required.");
+        }
+
+        var correlationId = CorrelationId(context);
+        var result = await service.CaptureAsync(
+            new(
+                request.ConnectivityProbes,
+                request.DistanceProbes,
+                request.OrderIds,
+                request.ExternalOrderIds,
+                request.BlockIds),
+            correlationId,
+            ct);
+        var userAgent = context.Request.Headers.UserAgent.ToString();
+        await dataStore.WriteAuditAsync(
+            new AuditEntry(
+                context.User.UserId(),
+                null,
+                "RDS_COMMISSIONING_DISCOVERY_CAPTURED",
+                "RDSCORE_DISCOVERY_SNAPSHOT",
+                result.SnapshotSha256,
+                null,
+                JsonSerializer.Serialize(new
+                {
+                    result.Snapshot.SchemaVersion,
+                    result.Snapshot.Source.SafeOrigin,
+                    RobotCount = result.Snapshot.Robots.Count,
+                    WorkSiteCount = result.Snapshot.WorkSites.Count,
+                    EndpointCount = result.Snapshot.EndpointResults.Count,
+                    FindingCount = result.Findings.Count,
+                    result.SnapshotSha256
+                }),
+                context.Connection.RemoteIpAddress?.ToString(),
+                userAgent.Length > 2000 ? userAgent[..2000] : userAgent,
+                correlationId),
+            ct);
+
+        return result;
+    }
 
     private static Task<RdsWorkSiteSyncRecord> SyncRdsWorkSitesAsync(
         SyncRdsWorkSitesRequest request,
@@ -483,3 +536,11 @@ public static class AdminEndpoints
             cancellationToken);
     }
 }
+
+public sealed record RdsCommissioningCaptureApiRequest(
+    bool ConfirmReadOnlyDiscovery,
+    IReadOnlyList<RdsConnectivityProbe>? ConnectivityProbes = null,
+    IReadOnlyList<RdsDistanceProbe>? DistanceProbes = null,
+    IReadOnlyList<string>? OrderIds = null,
+    IReadOnlyList<string>? ExternalOrderIds = null,
+    IReadOnlyList<string>? BlockIds = null);

@@ -20,6 +20,7 @@ var jwtOptions = new JwtOptions(
     builder.Configuration.GetValue("Authentication:Jwt:ClockSkewSeconds", 30));
 jwtOptions.Validate();
 var rdsOptions = RdsOptions.FromConfiguration(builder.Configuration);
+var rdsCoreDiscoveryOptions = RdsCoreDiscoveryOptions.FromConfiguration(builder.Configuration);
 var operatorWebOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>()?
@@ -50,6 +51,7 @@ builder.Services.Configure<JsonOptions>(options =>
 });
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton(rdsOptions);
+builder.Services.AddSingleton(rdsCoreDiscoveryOptions);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordHashService>(services => services.GetRequiredService<Pbkdf2PasswordHasher>());
@@ -59,6 +61,7 @@ builder.Services.AddSingleton<IApiDataStore, PostgresApiDataStore>();
 builder.Services.AddSingleton<IAdminConfigurationStore, PostgresAdminConfigurationStore>();
 builder.Services.AddSingleton<IRdsIntegrationStore, PostgresRdsIntegrationStore>();
 builder.Services.AddSingleton<IRdsExecutionStore, PostgresRdsExecutionStore>();
+builder.Services.AddSingleton<IRdsCommissioningConfigurationStore, PostgresRdsCommissioningConfigurationStore>();
 builder.Services.AddHttpClient("RdsReadOnly", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);
@@ -73,6 +76,21 @@ builder.Services.AddHttpClient("RdsReadOnly", client =>
     AllowAutoRedirect = false
 });
 builder.Services.AddSingleton<IRdsReadClient, RdsReadClient>();
+builder.Services.AddHttpClient("RdsCoreDiscovery", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(rdsCoreDiscoveryOptions.TimeoutSeconds);
+    if (rdsCoreDiscoveryOptions.BaseAddress is { } baseAddress)
+    {
+        client.BaseAddress = baseAddress;
+    }
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    UseCookies = false,
+    AllowAutoRedirect = false
+});
+builder.Services.AddSingleton<IRdsCoreDiscoveryClient, RdsCoreDiscoveryClient>();
+builder.Services.AddSingleton<RdsCommissioningDiscoveryService>();
 builder.Services.AddHttpClient("RdsMutation", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);

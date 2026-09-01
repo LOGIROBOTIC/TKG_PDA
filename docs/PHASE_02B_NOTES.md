@@ -4,7 +4,7 @@
 
 Phase 02B converts the five customer physical-layout workbooks into deterministic, source-traceable PDA display geometry. It seeds only `master.layouts`, `master.variant_layout_assignments`, and `master.layout_slots` through the existing Phase 01.1 schema.
 
-No migration was changed. No robot coordinate, RDS WorkSite, waypoint, route, stitch, map, navigation profile, or physical millimetre footprint was generated.
+No migration was changed. No robot coordinate, RDS WorkSite, waypoint, route, stitch, map, navigation profile, or drawing-scale-derived physical measurement was generated. Source-backed nominal container-master dimensions are propagated separately and are not robot geometry.
 
 Generated artifacts:
 
@@ -45,8 +45,8 @@ All 15 physical-layout sheets were rendered and visually checked before the norm
 5. These fields are PDA display geometry only. Excel cell counts are not treated as metres, millimetres, robot coordinates, or SEER/RDS coordinates.
 6. Part labels are normalized against the frozen Phase 02A canonical part set. Layout-only unknown parts are retained as evidence and never inserted into `master.parts`.
 7. A known part seen outside the layout's assigned variant context remains a known part association, but the variant mismatch is reported. This preserves source evidence without changing the Phase 02A baseline.
-8. Container precedence is explicit layout label first, then a unique Phase 02A planning mapping in the same machine/variant context. Multiple or absent candidates leave `default_container_type_id` `NULL`.
-9. Container category never supplies a physical footprint. A code such as `1284`, `ARABA`, or `ORT` may be resolved while its physical footprint remains `NULL`.
+8. Container precedence is explicit layout label first, then a unique Phase 02A planning mapping in the same machine/variant context. If that local value is blank, one globally consistent mapping for the exact same part code may be reused only when the slot has no variant mismatch. Multiple or absent candidates leave `default_container_type_id` `NULL`.
+9. Category alone never supplies a physical footprint. A fully source-backed nominal container master dimension may populate slot footprint metadata; Excel drawing scale is never converted to millimetres.
 10. Source workbook, sheet, cell range, and workbook SHA-256 are retained for every layout in normalized output and every DB slot in `metadata_json`.
 
 ## Shared layouts and SEALER conclusion
@@ -71,8 +71,8 @@ All 15 physical-layout sheets were rendered and visually checked before the norm
 | LOW accepted slots | 0 |
 | LOW excluded candidates | 13 |
 | Unresolved part-association slots | 28 |
-| Unresolved container-association slots | 80 |
-| Unknown physical footprints | 183 |
+| Unresolved container-association slots | 74 |
+| Unknown physical footprints | 129 (118 logistics + 11 MACHINE) |
 | Phase 02B data issues | 165 |
 
 Confidence across all candidates is HIGH 133, MEDIUM 50, LOW 13. LOW candidates are not seeded.
@@ -128,13 +128,13 @@ Twenty additional source part occurrences are canonical master parts but do not 
 
 ## Unresolved container associations
 
-Eighty logistics slots have no unique source-backed container mapping. The complete per-slot list is in `summary.json`, `data_issues.json`, and `data_issues.csv`. Affected layout groups are:
+Seventy-four logistics slots have no unique source-backed container mapping. Six SEALER slots were reconciled from one globally consistent exact-part mapping in SH-02 planning. The complete per-slot list is in `summary.json`, `data_issues.json`, and `data_issues.csv`. Affected layout groups are:
 
 - 412B V2: `SLOT-009`
 - GAR V1: `SLOT-007`–`SLOT-009`
 - GAR V2: `SLOT-004`–`SLOT-008`
 - GAR V3: `SLOT-001`–`SLOT-005`
-- SEALER shared V1/V2: all 14 logistics slots
+- SEALER shared V1/V2: `SLOT-004`–`008`, `SLOT-012`–`014`
 - SH-01-A V1: `SLOT-001`, `002`, `006`, `007`
 - SH-01-A V2: `SLOT-001`, `002`, `005`, `006`
 - SH-01-A V3: `SLOT-001`, `002`, `005`, `006`
@@ -150,22 +150,19 @@ No layout-only unknown container code was inserted or guessed.
 
 ## Container footprint issues
 
-Every physical footprint remains unknown because no trusted unit-bearing dimension is printed in the physical-layout workbooks. This includes 172 logistics positions and 11 explicit machine regions.
+Dedicated customer container evidence resolves nominal footprint for 54 logistics slots: 16 `1284`, 20 `BYK`, 14 `ORT`, and 4 `KCK`. These are container-master dimensions only; they are not robot poses, approach clearances or docking geometry. The remaining 129 regions are unknown: 118 logistics and 11 explicit MACHINE regions.
 
-| Resolved container code | Slot count with NULL footprint |
+| Container code | Slot count with NULL footprint |
 |---|---:|
-| 1284 | 16 |
 | 1285 | 2 |
 | 285C | 4 |
-| 4311 | 13 |
+| 4311 | 15 |
 | 4322 | 15 |
 | 4622 | 4 |
 | ARABA | 4 |
-| BYK | 20 |
-| ORT | 14 |
-| Unresolved container | 80 |
+| Unresolved container | 74 |
 
-`KCK` is known in Phase 02A but is not explicitly or uniquely associated with a Phase 02B slot, so no KCK footprint or slot default is inferred.
+`KCK` is now assigned to four SEALER slots by exact-part evidence; two other reconciled SEALER slots use `4311`, whose global dimensions remain conflicting.
 
 ## Source regions not safely interpreted
 
@@ -181,7 +178,8 @@ The following LOW candidates are retained in the audit report but excluded from 
 
 | Issue code | Count |
 |---|---:|
-| `CONTAINER_ASSOCIATION_UNRESOLVED` | 80 |
+| `CONTAINER_ASSOCIATION_UNRESOLVED` | 74 |
+| `CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART` | 6 |
 | `PART_ASSOCIATION_UNRESOLVED` | 28 |
 | `SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT` | 20 |
 | `PHYSICAL_FOOTPRINT_NOT_PROVIDED` | 21 |
@@ -196,7 +194,7 @@ The full unabridged report is `data/generated/phase_02b/data_issues.json` and `d
 
 ## Validation results
 
-- Unit/regression tests: 13/13 PASS.
+- Unit/regression tests: 15/15 PASS.
 - Pipeline output, generated SQL, CSV/JSON, and all 21 PNG review images are byte-equivalent across two independent runs.
 - All five customer workbooks remained byte-identical before and after extraction.
 - All layouts reference the known nine machines.
@@ -227,7 +225,7 @@ Result: PASS.
 - out-of-bounds slots: 0
 - missing provenance: 0
 - forbidden coordinate keys: 0
-- logical state digest before/after second import in this validation run: `6ce3be91c3a7b5217d570725f5a15025`
+- logical state digest before/after second import in this reconciliation validation run: `b16e7b47b640016d51f9eba83650e4c4`
 - second import changed logical state: false
 
 The digest includes generated identifiers and timestamps, so its value is only compared before/after the second seed inside the same fresh-cluster run. It is not a stable fingerprint across independently initialized clusters; generated SQL/JSON/CSV/PNG byte equivalence is validated separately by the pipeline tests.

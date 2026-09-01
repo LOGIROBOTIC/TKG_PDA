@@ -1,8 +1,62 @@
 {
   "container_types": [
     {
-      "category": "OTHER",
+      "category": "CONTAINER",
+      "category_source": "customer_visual_evidence",
       "code": "1284",
+      "dimension_source": "consistent_work_plan_rows",
+      "dimension_source_refs": [
+        {
+          "cell": "D3",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 3,
+          "sheet": "PAH-01-A"
+        },
+        {
+          "cell": "D9",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 9,
+          "sheet": "PAH-01-A"
+        },
+        {
+          "cell": "D15",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 15,
+          "sheet": "PAH-01-A"
+        },
+        {
+          "cell": "D19",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 19,
+          "sheet": "PAH-01-A"
+        },
+        {
+          "cell": "D4",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 4,
+          "sheet": "PAH-02-A"
+        },
+        {
+          "cell": "D9",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 9,
+          "sheet": "PAH-02-A"
+        },
+        {
+          "cell": "D14",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 14,
+          "sheet": "PAH-02-A"
+        },
+        {
+          "cell": "D20",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 20,
+          "sheet": "PAH-02-A"
+        }
+      ],
+      "height_mm": 400,
+      "length_mm": 1200,
       "name": "1284",
       "source_refs": [
         {
@@ -52,12 +106,24 @@
           "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
           "row": 20,
           "sheet": "PAH-02-A"
+        },
+        {
+          "cell": "1284",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/1284 ÇELİK KASA.png",
+          "row": 0,
+          "sheet": "(image)"
         }
-      ]
+      ],
+      "width_mm": 800
     },
     {
       "category": "OTHER",
+      "category_source": "unresolved",
       "code": "1285",
+      "dimension_source": null,
+      "dimension_source_refs": [],
+      "height_mm": null,
+      "length_mm": null,
       "name": "1285",
       "source_refs": [
         {
@@ -72,11 +138,17 @@
           "row": 9,
           "sheet": "412B"
         }
-      ]
+      ],
+      "width_mm": null
     },
     {
-      "category": "OTHER",
+      "category": "CONTAINER",
+      "category_source": "customer_visual_evidence",
       "code": "285C",
+      "dimension_source": null,
+      "dimension_source_refs": [],
+      "height_mm": null,
+      "length_mm": null,
       "name": "285C",
       "source_refs": [
         {
@@ -90,12 +162,24 @@
           "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
           "row": 7,
           "sheet": "412B"
+        },
+        {
+          "cell": "285C",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/285C - Çelik kasa.jpg",
+          "row": 0,
+          "sheet": "(image)"
         }
-      ]
+      ],
+      "width_mm": null
     },
     {
       "category": "BOX",
+      "category_source": "work_plan_hint",
       "code": "4311",
+      "dimension_source": null,
+      "dimension_source_refs": [],
+      "height_mm": null,
+      "length_mm": null,
       "name": "4311",
       "source_refs": [
         {
@@ -308,11 +392,17 @@
           "row": 25,
           "sheet": "SH-02-P1 -SH-02-P2"
         }
-      ]
+      ],
+      "width_mm": null
     },
     {
       "category": "BOX",
+      "category_source": "work_plan_hint",
       "code": "4322",
+      "dimension_source": null,
+      "dimension_source_refs": [],
+      "height_mm": null,
+      "length_mm": null,
       "name": "4322",
       "source_refs": [
         {
@@ -477,11 +567,17 @@
           "row": 24,
           "sheet": "SH-02-P1 -SH-02-P2"
         }
-      ]
+      ],
+      "width_mm": null
     },
     {
       "category": "BOX",
+      "category_source": "work_plan_hint",
       "code": "4622",
+      "dimension_source": null,
+      "dimension_source_refs": [],
+      "height_mm": null,
+      "length_mm": null,
       "name": "4622",
       "source_refs": [
         {
@@ -556,11 +652,17 @@
           "row": 26,
           "sheet": "SH-02-P1 -SH-02-P2"
         }
-      ]
+      ],
+      "width_mm": null
     },
     {
-      "category": "OTHER",
+      "category": "CART",
+      "category_source": "customer_code_literal",
       "code": "ARABA",
+      "dimension_source": null,
+      "dimension_source_refs": [],
+      "height_mm": null,
+      "length_mm": null,
       "name": "ARABA",
       "source_refs": [
         {
@@ -587,11 +689,24 @@
           "row": 22,
           "sheet": "SH-01-B"
         }
-      ]
+      ],
+      "width_mm": null
     },
     {
       "category": "CONTAINER",
+      "category_source": "customer_visual_evidence",
       "code": "BYK",
+      "dimension_source": "customer_container_size_image",
+      "dimension_source_refs": [
+        {
+          "cell": "BÜYÜK BOY",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+          "row": 0,
+          "sheet": "(image)"
+        }
+      ],
+      "height_mm": 600,
+      "length_mm": 1200,
       "name": "BYK",
       "source_refs": [
         {
@@ -713,12 +828,31 @@
           "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
           "row": 28,
           "sheet": "SH-01-B"
+        },
+        {
+          "cell": "BÜYÜK BOY",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+          "row": 0,
+          "sheet": "(image)"
         }
-      ]
+      ],
+      "width_mm": 750
     },
     {
-      "category": "OTHER",
+      "category": "CONTAINER",
+      "category_source": "customer_visual_evidence",
       "code": "KCK",
+      "dimension_source": "customer_container_size_image",
+      "dimension_source_refs": [
+        {
+          "cell": "KÜÇÜK BOY",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+          "row": 0,
+          "sheet": "(image)"
+        }
+      ],
+      "height_mm": 450,
+      "length_mm": 800,
       "name": "KCK",
       "source_refs": [
         {
@@ -816,12 +950,31 @@
           "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
           "row": 20,
           "sheet": "SH-02-P1 -SH-02-P2"
+        },
+        {
+          "cell": "KÜÇÜK BOY",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+          "row": 0,
+          "sheet": "(image)"
         }
-      ]
+      ],
+      "width_mm": 550
     },
     {
-      "category": "OTHER",
+      "category": "CONTAINER",
+      "category_source": "customer_visual_evidence",
       "code": "ORT",
+      "dimension_source": "customer_container_size_image",
+      "dimension_source_refs": [
+        {
+          "cell": "ORTA BOY",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+          "row": 0,
+          "sheet": "(image)"
+        }
+      ],
+      "height_mm": 550,
+      "length_mm": 950,
       "name": "ORT",
       "source_refs": [
         {
@@ -871,8 +1024,15 @@
           "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
           "row": 20,
           "sheet": "SH-01-B"
+        },
+        {
+          "cell": "ORTA BOY",
+          "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+          "row": 0,
+          "sheet": "(image)"
         }
-      ]
+      ],
+      "width_mm": 650
     }
   ],
   "corroboration_part_evidence": {
@@ -2376,7 +2536,7 @@
     "planning_rows": 191,
     "product_group_parts": 140,
     "product_groups": 51,
-    "source_files": 8,
+    "source_files": 11,
     "unique_parts": 161
   },
   "data_issues": [
@@ -2788,68 +2948,6 @@
     },
     {
       "blocking": false,
-      "code": "CONTAINER_CATEGORY_CONFLICT",
-      "container_code": "ORT",
-      "issue_id": "23edc9acb3ed6548bb62",
-      "message": "Container code has conflicting category hints; category OTHER is used.",
-      "observed_categories": [
-        "BOX",
-        "CONTAINER"
-      ],
-      "severity": "WARNING",
-      "sources": [
-        {
-          "cell": "D18",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 18,
-          "sheet": "412B"
-        },
-        {
-          "cell": "E19",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 19,
-          "sheet": "412B"
-        },
-        {
-          "cell": "D22",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 22,
-          "sheet": "412B"
-        },
-        {
-          "cell": "D3",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 3,
-          "sheet": "GAR"
-        },
-        {
-          "cell": "D6",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 6,
-          "sheet": "GAR"
-        },
-        {
-          "cell": "D12",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 12,
-          "sheet": "GAR"
-        },
-        {
-          "cell": "D13",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 13,
-          "sheet": "SH-01-B"
-        },
-        {
-          "cell": "D20",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 20,
-          "sheet": "SH-01-B"
-        }
-      ]
-    },
-    {
-      "blocking": false,
       "code": "UNKNOWN_CONTAINER_MAPPING",
       "issue_id": "278169945d22ad6fa8fb",
       "machine_code": "SEALER",
@@ -3139,29 +3237,6 @@
     },
     {
       "blocking": false,
-      "code": "CONTAINER_CATEGORY_UNRESOLVED",
-      "container_code": "285C",
-      "issue_id": "4667c66df220dd3ee142",
-      "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
-      "observed_categories": [],
-      "severity": "INFO",
-      "sources": [
-        {
-          "cell": "D4",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 4,
-          "sheet": "412B"
-        },
-        {
-          "cell": "D7",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 7,
-          "sheet": "412B"
-        }
-      ]
-    },
-    {
-      "blocking": false,
       "code": "UNKNOWN_CONTAINER_MAPPING",
       "issue_id": "46f0c620ed20abd9f0fb",
       "machine_code": "PAH-02-A",
@@ -3424,6 +3499,29 @@
     },
     {
       "blocking": false,
+      "code": "CONTAINER_DIMENSION_SOURCE_CONFLICT",
+      "container_code": "BYK",
+      "issue_id": "5d878ee03393e47ae5ed",
+      "message": "The dedicated customer container-size image and row-level planning dimensions differ; the dedicated container-master image is retained for nominal container dimensions.",
+      "observed_planning_dimensions": [
+        "1200/800",
+        "1200/800/1150"
+      ],
+      "resolved_dimensions_mm": [
+        1200,
+        750,
+        600
+      ],
+      "severity": "WARNING",
+      "source": {
+        "cell": "BÜYÜK BOY",
+        "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+        "row": 0,
+        "sheet": "(image)"
+      }
+    },
+    {
+      "blocking": false,
       "code": "UNKNOWN_CONTAINER_MAPPING",
       "issue_id": "5e02fca5b7760edc9515",
       "machine_code": "GAR",
@@ -3518,6 +3616,28 @@
         "sheet": "412B"
       },
       "variant_code": "2"
+    },
+    {
+      "blocking": false,
+      "code": "CONTAINER_DIMENSION_SOURCE_CONFLICT",
+      "container_code": "KCK",
+      "issue_id": "6610da002303053dad22",
+      "message": "The dedicated customer container-size image and row-level planning dimensions differ; the dedicated container-master image is retained for nominal container dimensions.",
+      "observed_planning_dimensions": [
+        "1200/800"
+      ],
+      "resolved_dimensions_mm": [
+        800,
+        550,
+        450
+      ],
+      "severity": "WARNING",
+      "source": {
+        "cell": "KÜÇÜK BOY",
+        "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+        "row": 0,
+        "sheet": "(image)"
+      }
     },
     {
       "blocking": false,
@@ -3646,44 +3766,6 @@
     },
     {
       "blocking": false,
-      "code": "CONTAINER_CATEGORY_CONFLICT",
-      "container_code": "ARABA",
-      "issue_id": "6f7694b7f707ddda23c0",
-      "message": "Container code has conflicting category hints; category OTHER is used.",
-      "observed_categories": [
-        "BOX",
-        "CART"
-      ],
-      "severity": "WARNING",
-      "sources": [
-        {
-          "cell": "D13",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 13,
-          "sheet": "SH-01-A"
-        },
-        {
-          "cell": "D12",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 12,
-          "sheet": "SH-01-B"
-        },
-        {
-          "cell": "D19",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 19,
-          "sheet": "SH-01-B"
-        },
-        {
-          "cell": "D22",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 22,
-          "sheet": "SH-01-B"
-        }
-      ]
-    },
-    {
-      "blocking": false,
       "code": "UNKNOWN_CONTAINER_MAPPING",
       "issue_id": "728b84ede5bc95ea4709",
       "machine_code": "SH-02-P1 -SH-02-P2",
@@ -3699,6 +3781,69 @@
         "sheet": "SH-02-P1 -SH-02-P2"
       },
       "variant_code": "2"
+    },
+    {
+      "blocking": false,
+      "code": "CONTAINER_CATEGORY_SOURCE_RECONCILED",
+      "container_code": "ORT",
+      "issue_id": "74fbdc053dac9d63288b",
+      "message": "Dedicated customer evidence resolves conflicting or weaker row-level container-category hints.",
+      "observed_categories": [
+        "BOX",
+        "CONTAINER"
+      ],
+      "resolved_category": "CONTAINER",
+      "severity": "INFO",
+      "sources": [
+        {
+          "cell": "D18",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 18,
+          "sheet": "412B"
+        },
+        {
+          "cell": "E19",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 19,
+          "sheet": "412B"
+        },
+        {
+          "cell": "D22",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 22,
+          "sheet": "412B"
+        },
+        {
+          "cell": "D3",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 3,
+          "sheet": "GAR"
+        },
+        {
+          "cell": "D6",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 6,
+          "sheet": "GAR"
+        },
+        {
+          "cell": "D12",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 12,
+          "sheet": "GAR"
+        },
+        {
+          "cell": "D13",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 13,
+          "sheet": "SH-01-B"
+        },
+        {
+          "cell": "D20",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 20,
+          "sheet": "SH-01-B"
+        }
+      ]
     },
     {
       "blocking": false,
@@ -3755,65 +3900,6 @@
         "sheet": "SH-02-P1 -SH-02-P2"
       },
       "variant_code": "1"
-    },
-    {
-      "blocking": false,
-      "code": "CONTAINER_CATEGORY_UNRESOLVED",
-      "container_code": "1284",
-      "issue_id": "77371a5f089292a6bba2",
-      "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
-      "observed_categories": [],
-      "severity": "INFO",
-      "sources": [
-        {
-          "cell": "D3",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 3,
-          "sheet": "PAH-01-A"
-        },
-        {
-          "cell": "D9",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 9,
-          "sheet": "PAH-01-A"
-        },
-        {
-          "cell": "D15",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 15,
-          "sheet": "PAH-01-A"
-        },
-        {
-          "cell": "D19",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 19,
-          "sheet": "PAH-01-A"
-        },
-        {
-          "cell": "D4",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 4,
-          "sheet": "PAH-02-A"
-        },
-        {
-          "cell": "D9",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 9,
-          "sheet": "PAH-02-A"
-        },
-        {
-          "cell": "D14",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 14,
-          "sheet": "PAH-02-A"
-        },
-        {
-          "cell": "D20",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 20,
-          "sheet": "PAH-02-A"
-        }
-      ]
     },
     {
       "blocking": false,
@@ -3903,6 +3989,45 @@
         "sheet": "PAH-01-A"
       },
       "variant_code": "1"
+    },
+    {
+      "blocking": false,
+      "code": "CONTAINER_CATEGORY_SOURCE_RECONCILED",
+      "container_code": "ARABA",
+      "issue_id": "7b3607134769b482b804",
+      "message": "Dedicated customer evidence resolves conflicting or weaker row-level container-category hints.",
+      "observed_categories": [
+        "BOX",
+        "CART"
+      ],
+      "resolved_category": "CART",
+      "severity": "INFO",
+      "sources": [
+        {
+          "cell": "D13",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 13,
+          "sheet": "SH-01-A"
+        },
+        {
+          "cell": "D12",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 12,
+          "sheet": "SH-01-B"
+        },
+        {
+          "cell": "D19",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 19,
+          "sheet": "SH-01-B"
+        },
+        {
+          "cell": "D22",
+          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+          "row": 22,
+          "sheet": "SH-01-B"
+        }
+      ]
     },
     {
       "blocking": false,
@@ -4286,6 +4411,28 @@
         "sheet": "SEALER"
       },
       "variant_code": "1"
+    },
+    {
+      "blocking": false,
+      "code": "CONTAINER_DIMENSION_SOURCE_CONFLICT",
+      "container_code": "ORT",
+      "issue_id": "a53543be9492707fdb8c",
+      "message": "The dedicated customer container-size image and row-level planning dimensions differ; the dedicated container-master image is retained for nominal container dimensions.",
+      "observed_planning_dimensions": [
+        "1200/800"
+      ],
+      "resolved_dimensions_mm": [
+        950,
+        650,
+        550
+      ],
+      "severity": "WARNING",
+      "source": {
+        "cell": "ORTA BOY",
+        "file": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+        "row": 0,
+        "sheet": "(image)"
+      }
     },
     {
       "blocking": false,
@@ -5277,113 +5424,6 @@
     },
     {
       "blocking": false,
-      "code": "CONTAINER_CATEGORY_UNRESOLVED",
-      "container_code": "KCK",
-      "issue_id": "fa48b7af475c4028c4f6",
-      "message": "Container code is preserved exactly, but its category is unresolved; category OTHER is used.",
-      "observed_categories": [],
-      "severity": "INFO",
-      "sources": [
-        {
-          "cell": "E14",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 14,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E16",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 16,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E20",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 20,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E22",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 22,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E26",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 26,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E28",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 28,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E32",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 32,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E34",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 34,
-          "sheet": "SEALER"
-        },
-        {
-          "cell": "E13",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 13,
-          "sheet": "SH-01-P1--SH-01-P2"
-        },
-        {
-          "cell": "E14",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 14,
-          "sheet": "SH-01-P1--SH-01-P2"
-        },
-        {
-          "cell": "E21",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 21,
-          "sheet": "SH-01-P1--SH-01-P2"
-        },
-        {
-          "cell": "E22",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 22,
-          "sheet": "SH-01-P1--SH-01-P2"
-        },
-        {
-          "cell": "D10",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 10,
-          "sheet": "SH-02-P1 -SH-02-P2"
-        },
-        {
-          "cell": "D11",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 11,
-          "sheet": "SH-02-P1 -SH-02-P2"
-        },
-        {
-          "cell": "D19",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 19,
-          "sheet": "SH-02-P1 -SH-02-P2"
-        },
-        {
-          "cell": "D20",
-          "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
-          "row": 20,
-          "sheet": "SH-02-P1 -SH-02-P2"
-        }
-      ]
-    },
-    {
-      "blocking": false,
       "code": "EXCEL_FORMULA_ERROR",
       "excel_error": "#DIV/0!",
       "formula": "=+N21/G21",
@@ -5418,8 +5458,9 @@
   ],
   "issue_counts_by_code": {
     "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT": 10,
-    "CONTAINER_CATEGORY_CONFLICT": 2,
-    "CONTAINER_CATEGORY_UNRESOLVED": 4,
+    "CONTAINER_CATEGORY_SOURCE_RECONCILED": 2,
+    "CONTAINER_CATEGORY_UNRESOLVED": 1,
+    "CONTAINER_DIMENSION_SOURCE_CONFLICT": 3,
     "EXCEL_FORMULA_ERROR": 33,
     "MISSING_PLANNING_INPUT": 23,
     "PART_CODE_SOURCE_DISCREPANCY": 2,
@@ -5427,8 +5468,8 @@
     "UNKNOWN_CONTAINER_MAPPING": 60
   },
   "issue_counts_by_severity": {
-    "INFO": 4,
-    "WARNING": 155
+    "INFO": 3,
+    "WARNING": 156
   },
   "manifest": [
     {
@@ -5478,6 +5519,24 @@
       "role": "textual_corroboration_only_no_geometry",
       "sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46",
       "size_bytes": 110702
+    },
+    {
+      "path": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/1284 ÇELİK KASA.png",
+      "role": "authoritative_container_visual_evidence",
+      "sha256": "724d307147ca330e5a956e4ce410f22beae703b72d8393e11c1d259bd92efc56",
+      "size_bytes": 500269
+    },
+    {
+      "path": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/285C - Çelik kasa.jpg",
+      "role": "authoritative_container_visual_evidence",
+      "sha256": "22390307548e4f7e5dccaa1cb3e7ebb05cdea8c0d0a488abee40fc52416252ab",
+      "size_bytes": 448242
+    },
+    {
+      "path": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+      "role": "authoritative_container_visual_evidence",
+      "sha256": "4da185d4db5829ba90037cb14600a7e33ce767acde452e5440a7d2f1d55ccfe1",
+      "size_bytes": 258197
     }
   ],
   "parts": [
@@ -12249,6 +12308,7 @@
   "precedence": [
     "AMR Çalışma Planı.xlsx is authoritative for machine/variant/product-group/planning rows.",
     "AMR Takt time study.xlsx corroborates field values and reports conflicts without overriding the work plan.",
+    "Dedicated customer container photographs resolve nominal container category/dimensions where their labels are explicit; row-level conflicts remain reported.",
     "AGV - BAKIM - PLC Çalışma.xlsx and layout workbooks provide textual corroboration only.",
     "No colored-cell coordinates, footprints, merged-area geometry or layout slot positions are extracted."
   ],
@@ -15559,16 +15619,11 @@
       "variant_code": "2"
     }
   ],
-  "schema_version": "phase_02a_v1",
-  "source_digest": "7f203a6d3c1324f1b1065bdb9a02830669dc0cda76b73377831edef2413e5f67",
+  "schema_version": "phase_02a_v2",
+  "source_digest": "5e26bc18d3a34867c9ce211157b9af00de1c5e20753e85493591f759a527802f",
   "source_files_unchanged": true,
   "unresolved_container_codes": [
     "(blank)",
-    "1284",
-    "1285",
-    "285C",
-    "ARABA",
-    "KCK",
-    "ORT"
+    "1285"
   ]
 }

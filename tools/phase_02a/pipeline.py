@@ -14,7 +14,7 @@ from typing import Any, Iterable
 from openpyxl import load_workbook
 
 
-SCHEMA_VERSION = "phase_02a_v1"
+SCHEMA_VERSION = "phase_02a_v2"
 SOURCE_ROOT = Path("2026- OPTİMAK -ROBOT AMR")
 WORK_PLAN = SOURCE_ROOT / "AMR Varyant" / "AMR Çalışma Planı.xlsx"
 TAKT_STUDY = SOURCE_ROOT / "AMR Takt time study.xlsx"
@@ -26,7 +26,46 @@ LAYOUT_WORKBOOKS = (
     SOURCE_ROOT / "AMR Varyant" / "SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
     SOURCE_ROOT / "AMR Varyant" / "SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
 )
-SOURCE_FILES = (INTERACTION, TAKT_STUDY, WORK_PLAN, *LAYOUT_WORKBOOKS)
+CONTAINER_1284_IMAGE = SOURCE_ROOT / "Hyundai STP" / "1284 ÇELİK KASA.png"
+CONTAINER_285C_IMAGE = SOURCE_ROOT / "Hyundai STP" / "285C - Çelik kasa.jpg"
+CONTAINER_SIZE_IMAGE = SOURCE_ROOT / "Hyundai STP" / "CLK Kasa tipleri.png"
+CONTAINER_IMAGES = (CONTAINER_1284_IMAGE, CONTAINER_285C_IMAGE, CONTAINER_SIZE_IMAGE)
+SOURCE_FILES = (INTERACTION, TAKT_STUDY, WORK_PLAN, *LAYOUT_WORKBOOKS, *CONTAINER_IMAGES)
+
+# Dedicated customer photographs are more specific container-master evidence
+# than the mixed row-level Kasa/Kutu hints in the planning workbook. The size
+# chart labels the three steel-container sizes as Büyük/Orta/Küçük; the codes
+# BYK/ORT/KCK are their customer abbreviations. Dimensions are normalized to
+# length x width x height in millimetres. No robot clearance or docking
+# geometry is inferred from these nominal container dimensions.
+CONTAINER_VISUAL_EVIDENCE: dict[str, dict[str, Any]] = {
+    "1284": {"category": "CONTAINER", "source": CONTAINER_1284_IMAGE},
+    "285C": {"category": "CONTAINER", "source": CONTAINER_285C_IMAGE},
+    "BYK": {
+        "category": "CONTAINER",
+        "length_mm": 1200,
+        "width_mm": 750,
+        "height_mm": 600,
+        "source": CONTAINER_SIZE_IMAGE,
+        "label": "BÜYÜK BOY",
+    },
+    "ORT": {
+        "category": "CONTAINER",
+        "length_mm": 950,
+        "width_mm": 650,
+        "height_mm": 550,
+        "source": CONTAINER_SIZE_IMAGE,
+        "label": "ORTA BOY",
+    },
+    "KCK": {
+        "category": "CONTAINER",
+        "length_mm": 800,
+        "width_mm": 550,
+        "height_mm": 450,
+        "source": CONTAINER_SIZE_IMAGE,
+        "label": "KÜÇÜK BOY",
+    },
+}
 
 BASELINE_VARIANTS: dict[str, tuple[str, ...]] = {
     "SH-01-A": ("1", "2", "3", "4", "5"),
@@ -155,6 +194,16 @@ def source_ref(project_root: Path, path: Path, sheet: str, row: int, cell: str) 
     }
 
 
+def visual_source_ref(project_root: Path, path: Path, label: str) -> dict[str, Any]:
+    resolved = path if path.is_absolute() else project_root / path
+    return {
+        "file": resolved.relative_to(project_root).as_posix(),
+        "sheet": "(image)",
+        "row": 0,
+        "cell": label,
+    }
+
+
 def source_ref_key(ref: dict[str, Any]) -> tuple[Any, ...]:
     return (ref["file"], ref["sheet"], ref["row"], ref["cell"])
 
@@ -212,6 +261,8 @@ def build_manifest(project_root: Path) -> list[dict[str, Any]]:
                 "role": (
                     "authoritative_textual_master_and_planning"
                     if relative == WORK_PLAN
+                    else "authoritative_container_visual_evidence"
+                    if relative in CONTAINER_IMAGES
                     else "planning_corroboration"
                     if relative == TAKT_STUDY
                     else "interaction_corroboration"
@@ -347,7 +398,7 @@ def extract_work_plan(
     members: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     planning: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     container_observations: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"categories": set(), "source_refs": []}
+        lambda: {"categories": set(), "dimensions": defaultdict(list), "source_refs": []}
     )
 
     group_order_by_variant: Counter[tuple[str, str]] = Counter()
@@ -444,6 +495,9 @@ def extract_work_plan(
                             row_codes.append((group_key, related_code, True))
 
                 container_code = normalize_identifier(cell_value(value_ws, row_number, columns["container_code"]))
+                container_dimensions = normalize_text(
+                    cell_value(value_ws, row_number, columns["dimensions"])
+                )
                 category = category_from_hint(
                     cell_value(value_ws, row_number, columns["container_category_hint"]),
                     container_code,
@@ -452,12 +506,12 @@ def extract_work_plan(
                     observation = container_observations[container_code]
                     if category:
                         observation["categories"].add(category)
+                    if container_dimensions:
+                        observation["dimensions"][container_dimensions].append(ref)
                     observation["source_refs"].append(ref)
 
                 metric_values = {
-                    "container_dimensions": normalize_text(
-                        cell_value(value_ws, row_number, columns["dimensions"])
-                    ),
+                    "container_dimensions": container_dimensions,
                     "container_code": container_code,
                     "lot_quantity": decimal_string(
                         cell_value(value_ws, row_number, columns["lot_quantity"])
@@ -756,7 +810,15 @@ def scan_textual_corroboration(
     return {code: stable_unique_refs(refs) for code, refs in sorted(evidence.items())}
 
 
+def parse_container_dimensions(value: str) -> tuple[int, int, int] | None:
+    match = re.fullmatch(r"\s*(\d+)\s*[/xX]\s*(\d+)\s*[/xX]\s*(\d+)\s*", value)
+    if not match:
+        return None
+    return tuple(int(item) for item in match.groups())
+
+
 def finalize_containers(
+    project_root: Path,
     observations: dict[str, dict[str, Any]],
     issues: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -764,10 +826,19 @@ def finalize_containers(
     for code in sorted(observations):
         categories = sorted(observations[code]["categories"])
         refs = stable_unique_refs(observations[code]["source_refs"])
-        if len(categories) == 1:
+        visual = CONTAINER_VISUAL_EVIDENCE.get(code)
+        if code == "ARABA":
+            category = "CART"
+            category_source = "customer_code_literal"
+        elif visual:
+            category = visual["category"]
+            category_source = "customer_visual_evidence"
+        elif len(categories) == 1:
             category = categories[0]
+            category_source = "work_plan_hint"
         else:
             category = "OTHER"
+            category_source = "unresolved"
             add_issue(
                 issues,
                 "CONTAINER_CATEGORY_UNRESOLVED" if not categories else "CONTAINER_CATEGORY_CONFLICT",
@@ -779,11 +850,82 @@ def finalize_containers(
                 observed_categories=categories,
                 sources=refs,
             )
+
+        if category_source != "unresolved" and categories and categories != [category]:
+            add_issue(
+                issues,
+                "CONTAINER_CATEGORY_SOURCE_RECONCILED",
+                "INFO",
+                "Dedicated customer evidence resolves conflicting or weaker row-level container-category hints.",
+                container_code=code,
+                resolved_category=category,
+                observed_categories=categories,
+                sources=refs,
+            )
+
+        dimension_refs = observations[code]["dimensions"]
+        observed_dimensions = sorted(dimension_refs)
+        parsed_observed = {
+            parsed
+            for value in observed_dimensions
+            if (parsed := parse_container_dimensions(value)) is not None
+        }
+        length_mm = width_mm = height_mm = None
+        dimension_source = None
+        dimension_source_refs: list[dict[str, Any]] = []
+
+        if visual and all(visual.get(field) for field in ("length_mm", "width_mm", "height_mm")):
+            length_mm = int(visual["length_mm"])
+            width_mm = int(visual["width_mm"])
+            height_mm = int(visual["height_mm"])
+            dimension_source = "customer_container_size_image"
+            dimension_source_refs = [
+                visual_source_ref(project_root, visual["source"], visual.get("label", code))
+            ]
+            visual_dimensions = (length_mm, width_mm, height_mm)
+            visual_dimension_text = f"{length_mm}/{width_mm}/{height_mm}"
+            if observed_dimensions and set(observed_dimensions) != {visual_dimension_text}:
+                add_issue(
+                    issues,
+                    "CONTAINER_DIMENSION_SOURCE_CONFLICT",
+                    "WARNING",
+                    "The dedicated customer container-size image and row-level planning dimensions differ; the dedicated container-master image is retained for nominal container dimensions.",
+                    container_code=code,
+                    resolved_dimensions_mm=list(visual_dimensions),
+                    observed_planning_dimensions=observed_dimensions,
+                    source=dimension_source_refs[0],
+                )
+        elif (
+            len(parsed_observed) == 1
+            and len(observed_dimensions) == 1
+            and sum(len(items) for items in dimension_refs.values()) == len(refs)
+        ):
+            # Every observation for this code supplies the same complete 3-D
+            # value. This is safe type-level evidence (currently 1284).
+            consistent_dimensions = next(iter(parsed_observed))
+            length_mm, width_mm, height_mm = consistent_dimensions
+            dimension_source = "consistent_work_plan_rows"
+            matching = next(
+                value for value in observed_dimensions
+                if parse_container_dimensions(value) == consistent_dimensions
+            )
+            dimension_source_refs = stable_unique_refs(dimension_refs[matching])
+
+        if visual:
+            refs = stable_unique_refs(
+                [*refs, visual_source_ref(project_root, visual["source"], visual.get("label", code))]
+            )
         containers.append(
             {
                 "code": code,
                 "name": code,
                 "category": category,
+                "length_mm": length_mm,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+                "category_source": category_source,
+                "dimension_source": dimension_source,
+                "dimension_source_refs": dimension_source_refs,
                 "source_refs": refs,
             }
         )
@@ -836,7 +978,7 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
     takt_rows = extract_takt_rows(project_root, issues)
     compare_takt_to_work_plan(extracted["planning"], takt_rows, issues)
     corroboration = scan_textual_corroboration(project_root, set(extracted["parts"]), issues)
-    containers = finalize_containers(extracted["container_observations"], issues)
+    containers = finalize_containers(project_root, extracted["container_observations"], issues)
 
     parts = [strip_internal_fields(extracted["parts"][key]) for key in sorted(extracted["parts"])]
     groups = [strip_internal_fields(extracted["groups"][key]) for key in sorted(extracted["groups"])]
@@ -885,6 +1027,7 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
         "precedence": [
             "AMR Çalışma Planı.xlsx is authoritative for machine/variant/product-group/planning rows.",
             "AMR Takt time study.xlsx corroborates field values and reports conflicts without overriding the work plan.",
+            "Dedicated customer container photographs resolve nominal container category/dimensions where their labels are explicit; row-level conflicts remain reported.",
             "AGV - BAKIM - PLC Çalışma.xlsx and layout workbooks provide textual corroboration only.",
             "No colored-cell coordinates, footprints, merged-area geometry or layout slot positions are extracted.",
         ],
@@ -927,6 +1070,9 @@ def generate_seed_sql(dataset: dict[str, Any]) -> str:
             sql_literal(item["code"]),
             sql_literal(item["name"]),
             sql_literal(item["category"]),
+            sql_number(str(item["length_mm"]) if item["length_mm"] is not None else None),
+            sql_number(str(item["width_mm"]) if item["width_mm"] is not None else None),
+            sql_number(str(item["height_mm"]) if item["height_mm"] is not None else None),
         )
         for item in dataset["container_types"]
     )
@@ -986,15 +1132,21 @@ VALUES
 {parts_values}
 ON CONFLICT (part_code) DO NOTHING;
 
-INSERT INTO master.container_types (code, name, category)
+INSERT INTO master.container_types (code, name, category, length_mm, width_mm, height_mm)
 VALUES
 {container_values}
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
     category = EXCLUDED.category,
+    length_mm = EXCLUDED.length_mm,
+    width_mm = EXCLUDED.width_mm,
+    height_mm = EXCLUDED.height_mm,
     updated_at = now()
 WHERE master.container_types.name IS DISTINCT FROM EXCLUDED.name
-   OR master.container_types.category IS DISTINCT FROM EXCLUDED.category;
+   OR master.container_types.category IS DISTINCT FROM EXCLUDED.category
+   OR master.container_types.length_mm IS DISTINCT FROM EXCLUDED.length_mm
+   OR master.container_types.width_mm IS DISTINCT FROM EXCLUDED.width_mm
+   OR master.container_types.height_mm IS DISTINCT FROM EXCLUDED.height_mm;
 
 WITH source(machine_code, variant_code, main_part_code, name, display_order) AS (
 VALUES
@@ -1147,7 +1299,10 @@ def write_outputs(dataset: dict[str, Any], output_dir: Path, seed_path: Path) ->
     write_csv(
         output_dir / "container_types.csv",
         dataset["container_types"],
-        ["code", "name", "category"],
+        [
+            "code", "name", "category", "length_mm", "width_mm", "height_mm",
+            "category_source", "dimension_source", "dimension_source_refs", "source_refs",
+        ],
     )
     write_csv(
         output_dir / "product_groups.csv",

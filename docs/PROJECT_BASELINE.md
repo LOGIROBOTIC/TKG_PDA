@@ -74,11 +74,12 @@ Data issue dağılımı:
 | `SOURCE_VALUE_CONFLICT` | 25 |
 | `MISSING_PLANNING_INPUT` | 23 |
 | `AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT` | 10 |
-| `CONTAINER_CATEGORY_UNRESOLVED` | 4 |
-| `CONTAINER_CATEGORY_CONFLICT` | 2 |
+| `CONTAINER_DIMENSION_SOURCE_CONFLICT` | 3 |
+| `CONTAINER_CATEGORY_SOURCE_RECONCILED` | 2 |
+| `CONTAINER_CATEGORY_UNRESOLVED` | 1 |
 | `PART_CODE_SOURCE_DISCREPANCY` | 2 |
 
-Çözülmemiş container kodları `(blank)`, `1284`, `1285`, `285C`, `ARABA`, `KCK` ve `ORT` olarak raporlanır; eşleşme veya ölçü tahmin edilmez. `#DIV/0!` üreten gerçek parçalar master data'ya alınır, etkilenmiş planning metrikleri `NULL` kalır.
+Çözülmemiş container category code yalnız `1285`'tir; blank planning mapping'leri `NULL` kalır. Customer görselleri/planning kanıtıyla `1284`, `285C`, `BYK`, `ORT`, `KCK` ve `ARABA` uzlaştırılmıştır; çelişkili type-level ölçüler yine `NULL` kalır. `#DIV/0!` üreten gerçek parçalar master data'ya alınır, etkilenmiş planning metrikleri `NULL` kalır.
 
 `67115BN050-10-HAOS` canonical part kodudur. SH-01-A fiziksel kaynakta görünen HMTR varyasyonu canonical kaydı değiştirmez; provenance/data issue içinde müşteri teyidi bekleyen discrepancy olarak tutulur.
 
@@ -122,8 +123,8 @@ Beş fiziksel layout workbook'undan üretilen kayıtlar:
 ### 4.3 Açık fiziksel veri konuları
 
 - 28 slotun part ilişkisi çözülememiştir.
-- 80 slotun container ilişkisi çözülememiştir.
-- 183 slot için güvenilir fiziksel footprint ölçüsü yoktur; tamamı `NULL` kalır.
+- 74 slotun container ilişkisi çözülememiştir.
+- 54 lojistik slot customer-source nominal container footprint'i taşır; kalan 129 region'ın footprint'i `NULL` kalır. Bu ölçüler robot yaklaşımı/clearance değildir.
 - 14 kaynak bölge güvenli yorumlanamadığı için LOW confidence aday olarak seed dışı bırakılmıştır (13 slot adayı ve bir kanıtlanmamış SEALER V3 bölgesi bağlamı).
 - Ekran geometrisi 0–1 aralığındaki `ui_*` alanlarıdır; fiziksel veya robot koordinatı değildir.
 

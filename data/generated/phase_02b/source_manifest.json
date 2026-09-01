@@ -32,7 +32,7 @@
   {
     "path": "data/generated/phase_02a/normalized_customer_data.json",
     "role": "frozen_textual_master_reference",
-    "sha256": "6b88d6d2ab66d84d4eafb07d8f59d94461ba487e0e9d41dfc596cb4badb96973",
-    "size_bytes": 476181
+    "sha256": "a8c2acca8b8fc818391539eafe6a4b022aa503838ec99bfe3b6a167762b7f9ff",
+    "size_bytes": 478467
   }
 ]

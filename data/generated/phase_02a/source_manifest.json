@@ -46,5 +46,23 @@
     "role": "textual_corroboration_only_no_geometry",
     "sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46",
     "size_bytes": 110702
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/1284 ÇELİK KASA.png",
+    "role": "authoritative_container_visual_evidence",
+    "sha256": "724d307147ca330e5a956e4ce410f22beae703b72d8393e11c1d259bd92efc56",
+    "size_bytes": 500269
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/285C - Çelik kasa.jpg",
+    "role": "authoritative_container_visual_evidence",
+    "sha256": "22390307548e4f7e5dccaa1cb3e7ebb05cdea8c0d0a488abee40fc52416252ab",
+    "size_bytes": 448242
+  },
+  {
+    "path": "2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png",
+    "role": "authoritative_container_visual_evidence",
+    "sha256": "4da185d4db5829ba90037cb14600a7e33ce767acde452e5440a7d2f1d55ccfe1",
+    "size_bytes": 258197
   }
 ]

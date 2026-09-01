@@ -69,7 +69,7 @@ Complete database application order:
 4. `db/migrations/005_layout_slot_part_mapping.sql`
 5. `db/seeds/generated/002c_customer_layout_slot_part_assignments.sql`
 
-The Phase 02B seed is idempotent and resolves machines, variants, parts, and container types through the frozen Phase 01/02A baseline. It inserts no new canonical part/container data. `ui_*` values are normalized PDA display geometry only; physical dimensions remain `NULL` unless explicitly supplied by a trusted layout source. No RDS WorkSite, robot/map coordinate, route, stitch, navigation profile, or SEER map data is generated.
+The Phase 02B seed is idempotent and resolves machines, variants, parts, and container types through the Phase 01/02A customer baseline. It inserts no new canonical part/container data. `ui_*` values are normalized PDA display geometry only. Source-backed nominal dimensions in `master.container_types` may be retained in slot provenance, but are not robot pose, clearance, route or docking geometry. No RDS WorkSite, robot/map coordinate, route, stitch, navigation profile, or SEER map data is generated.
 
 Of the 183 generated `master.layout_slots` rows, 172 are logistics positions and 11 are machine/cell display regions marked with `slot_role = 'MACHINE'`. These 11 rows are visual/physical references only. Future workflow generation must exclude them from transport source/destination selection; the existing `slot_role` discriminator is sufficient for this baseline, so no schema migration is required.
 

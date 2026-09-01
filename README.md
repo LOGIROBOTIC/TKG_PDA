@@ -134,10 +134,10 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 
 ## Bilinen veri kalitesi sınırları
 
-- Phase 02A: 159 izlenebilir data issue; bunların 155'i warning, 4'ü info seviyesindedir.
-- Çözülmemiş container kodları: `(blank)`, `1284`, `1285`, `285C`, `ARABA`, `KCK`, `ORT`.
-- Phase 02B: 28 slotta part ilişkisi, 80 slotta container ilişkisi çözülememiştir.
-- 183 slotun fiziksel footprint ölçüsü güvenilir kaynakta verilmediği için `NULL` bırakılmıştır.
+- Phase 02A: 159 izlenebilir data issue; bunların 156'sı warning, 3'ü info seviyesindedir.
+- Çözülmemiş container kategori kodu yalnız `1285`'tir; blank planning mapping'leri ayrıca `NULL` kalır. `1284`, `285C`, `BYK`, `ORT`, `KCK` ve `ARABA` mevcut customer görsel/planning kanıtıyla uzlaştırılmıştır.
+- Phase 02B: 28 slotta part ilişkisi, 74 slotta container ilişkisi çözülememiştir.
+- 54 lojistik slot source-backed nominal container footprint'i taşır; kalan 129 region (118 lojistik + 11 MACHINE) `NULL` kalır. Nominal container ölçüsü robot pozu/clearance değildir.
 - `67115BN050-10-HAOS` canonical koddur; HMTR görünümü source discrepancy olarak korunur.
 - SEALER V1/V2 ortak layout kullanır; V3 için kanıt bulunmadığından layout ataması yapılmamıştır.
 

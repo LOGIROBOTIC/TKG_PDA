@@ -6,13 +6,14 @@
     "planning_rows": 191,
     "product_group_parts": 140,
     "product_groups": 51,
-    "source_files": 8,
+    "source_files": 11,
     "unique_parts": 161
   },
   "issue_counts_by_code": {
     "AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT": 10,
-    "CONTAINER_CATEGORY_CONFLICT": 2,
-    "CONTAINER_CATEGORY_UNRESOLVED": 4,
+    "CONTAINER_CATEGORY_SOURCE_RECONCILED": 2,
+    "CONTAINER_CATEGORY_UNRESOLVED": 1,
+    "CONTAINER_DIMENSION_SOURCE_CONFLICT": 3,
     "EXCEL_FORMULA_ERROR": 33,
     "MISSING_PLANNING_INPUT": 23,
     "PART_CODE_SOURCE_DISCREPANCY": 2,
@@ -20,19 +21,14 @@
     "UNKNOWN_CONTAINER_MAPPING": 60
   },
   "issue_counts_by_severity": {
-    "INFO": 4,
-    "WARNING": 155
+    "INFO": 3,
+    "WARNING": 156
   },
-  "schema_version": "phase_02a_v1",
-  "source_digest": "7f203a6d3c1324f1b1065bdb9a02830669dc0cda76b73377831edef2413e5f67",
+  "schema_version": "phase_02a_v2",
+  "source_digest": "5e26bc18d3a34867c9ce211157b9af00de1c5e20753e85493591f759a527802f",
   "source_files_unchanged": true,
   "unresolved_container_codes": [
     "(blank)",
-    "1284",
-    "1285",
-    "285C",
-    "ARABA",
-    "KCK",
-    "ORT"
+    "1285"
   ]
 }

@@ -1,8 +1,9 @@
 # TKG PDA Phase 02A — Textual Master Data Import Pipeline
 
-**Status:** Completed; Phase 02B not started
+**Status:** Completed; customer-source reconciliation applied without changing the original workbooks/images
 **Date:** 2026-08-18
-**Source digest:** `7f203a6d3c1324f1b1065bdb9a02830669dc0cda76b73377831edef2413e5f67`
+**Reconciliation date:** 2026-09-01
+**Source digest:** `5e26bc18d3a34867c9ce211157b9af00de1c5e20753e85493591f759a527802f`
 
 ## Scope boundary
 
@@ -32,6 +33,12 @@ Textual corroboration only; no geometry:
 - `2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx`
 - `2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx`
 
+Dedicated container-master visual evidence:
+
+- `2026- OPTİMAK -ROBOT AMR/Hyundai STP/1284 ÇELİK KASA.png`
+- `2026- OPTİMAK -ROBOT AMR/Hyundai STP/285C - Çelik kasa.jpg`
+- `2026- OPTİMAK -ROBOT AMR/Hyundai STP/CLK Kasa tipleri.png`
+
 Exact paths, sizes, SHA-256 hashes and roles are stored in `data/generated/phase_02a/source_manifest.json`. The pipeline hashes every source before and after extraction and aborts if a source changes during the run.
 
 ## Extraction and normalization rules
@@ -47,7 +54,7 @@ Exact paths, sizes, SHA-256 hashes and roles are stored in `data/generated/phase
 9. Formula errors are recorded per source cell in the data-quality report.
 10. Duplicate authoritative rows are merged by business key. If two nonblank values conflict, that field becomes `NULL` and a nonblocking issue is emitted.
 11. `AMR Çalışma Planı.xlsx` wins over differing takt-study values. Every differing nonblank corroboration value is reported.
-12. Raw nonblank container codes are preserved. Missing mappings stay `NULL`. Unresolved/conflicting categories use `OTHER` and remain visible as data issues.
+12. Raw nonblank container codes are preserved. Dedicated customer container images may resolve category and nominal type dimensions; conflicting row-level dimension evidence remains a data issue. Missing mappings stay `NULL`.
 13. Only structural corruption, a missing required source/header or an impossible machine/variant reference stops generation. All current customer data issues are nonblocking.
 
 ## Precedence and known decisions
@@ -55,13 +62,14 @@ Exact paths, sizes, SHA-256 hashes and roles are stored in `data/generated/phase
 - `67115BN050-10-HAOS` is canonical.
 - The two textual occurrences of `67115BN050-10-HMTR` in the SH-01-A Variant 1 layout sheet remain source evidence and generate discrepancy issues; they do not create a separate part.
 - Missing-lot real parts remain in master data. Their lot and dependent AGV metrics remain `NULL`.
+- `1284`, `BYK`, `ORT`, and `KCK` nominal dimensions and the 1284/285C container categories come from explicit customer sources. `ARABA` is category `CART`; its inconsistent row-level dimensions remain `NULL`.
 - Physical layouts and navigation profiles remain outside this phase.
 
 ## Discovered normalized counts
 
 | Record type | Count |
 |---|---:|
-| Source Excel files | 8 |
+| Source files | 11 (8 Excel + 3 customer images) |
 | Unique parts | 161 |
 | Container types | 10 |
 | Product groups | 51 |
@@ -74,7 +82,7 @@ These values were discovered from the first corrected deterministic extraction a
 
 ## Data-quality results
 
-All 159 issues are nonblocking: 155 `WARNING`, 4 `INFO`.
+All 159 issues are nonblocking: 156 `WARNING`, 3 `INFO`.
 
 | Issue code | Count | Meaning |
 |---|---:|---|
@@ -83,15 +91,17 @@ All 159 issues are nonblocking: 155 `WARNING`, 4 `INFO`.
 | `SOURCE_VALUE_CONFLICT` | 25 | Work-plan and takt-study nonblank values differ; work-plan precedence retained. |
 | `MISSING_PLANNING_INPUT` | 23 | Required source planning input such as Kutu Lotu is blank/invalid. |
 | `AUTHORITATIVE_DUPLICATE_VALUE_CONFLICT` | 10 | Duplicate work-plan business context has differing values; conflicting field set to `NULL`. |
-| `CONTAINER_CATEGORY_UNRESOLVED` | 4 | Raw code retained with category `OTHER`. |
-| `CONTAINER_CATEGORY_CONFLICT` | 2 | Conflicting category hints; raw code retained with category `OTHER`. |
+| `CONTAINER_DIMENSION_SOURCE_CONFLICT` | 3 | Dedicated BYK/ORT/KCK size chart differs from row-level planning dimensions; both are retained with explicit precedence. |
+| `CONTAINER_CATEGORY_SOURCE_RECONCILED` | 2 | Dedicated/literal evidence resolves weaker or conflicting row hints. |
+| `CONTAINER_CATEGORY_UNRESOLVED` | 1 | Only `1285` remains category `OTHER`. |
 | `PART_CODE_SOURCE_DISCREPANCY` | 2 | HMTR layout evidence normalized to canonical HAOS. |
 
-Unresolved container mapping/category values are:
+Unresolved container mapping/category values are now only:
 
 - `(blank)` — no raw code exists; mapping is `NULL`.
-- `1284`, `1285`, `285C`, `KCK` — raw code retained; category unresolved as `OTHER`.
-- `ARABA`, `ORT` — raw code retained; category hints conflict, so category is `OTHER`.
+- `1285` — raw code exists, but category and nominal dimensions are absent.
+
+Reconciled type master: `1284 = 1200×800×400`, `BYK = 1200×750×600`, `ORT = 950×650×550`, `KCK = 800×550×450`; `285C` is `CONTAINER`; `ARABA` is `CART`.
 
 The complete issue set is in both `data_issues.json` and `data_issues.csv`; no issue is omitted from those artifacts.
 
@@ -123,7 +133,7 @@ The generated SQL is deterministic and idempotent. It resolves baseline machine/
 
 ## Automated validation
 
-`tests/phase_02a/test_pipeline.py` contains ten deterministic/unit/regression tests covering:
+`tests/phase_02a/test_pipeline.py` contains eleven deterministic/unit/regression tests covering:
 
 - normalization,
 - byte-equivalent reruns,
@@ -135,8 +145,9 @@ The generated SQL is deterministic and idempotent. It resolves baseline machine/
 - unknown container handling,
 - source immutability,
 - discovered-count regression.
+- customer container category/dimension reconciliation.
 
-Result: **10/10 PASS**.
+Result: **11/11 PASS**.
 
 ## PostgreSQL integration result
 
@@ -156,6 +167,6 @@ Result: **PASS**.
 
 The temporary cluster was stopped and moved to the Windows Recycle Bin after the test.
 
-## Explicitly deferred
+## Historical phase boundary
 
-Phase 02B was not started. Colored layout parsing, physical slot geometry, PDA display coordinates, container footprints and visual verification remain a separate safety-sensitive phase.
+Phase 02A originally stopped before colored layout parsing. Phase 02B was later completed as a separate safety-sensitive pipeline; the customer-source reconciliation only enriches container master evidence and does not merge robot/layout geometry into Phase 02A.

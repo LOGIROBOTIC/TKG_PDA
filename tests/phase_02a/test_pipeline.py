@@ -107,6 +107,28 @@ class Phase02APipelineTests(unittest.TestCase):
         for key, value in expected.items():
             self.assertEqual(self.dataset["counts"][key], value, key)
 
+    def test_11_customer_container_evidence_is_reconciled(self) -> None:
+        containers = {item["code"]: item for item in self.dataset["container_types"]}
+        self.assertEqual(
+            (containers["1284"]["category"], containers["1284"]["length_mm"], containers["1284"]["width_mm"], containers["1284"]["height_mm"]),
+            ("CONTAINER", 1200, 800, 400),
+        )
+        self.assertEqual(
+            (containers["BYK"]["length_mm"], containers["BYK"]["width_mm"], containers["BYK"]["height_mm"]),
+            (1200, 750, 600),
+        )
+        self.assertEqual(
+            (containers["ORT"]["length_mm"], containers["ORT"]["width_mm"], containers["ORT"]["height_mm"]),
+            (950, 650, 550),
+        )
+        self.assertEqual(
+            (containers["KCK"]["length_mm"], containers["KCK"]["width_mm"], containers["KCK"]["height_mm"]),
+            (800, 550, 450),
+        )
+        self.assertEqual(containers["285C"]["category"], "CONTAINER")
+        self.assertEqual(containers["ARABA"]["category"], "CART")
+        self.assertEqual(self.dataset["unresolved_container_codes"], ["(blank)", "1285"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

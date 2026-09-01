@@ -145,6 +145,16 @@ SELECT json_build_object(
     WHERE metadata_json ? 'physical_footprint_mm'
       AND metadata_json->'physical_footprint_mm' = 'null'::jsonb
   ),
+  'reconciled_sealer_containers', (
+    SELECT count(*)
+    FROM master.layout_slots s
+    JOIN master.layouts l ON l.id = s.layout_id
+    JOIN master.machines m ON m.id = l.machine_id
+    JOIN master.container_types c ON c.id = s.default_container_type_id
+    WHERE m.code = 'SEALER'
+      AND s.metadata_json->>'container_evidence' = 'phase_02a_exact_part_cross_context'
+      AND c.code IN ('4311', 'KCK')
+  ),
   'forbidden_coordinate_keys', (
     SELECT count(*) FROM master.layout_slots
     WHERE metadata_json::text ~ '"(robot_x|robot_y|map_x|map_y|waypoint|route_id|navigation_profile_id|rds_worksite_id|site_id|stitch_config)"[[:space:]]*:'
@@ -183,6 +193,7 @@ SELECT json_build_object(
     if ($actual.out_of_bounds_slots -ne 0) { throw 'Out-of-bounds UI geometry detected' }
     if ($actual.missing_provenance -ne 0) { throw 'Slot provenance is incomplete' }
     if ($actual.unknown_footprints -ne $expected.unknown_physical_footprints) { throw 'Unknown footprints were not retained as NULL' }
+    if ($actual.reconciled_sealer_containers -ne 6) { throw 'Exact-part SEALER container reconciliation was not loaded' }
     if ($actual.forbidden_coordinate_keys -ne 0) { throw 'Forbidden robot/map/RDS coordinate key detected' }
     if ($actual.shared_layouts_with_two_variants -ne 3) { throw 'Shared-layout assignments are incomplete' }
     if ($actual.sealer_v3_assignments -ne 0) { throw 'SEALER V3 must remain unassigned' }
@@ -202,6 +213,7 @@ SELECT json_build_object(
         out_of_bounds_slots = [int]$actual.out_of_bounds_slots
         missing_provenance = [int]$actual.missing_provenance
         unknown_footprints = [int]$actual.unknown_footprints
+        reconciled_sealer_containers = [int]$actual.reconciled_sealer_containers
         forbidden_coordinate_keys = [int]$actual.forbidden_coordinate_keys
         shared_layouts_with_two_variants = [int]$actual.shared_layouts_with_two_variants
         logical_state_digest = $digestAfter

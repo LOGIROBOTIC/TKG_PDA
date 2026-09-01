@@ -18,7 +18,7 @@ from openpyxl.utils import column_index_from_string, get_column_letter, range_bo
 from PIL import Image, ImageDraw, ImageFont
 
 
-SCHEMA_VERSION = "phase_02b_v1"
+SCHEMA_VERSION = "phase_02b_v2"
 SOURCE_ROOT = Path("2026- OPTİMAK -ROBOT AMR") / "AMR Varyant"
 PHASE_02A_DATA = Path("data/generated/phase_02a/normalized_customer_data.json")
 
@@ -449,6 +449,7 @@ def phase_02a_context(project_root: Path) -> dict[str, Any]:
         "payload": payload,
         "parts": {item["part_code"] for item in payload["parts"]},
         "containers": {item["code"] for item in payload["container_types"]},
+        "container_records": {item["code"]: item for item in payload["container_types"]},
         "planning": payload["planning_metrics"],
     }
 
@@ -467,6 +468,7 @@ def derive_container(
     resolved_parts: list[str],
     explicit_containers: list[str],
     planning: list[dict[str, Any]],
+    allow_cross_context: bool,
 ) -> dict[str, Any]:
     evidence_rows = [
         row for row in planning
@@ -512,12 +514,35 @@ def derive_container(
             ],
             "ambiguous": False,
         }
+
+    cross_context_rows = [
+        row for row in planning
+        if allow_cross_context
+        and row["part_code"] in resolved_parts
+        and row["container_code"]
+    ]
+    cross_context_codes = sorted({row["container_code"] for row in cross_context_rows})
+    if not planning_codes and len(cross_context_codes) == 1:
+        selected = cross_context_codes[0]
+        cross_context_refs = {
+            json.dumps(ref, ensure_ascii=False, sort_keys=True): ref
+            for row in cross_context_rows
+            if row["container_code"] == selected
+            for ref in row.get("source_refs", [])
+        }
+        return {
+            "container_code": selected,
+            "evidence": "phase_02a_exact_part_cross_context",
+            "planning_container_candidates": cross_context_codes,
+            "planning_source_refs": [cross_context_refs[key] for key in sorted(cross_context_refs)],
+            "ambiguous": False,
+        }
     return {
         "container_code": None,
         "evidence": None,
-        "planning_container_candidates": planning_codes,
+        "planning_container_candidates": planning_codes or cross_context_codes,
         "planning_source_refs": [],
-        "ambiguous": len(planning_codes) > 1,
+        "ambiguous": len(planning_codes or cross_context_codes) > 1,
     }
 
 
@@ -556,6 +581,7 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
     phase02a = phase_02a_context(project_root)
     authoritative_parts: set[str] = phase02a["parts"]
     known_containers: set[str] = phase02a["containers"]
+    container_records: dict[str, dict[str, Any]] = phase02a["container_records"]
     planning: list[dict[str, Any]] = phase02a["planning"]
     issues: dict[str, dict[str, Any]] = {}
 
@@ -735,7 +761,22 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
                     resolved_parts,
                     evidence["explicit_container_codes"],
                     planning,
+                    allow_cross_context=not variant_mismatch_parts,
                 )
+                if container["evidence"] == "phase_02a_exact_part_cross_context":
+                    add_issue(
+                        issues,
+                        "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+                        "INFO",
+                        "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+                        machine_code=spec.machine_code,
+                        variant_codes=list(spec.variant_codes),
+                        layout_code=spec.code,
+                        resolved_part_codes=resolved_parts,
+                        container_code=container["container_code"],
+                        planning_source_refs=container["planning_source_refs"],
+                        source=source,
+                    )
                 if evidence["unknown_container_tokens"]:
                     add_issue(
                         issues,
@@ -789,11 +830,26 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
                         source=source,
                     )
 
-                footprint = (
-                    evidence["explicit_dimensions_mm"][0]
-                    if len(evidence["explicit_dimensions_mm"]) == 1
-                    else None
-                )
+                footprint = None
+                footprint_evidence = None
+                footprint_source_refs: list[dict[str, Any]] = []
+                if len(evidence["explicit_dimensions_mm"]) == 1:
+                    footprint = evidence["explicit_dimensions_mm"][0]
+                    footprint_evidence = "layout_label"
+                    footprint_source_refs = [source]
+                elif container["container_code"]:
+                    container_record = container_records[container["container_code"]]
+                    if all(
+                        container_record.get(field) is not None
+                        for field in ("length_mm", "width_mm", "height_mm")
+                    ):
+                        footprint = {
+                            "length_mm": container_record["length_mm"],
+                            "width_mm": container_record["width_mm"],
+                            "height_mm": container_record["height_mm"],
+                        }
+                        footprint_evidence = "phase_02a_container_master"
+                        footprint_source_refs = container_record.get("dimension_source_refs", [])
                 confidence = (
                     "HIGH"
                     if evidence["raw_part_codes"]
@@ -843,6 +899,8 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
                         "planning_source_refs": container["planning_source_refs"],
                         "container_association_unresolved": container_unresolved,
                         "physical_footprint_mm": footprint,
+                        "physical_footprint_evidence": footprint_evidence,
+                        "physical_footprint_source_refs": footprint_source_refs,
                         "geometry_basis": "excel_cell_display_grid",
                         "ignored_label_tokens": evidence["ignored_label_tokens"],
                     },
@@ -855,7 +913,7 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
                     issues,
                     "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
                     "INFO",
-                    "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+                    "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
                     machine_code=spec.machine_code,
                     layout_code=spec.code,
                     affected_slot_count=missing_footprints,
@@ -957,8 +1015,9 @@ def build_dataset(project_root: Path) -> dict[str, Any]:
         "manifest": manifest_before,
         "precedence": [
             "Colored physical-layout workbooks are authoritative for display geometry and explicit labels.",
-            "Phase 02A is the frozen canonical source for machine/variant/part/container identity and planning mappings.",
+            "Phase 02A is the canonical source for machine/variant/part/container identity, planning mappings and reconciled customer container-master evidence.",
             "Explicit layout container labels outrank Phase 02A-derived container candidates but conflicts are reported.",
+            "An exact part code may reuse one globally consistent customer planning container mapping when the local row is blank and the slot has no variant mismatch.",
             "Excel cell size is normalized only for PDA display; it is not a millimetre, robot, map, route or waypoint coordinate.",
             "No new canonical part or container is created from layout-only evidence.",
         ],

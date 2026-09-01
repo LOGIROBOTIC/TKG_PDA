@@ -1,6 +1,6 @@
 -- TKG PDA Phase 02B generated Part <-> Layout Slot assignments
--- schema_version: phase_02b_v1
--- source_digest: 734cd1c71db4708299478cbebf636231e770fe284fb58e12f8733df0bd53123c
+-- schema_version: phase_02b_v2
+-- source_digest: 678fadea1107457a1c002acf304c6a73da3315f27d398cffb397f977a75349a7
 -- curated pairs: 143; mapped logistics slots: 124
 -- unmapped logistics slots: 48 (28 unresolved evidence; 20 variant-mismatch-only)
 -- Populated ONLY where the customer-derived source relationship is

@@ -42,22 +42,6 @@
     ]
   },
   {
-    "affected_slot_count": 6,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "047e72284e0ef90d9e0f",
-    "layout_code": "CUSTOMER-PHYSICAL-V4",
-    "machine_code": "SH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "4. VARYANT",
-      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
-    }
-  },
-  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "0724526a94302fb9a26c",
@@ -76,6 +60,22 @@
       "1",
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 3,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "072ead0b32a986a7f430",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "PAH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A1:CC76",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
   },
   {
     "blocking": false,
@@ -257,22 +257,6 @@
     ]
   },
   {
-    "affected_slot_count": 8,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "0fe06aa46d0e9368a0e5",
-    "layout_code": "CUSTOMER-PHYSICAL-V2",
-    "machine_code": "GAR",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
-      "range": "A78:CC164",
-      "sheet": "2.Varyant",
-      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
-    }
-  },
-  {
     "blocking": false,
     "code": "PART_ASSOCIATION_UNRESOLVED",
     "issue_id": "1074d9dc4599ce349b38",
@@ -394,20 +378,35 @@
     ]
   },
   {
-    "affected_slot_count": 7,
     "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "13d4f8463bda66e34cdf",
-    "layout_code": "CUSTOMER-PHYSICAL-V2",
-    "machine_code": "PAH-02-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "code": "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+    "container_code": "KCK",
+    "issue_id": "1891eadc56141c8d469e",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+    "planning_source_refs": [
+      {
+        "cell": "D19",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 19,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ],
+    "resolved_part_codes": [
+      "71586BN400-20"
+    ],
     "severity": "INFO",
     "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
-      "range": "A1:CC76",
-      "sheet": "2.Varyant",
-      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
-    }
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DC2:DJ13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
   },
   {
     "blocking": false,
@@ -607,6 +606,22 @@
     ]
   },
   {
+    "affected_slot_count": 8,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "234cc9bf6b368d34a74a",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "412B",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A78:CC164",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
     "blocking": false,
     "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
     "issue_id": "246b6a63eda081e0f675",
@@ -675,22 +690,6 @@
     }
   },
   {
-    "affected_slot_count": 7,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "2bd0e6e89be4b321349c",
-    "layout_code": "CUSTOMER-PHYSICAL-V1",
-    "machine_code": "PAH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
-      "range": "A1:CC76",
-      "sheet": "1.Varyant",
-      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
-    }
-  },
-  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "2c66533bd7cb6eeabaf4",
@@ -731,22 +730,6 @@
       "1",
       "2"
     ]
-  },
-  {
-    "affected_slot_count": 10,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "2f43c7f78446d275d8bf",
-    "layout_code": "CUSTOMER-PHYSICAL-V1",
-    "machine_code": "SH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
-    }
   },
   {
     "blocking": false,
@@ -791,6 +774,38 @@
     ]
   },
   {
+    "affected_slot_count": 15,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "3253f21799132f920f34",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-01-P1--SH-01-P2",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "B1:CC138",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
+  },
+  {
+    "affected_slot_count": 2,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "35a0ae9aa28a65e05cab",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "PAH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A1:CC65",
+      "sheet": "2. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
+  },
+  {
     "blocking": false,
     "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
     "issue_id": "3781c5372a14bb8d6602",
@@ -808,6 +823,22 @@
       "1",
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 6,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "3828a48b577b338acb04",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "3.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
   },
   {
     "blocking": false,
@@ -868,6 +899,22 @@
       "1",
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 7,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "3beecc8d2952b9df6288",
+    "layout_code": "CUSTOMER-PHYSICAL-V5",
+    "machine_code": "SH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "5.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
   },
   {
     "blocking": false,
@@ -935,28 +982,6 @@
   {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
-    "issue_id": "3e0d59c15e44d53d1546",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
-    "resolved_part_codes": [
-      "71566BN400-20"
-    ],
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "CR2:CY13",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    },
-    "variant_codes": [
-      "1",
-      "2"
-    ]
-  },
-  {
-    "blocking": false,
-    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "40017ff322a913f707c8",
     "layout_code": "CUSTOMER-PHYSICAL-V3",
     "machine_code": "SH-01-A",
@@ -997,29 +1022,13 @@
     ]
   },
   {
-    "affected_slot_count": 9,
+    "affected_slot_count": 3,
     "blocking": false,
     "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "42e038641792b1fd90c8",
-    "layout_code": "CUSTOMER-PHYSICAL-V2",
-    "machine_code": "SH-01-B",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "2. VARYANT",
-      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
-    }
-  },
-  {
-    "affected_slot_count": 8,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "434c580751586bfa38a7",
+    "issue_id": "439b058f1ccdec27ea16",
     "layout_code": "CUSTOMER-PHYSICAL-V3",
     "machine_code": "412B",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
     "severity": "INFO",
     "source": {
       "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
@@ -1081,28 +1090,6 @@
     "source": {
       "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
       "range": "EJ2:EQ13",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    },
-    "variant_codes": [
-      "1",
-      "2"
-    ]
-  },
-  {
-    "blocking": false,
-    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
-    "issue_id": "47395ed7f4f17ecc2217",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
-    "resolved_part_codes": [
-      "71517BN400-20"
-    ],
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "CG2:CN13",
       "sheet": "1. VARYANT",
       "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
     },
@@ -1251,22 +1238,6 @@
     ]
   },
   {
-    "affected_slot_count": 8,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "527e6fdadf4c7719a690",
-    "layout_code": "CUSTOMER-PHYSICAL-V1",
-    "machine_code": "412B",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
-      "range": "A78:CC164",
-      "sheet": "1.Varyant",
-      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
-    }
-  },
-  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "534b3b05667493e18e79",
@@ -1385,22 +1356,6 @@
     ]
   },
   {
-    "affected_slot_count": 9,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "587c301d5a414c0b9b0a",
-    "layout_code": "CUSTOMER-PHYSICAL-V3",
-    "machine_code": "SH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "3.VARYANT",
-      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
-    }
-  },
-  {
     "blocking": false,
     "code": "PART_ASSOCIATION_UNRESOLVED",
     "issue_id": "5cec42c21b0447963b82",
@@ -1463,22 +1418,6 @@
     ]
   },
   {
-    "affected_slot_count": 6,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "5f719acefbf2f777b13c",
-    "layout_code": "CUSTOMER-PHYSICAL-V1",
-    "machine_code": "PAH-02-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
-      "range": "A1:CC65",
-      "sheet": "1.Varyant",
-      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
-    }
-  },
-  {
     "blocking": false,
     "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
     "issue_id": "60ceb0e2533fb2c1bec1",
@@ -1495,6 +1434,22 @@
     "variant_codes": [
       "4"
     ]
+  },
+  {
+    "affected_slot_count": 6,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "6152a2bd545d7a369361",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "SH-01-B",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "3. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
   },
   {
     "blocking": false,
@@ -1518,17 +1473,33 @@
     ]
   },
   {
-    "affected_slot_count": 9,
+    "affected_slot_count": 6,
     "blocking": false,
     "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "6a229fb24d15b677c590",
+    "issue_id": "68c48f74020fc976cddf",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "GAR",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A78:CC164",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
+    "affected_slot_count": 11,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "68e694d0de8ef4916444",
     "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SH-02-P1 -SH-02-P2",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "machine_code": "SEALER",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
     "severity": "INFO",
     "source": {
       "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "FI1:IG138",
+      "range": "CG1:FH138",
       "sheet": "1. VARYANT",
       "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
     }
@@ -1609,6 +1580,22 @@
     }
   },
   {
+    "affected_slot_count": 3,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "71172e587778374bf4d8",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "PAH-02-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A1:CC76",
+      "sheet": "2.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
     "blocking": false,
     "code": "PART_ASSOCIATION_UNRESOLVED",
     "issue_id": "7263490c1c68ffcf5b5c",
@@ -1650,28 +1637,6 @@
   {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
-    "issue_id": "737ab43857ac6f3c8e17",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
-    "resolved_part_codes": [
-      "71556BN400-20"
-    ],
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "CR126:CY137",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    },
-    "variant_codes": [
-      "1",
-      "2"
-    ]
-  },
-  {
-    "blocking": false,
-    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "74506744a396f8192a8b",
     "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
     "machine_code": "SH-01-P1--SH-01-P2",
@@ -1690,6 +1655,22 @@
       "1",
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "74735fd8ccd997cb18c0",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
   },
   {
     "blocking": false,
@@ -1749,44 +1730,6 @@
     "variant_codes": [
       "2"
     ]
-  },
-  {
-    "blocking": false,
-    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
-    "issue_id": "7fbb5dfb52aeb03f31ca",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
-    "resolved_part_codes": [
-      "71586BN400-20"
-    ],
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "DC2:DJ13",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    },
-    "variant_codes": [
-      "1",
-      "2"
-    ]
-  },
-  {
-    "affected_slot_count": 6,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "801bd3cfcd9b9603ae67",
-    "layout_code": "CUSTOMER-PHYSICAL-V2",
-    "machine_code": "PAH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
-      "range": "A1:CC65",
-      "sheet": "2. Varyant",
-      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
-    }
   },
   {
     "blocking": false,
@@ -1871,6 +1814,43 @@
   },
   {
     "blocking": false,
+    "code": "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+    "container_code": "4311",
+    "issue_id": "8c41d5a6edc163a880a6",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+    "planning_source_refs": [
+      {
+        "cell": "D16",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 16,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      },
+      {
+        "cell": "D25",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 25,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ],
+    "resolved_part_codes": [
+      "71517BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CG2:CN13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "8fa32f345e4e19f93703",
     "layout_code": "CUSTOMER-PHYSICAL-V3",
@@ -1889,6 +1869,22 @@
     "variant_codes": [
       "3"
     ]
+  },
+  {
+    "affected_slot_count": 9,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "92f32d9175ed5549323b",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SH-02-P1 -SH-02-P2",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "FI1:IG138",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    }
   },
   {
     "blocking": false,
@@ -1910,19 +1906,19 @@
     ]
   },
   {
-    "affected_slot_count": 7,
+    "affected_slot_count": 6,
     "blocking": false,
     "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "96b1e2844d209ccdf2d4",
-    "layout_code": "CUSTOMER-PHYSICAL-V5",
-    "machine_code": "SH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "issue_id": "9781b0e4ae540de19a7f",
+    "layout_code": "CUSTOMER-PHYSICAL-V3",
+    "machine_code": "GAR",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
     "severity": "INFO",
     "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "5.VARYANT",
-      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A78:CC164",
+      "sheet": "3.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
     }
   },
   {
@@ -1945,22 +1941,6 @@
     "variant_codes": [
       "2"
     ]
-  },
-  {
-    "affected_slot_count": 8,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "9936f7e2d913d3a44b0a",
-    "layout_code": "CUSTOMER-PHYSICAL-V3",
-    "machine_code": "GAR",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
-      "range": "A78:CC164",
-      "sheet": "3.Varyant",
-      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
-    }
   },
   {
     "blocking": false,
@@ -2002,6 +1982,37 @@
   },
   {
     "blocking": false,
+    "code": "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+    "container_code": "KCK",
+    "issue_id": "9add4136f45ae7eff586",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+    "planning_source_refs": [
+      {
+        "cell": "D11",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 11,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ],
+    "resolved_part_codes": [
+      "71556BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CR126:CY137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
     "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
     "issue_id": "9b7ac12597f51f2ef8e3",
     "message": "Merged template artifact is outside every proven machine extraction region.",
@@ -2031,6 +2042,22 @@
     "variant_codes": [
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 5,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "9d09f5a45eb374518a5f",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "412B",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
+      "range": "A67:CC164",
+      "sheet": "2. Varyant",
+      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
+    }
   },
   {
     "blocking": false,
@@ -2122,22 +2149,6 @@
     }
   },
   {
-    "affected_slot_count": 9,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "a19182e6a71910598ec4",
-    "layout_code": "CUSTOMER-PHYSICAL-V1",
-    "machine_code": "SH-01-B",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
-    }
-  },
-  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "a4df42143d56a4ea4552",
@@ -2157,6 +2168,22 @@
     "variant_codes": [
       "3"
     ]
+  },
+  {
+    "affected_slot_count": 5,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "a56ffe3beace0f9be94a",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "GAR",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A67:CC164",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
   },
   {
     "blocking": false,
@@ -2195,6 +2222,22 @@
     "variant_codes": [
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 5,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "b0457232a8a0ef233580",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "2.VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
   },
   {
     "blocking": false,
@@ -2354,28 +2397,6 @@
   },
   {
     "blocking": false,
-    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
-    "issue_id": "b8e9e027573afd65dd82",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
-    "resolved_part_codes": [
-      "71517BN400-20"
-    ],
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "CG126:CN137",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    },
-    "variant_codes": [
-      "1",
-      "2"
-    ]
-  },
-  {
-    "blocking": false,
     "code": "LOW_CONFIDENCE_CANDIDATE_EXCLUDED",
     "issue_id": "b8fa6448808b936c6266",
     "message": "Merged template artifact is outside every proven machine extraction region.",
@@ -2401,6 +2422,37 @@
       "sheet": "1. VARYANT",
       "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
     }
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+    "container_code": "KCK",
+    "issue_id": "b975dc6809cf853689d9",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+    "planning_source_refs": [
+      {
+        "cell": "D10",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 10,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ],
+    "resolved_part_codes": [
+      "71576BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "DC126:DJ137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
   },
   {
     "blocking": false,
@@ -2462,6 +2514,22 @@
     ]
   },
   {
+    "affected_slot_count": 7,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "c0d02add682d2346486d",
+    "layout_code": "CUSTOMER-PHYSICAL-V2",
+    "machine_code": "SH-01-B",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "2. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
+  },
+  {
     "blocking": false,
     "code": "SOURCE_PART_NOT_PLANNED_FOR_LAYOUT_VARIANT",
     "issue_id": "c518fb8d877b8fd7674a",
@@ -2481,20 +2549,41 @@
     ]
   },
   {
-    "affected_slot_count": 9,
     "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "c8f99c483919c7d9d7a2",
-    "layout_code": "CUSTOMER-PHYSICAL-V3",
-    "machine_code": "SH-01-B",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
+    "code": "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+    "container_code": "4311",
+    "issue_id": "c5c153c1c88ec444784f",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+    "planning_source_refs": [
+      {
+        "cell": "D16",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 16,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      },
+      {
+        "cell": "D25",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 25,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ],
+    "resolved_part_codes": [
+      "71517BN400-20"
+    ],
     "severity": "INFO",
     "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "3. VARYANT",
-      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
-    }
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CG126:CN137",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
+    "variant_codes": [
+      "1",
+      "2"
+    ]
   },
   {
     "blocking": false,
@@ -2516,6 +2605,22 @@
       "1",
       "2"
     ]
+  },
+  {
+    "affected_slot_count": 7,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "c995137a6d55cabce68e",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "SH-01-B",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-B HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "c9adf7b015ff54b8bc81954d4120767a89464b31071dfb738d165b9d6805139d"
+    }
   },
   {
     "blocking": false,
@@ -2548,22 +2653,6 @@
       "range": "BR24:CC31",
       "sheet": "3. Varyant",
       "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
-    }
-  },
-  {
-    "affected_slot_count": 15,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "cf471a01b3d38fb452e6",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "CG1:FH138",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
     }
   },
   {
@@ -2714,6 +2803,22 @@
     ]
   },
   {
+    "affected_slot_count": 4,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "dd80c927170f4b127b5c",
+    "layout_code": "CUSTOMER-PHYSICAL-V4",
+    "machine_code": "SH-01-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
+      "range": "A1:CQ72",
+      "sheet": "4. VARYANT",
+      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
+    }
+  },
+  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "ddb0fb9b906ec89fdcd0",
@@ -2737,28 +2842,6 @@
   {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
-    "issue_id": "ddb785da283623900dc5",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SEALER",
-    "message": "Slot is imported with NULL default_container_type_id; no unique source-backed mapping exists.",
-    "resolved_part_codes": [
-      "71576BN400-20"
-    ],
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "DC126:DJ137",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    },
-    "variant_codes": [
-      "1",
-      "2"
-    ]
-  },
-  {
-    "blocking": false,
-    "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "df71db0f7cd91cfddbd8",
     "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
     "machine_code": "SH-01-P1--SH-01-P2",
@@ -2777,38 +2860,6 @@
       "1",
       "2"
     ]
-  },
-  {
-    "affected_slot_count": 9,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "e00714dee6042b3c198d",
-    "layout_code": "CUSTOMER-PHYSICAL-V2",
-    "machine_code": "SH-01-A",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-A HÜCRESİ VARYANT KUTU YERLEŞİMİ.xlsx",
-      "range": "A1:CQ72",
-      "sheet": "2.VARYANT",
-      "workbook_sha256": "91abcb5842112b1cb642f011dd153f4198019a82cf78ee76694444d62606dfd4"
-    }
-  },
-  {
-    "affected_slot_count": 9,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "e1e1be7e472433414c5a",
-    "layout_code": "CUSTOMER-PHYSICAL-V1",
-    "machine_code": "GAR",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
-      "range": "A67:CC164",
-      "sheet": "1.Varyant",
-      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
-    }
   },
   {
     "blocking": false,
@@ -2869,22 +2920,6 @@
       "1",
       "2"
     ]
-  },
-  {
-    "affected_slot_count": 9,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "e6a27ac01336ebd7f157",
-    "layout_code": "CUSTOMER-PHYSICAL-V2",
-    "machine_code": "412B",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-01-A-412B.xlsx",
-      "range": "A67:CC164",
-      "sheet": "2. Varyant",
-      "workbook_sha256": "8565a1f1e9e4f6a7849879c409a8fc2f4d381e9d0463c88e6e5204eaef81aef0"
-    }
   },
   {
     "blocking": false,
@@ -3003,6 +3038,22 @@
     ]
   },
   {
+    "affected_slot_count": 2,
+    "blocking": false,
+    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
+    "issue_id": "f06442e5847ab957b560",
+    "layout_code": "CUSTOMER-PHYSICAL-V1",
+    "machine_code": "PAH-02-A",
+    "message": "No source-backed nominal container dimensions are available for these regions; Excel display geometry is not converted to millimetres.",
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/PAH-02-A-GAR.xlsx",
+      "range": "A1:CC65",
+      "sheet": "1.Varyant",
+      "workbook_sha256": "0140d5b7fc7b0360bed6bdbd3c54becf8101724a5bcb2369fa6f0db1a52e0f33"
+    }
+  },
+  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "f12718022ff76c86287e",
@@ -3087,22 +3138,6 @@
     ]
   },
   {
-    "affected_slot_count": 15,
-    "blocking": false,
-    "code": "PHYSICAL_FOOTPRINT_NOT_PROVIDED",
-    "issue_id": "f4bf2cb27f25bc89b663",
-    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
-    "machine_code": "SH-01-P1--SH-01-P2",
-    "message": "Excel display rectangles have no trusted physical unit; no millimetre footprint is inferred.",
-    "severity": "INFO",
-    "source": {
-      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
-      "range": "B1:CC138",
-      "sheet": "1. VARYANT",
-      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
-    }
-  },
-  {
     "blocking": false,
     "code": "CONTAINER_ASSOCIATION_UNRESOLVED",
     "issue_id": "f4fb502b960a9d788526",
@@ -3160,6 +3195,37 @@
       "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
     },
     "unresolved_part_codes": [],
+    "variant_codes": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "blocking": false,
+    "code": "CONTAINER_MAPPING_DERIVED_FROM_EXACT_PART",
+    "container_code": "KCK",
+    "issue_id": "fd2ed4392d565632eca7",
+    "layout_code": "CUSTOMER-PHYSICAL-SHARED-V1-V2",
+    "machine_code": "SEALER",
+    "message": "The slot's exact part code has one consistent container code in another customer planning context; the relationship is reused without inferring from category or geometry.",
+    "planning_source_refs": [
+      {
+        "cell": "D20",
+        "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/AMR Çalışma Planı.xlsx",
+        "row": 20,
+        "sheet": "SH-02-P1 -SH-02-P2"
+      }
+    ],
+    "resolved_part_codes": [
+      "71566BN400-20"
+    ],
+    "severity": "INFO",
+    "source": {
+      "file": "2026- OPTİMAK -ROBOT AMR/AMR Varyant/SH-01-P1--SH-01-P2-SH-02-P1 -SH-02-P2.xlsx",
+      "range": "CR2:CY13",
+      "sheet": "1. VARYANT",
+      "workbook_sha256": "d7c6f5cf5d8102bfbbdfaf44c39b98c87bbca830e3cf3d93d1cfcec39503ae46"
+    },
     "variant_codes": [
       "1",
       "2"

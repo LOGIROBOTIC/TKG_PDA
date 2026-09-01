@@ -100,8 +100,31 @@ class Phase02BPipelineTests(unittest.TestCase):
         walk(self.dataset)
 
     def test_07_unknown_physical_dimensions_remain_null(self) -> None:
-        self.assertTrue(all(item["metadata"]["physical_footprint_mm"] is None for item in self.dataset["layout_slots"]))
-        self.assertEqual(self.dataset["counts"]["unknown_physical_footprints"], len(self.dataset["layout_slots"]))
+        known = [
+            item for item in self.dataset["layout_slots"]
+            if item["metadata"]["physical_footprint_mm"] is not None
+        ]
+        self.assertEqual(len(known), 54)
+        self.assertTrue(all(item["slot_role"] != "MACHINE" for item in known))
+        self.assertTrue(all(
+            item["metadata"]["physical_footprint_evidence"] == "phase_02a_container_master"
+            for item in known
+        ))
+        self.assertTrue(all(
+            item["default_container_code"] in {"1284", "BYK", "ORT", "KCK"}
+            for item in known
+        ))
+        self.assertEqual(self.dataset["counts"]["unknown_physical_footprints"], 129)
+
+    def test_07b_exact_part_cross_context_container_mapping_is_safe(self) -> None:
+        derived = [
+            item for item in self.dataset["layout_slots"]
+            if item["metadata"].get("container_evidence") == "phase_02a_exact_part_cross_context"
+        ]
+        self.assertEqual(len(derived), 6)
+        self.assertEqual({item["machine_code"] for item in derived}, {"SEALER"})
+        self.assertEqual({item["default_container_code"] for item in derived}, {"4311", "KCK"})
+        self.assertTrue(all(not item["metadata"]["variant_mismatch_part_codes"] for item in derived))
 
     def test_08_unknown_parts_do_not_create_master_data(self) -> None:
         canonical = {item["part_code"] for item in self.phase02a["parts"]}

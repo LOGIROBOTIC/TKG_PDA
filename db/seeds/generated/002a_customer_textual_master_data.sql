@@ -1,6 +1,6 @@
 -- TKG PDA Phase 02A generated textual customer master data
--- schema_version: phase_02a_v1
--- source_digest: 7f203a6d3c1324f1b1065bdb9a02830669dc0cda76b73377831edef2413e5f67
+-- schema_version: phase_02a_v2
+-- source_digest: 5e26bc18d3a34867c9ce211157b9af00de1c5e20753e85493591f759a527802f
 -- deterministic output; do not edit by hand
 
 BEGIN;
@@ -170,24 +170,30 @@ VALUES
     ('G92LA0H010-40', NULL)
 ON CONFLICT (part_code) DO NOTHING;
 
-INSERT INTO master.container_types (code, name, category)
+INSERT INTO master.container_types (code, name, category, length_mm, width_mm, height_mm)
 VALUES
-    ('1284', '1284', 'OTHER'),
-    ('1285', '1285', 'OTHER'),
-    ('285C', '285C', 'OTHER'),
-    ('4311', '4311', 'BOX'),
-    ('4322', '4322', 'BOX'),
-    ('4622', '4622', 'BOX'),
-    ('ARABA', 'ARABA', 'OTHER'),
-    ('BYK', 'BYK', 'CONTAINER'),
-    ('KCK', 'KCK', 'OTHER'),
-    ('ORT', 'ORT', 'OTHER')
+    ('1284', '1284', 'CONTAINER', 1200, 800, 400),
+    ('1285', '1285', 'OTHER', NULL, NULL, NULL),
+    ('285C', '285C', 'CONTAINER', NULL, NULL, NULL),
+    ('4311', '4311', 'BOX', NULL, NULL, NULL),
+    ('4322', '4322', 'BOX', NULL, NULL, NULL),
+    ('4622', '4622', 'BOX', NULL, NULL, NULL),
+    ('ARABA', 'ARABA', 'CART', NULL, NULL, NULL),
+    ('BYK', 'BYK', 'CONTAINER', 1200, 750, 600),
+    ('KCK', 'KCK', 'CONTAINER', 800, 550, 450),
+    ('ORT', 'ORT', 'CONTAINER', 950, 650, 550)
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
     category = EXCLUDED.category,
+    length_mm = EXCLUDED.length_mm,
+    width_mm = EXCLUDED.width_mm,
+    height_mm = EXCLUDED.height_mm,
     updated_at = now()
 WHERE master.container_types.name IS DISTINCT FROM EXCLUDED.name
-   OR master.container_types.category IS DISTINCT FROM EXCLUDED.category;
+   OR master.container_types.category IS DISTINCT FROM EXCLUDED.category
+   OR master.container_types.length_mm IS DISTINCT FROM EXCLUDED.length_mm
+   OR master.container_types.width_mm IS DISTINCT FROM EXCLUDED.width_mm
+   OR master.container_types.height_mm IS DISTINCT FROM EXCLUDED.height_mm;
 
 WITH source(machine_code, variant_code, main_part_code, name, display_order) AS (
 VALUES

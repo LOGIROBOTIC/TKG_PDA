@@ -35,6 +35,47 @@ void main() {
     harness.dispose();
   });
 
+  testWidgets('small main-part lists keep one-tap selection without search', (
+    tester,
+  ) async {
+    final harness = await _harness(tester);
+
+    expect(harness.controller.partOptions.length, lessThanOrEqualTo(10));
+    expect(find.byKey(const Key('main-part-search')), findsNothing);
+    harness.dispose();
+  });
+
+  testWidgets('long main-part lists can be filtered by customer part code', (
+    tester,
+  ) async {
+    final options = List.generate(
+      11,
+      (index) => MachineMainPartOption(
+        partId: 'long-part-$index',
+        partCode: 'CUSTOMER-${index.toString().padLeft(2, '0')}',
+        description: null,
+        relatedParts: const [],
+      ),
+    );
+    final repository = FakePdaRepository()..partOptionsValue = options;
+    final harness = await _harness(tester, repository: repository);
+
+    expect(find.byKey(const Key('main-part-search')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('main-part-search')),
+      'customer-07',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('main-part-long-part-7')), findsOneWidget);
+    expect(find.byKey(const Key('main-part-long-part-6')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('clear-main-part-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('main-part-long-part-6')), findsOneWidget);
+    harness.dispose();
+  });
+
   testWidgets(
     'one click on a main part makes it the effective part and starts the '
     'compatible-variant lookup, with no second confirmation chip',

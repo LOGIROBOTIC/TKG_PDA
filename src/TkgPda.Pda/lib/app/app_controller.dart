@@ -100,6 +100,7 @@ class AppController extends ChangeNotifier {
   bool _resumeValidationPending = false;
   ApiProblem? _problem;
   String? _notice;
+  String? _submittingOperation;
   Timer? _pollTimer;
   TransportCommand? _ambiguousCommand;
 
@@ -149,6 +150,7 @@ class AppController extends ChangeNotifier {
   bool get offline => _offline;
   ApiProblem? get problem => _problem;
   String? get notice => _notice;
+  String? get submittingOperation => _submittingOperation;
   bool get hasAmbiguousSubmission => _submission.hasAmbiguousRequest;
   bool get mutationEnabled =>
       !_offline &&
@@ -927,6 +929,7 @@ class AppController extends ChangeNotifier {
       return null;
     }
     _setBusy(true);
+    _submittingOperation = command.operation;
     _clearFeedback();
     try {
       final result = await _submission.submit(
@@ -956,10 +959,11 @@ class AppController extends ChangeNotifier {
       }
       _problem = problem;
       return null;
-    } on StateError catch (error) {
-      _notice = error.message;
+    } on StateError {
+      _notice = 'İşlem bilgileri değişti. Durumu yenileyip tekrar deneyin.';
       return null;
     } finally {
+      _submittingOperation = null;
       _setBusy(false);
     }
   }

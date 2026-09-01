@@ -101,6 +101,7 @@ void main() {
       find.text('Oturumunuz sona erdi. Lütfen yeniden giriş yapın.'),
       findsOneWidget,
     );
+    expect(find.textContaining('corr-login'), findsNothing);
     harness.dispose();
   });
 
@@ -123,13 +124,17 @@ void main() {
     harness.dispose();
   });
 
-  testWidgets('machine list renders only repository values', (tester) async {
+  testWidgets('machine list renders customer values without permission chips', (
+    tester,
+  ) async {
     final repository = FakePdaRepository();
     final harness = await _loggedInHarness(tester, repository: repository);
 
     expect(find.byKey(Key('machine-${testMachine.id}')), findsOneWidget);
     expect(find.text(testMachine.code), findsOneWidget);
-    expect(find.text('Operasyon'), findsOneWidget);
+    expect(find.text('Görüntüleme'), findsNothing);
+    expect(find.text('Operasyon'), findsNothing);
+    expect(find.text('Varyant'), findsNothing);
     harness.dispose();
   });
 
@@ -144,6 +149,32 @@ void main() {
       find.textContaining('Size tanımlı makine bulunamadı'),
       findsOneWidget,
     );
+    harness.dispose();
+  });
+
+  testWidgets('a view-only machine shows one understandable limitation', (
+    tester,
+  ) async {
+    final viewOnly = MachineSummary(
+      id: '30000000-0000-0000-0000-000000000099',
+      code: 'VIEW-ONLY',
+      displayName: 'Görüntülenebilir Makine',
+      displayOrder: 99,
+      permissions: const MachinePermissions(
+        canView: true,
+        canOperate: false,
+        canChangeVariant: false,
+        canManageSlots: false,
+      ),
+    );
+    final repository = FakePdaRepository()..machineValues = [viewOnly];
+    final harness = await _loggedInHarness(tester, repository: repository);
+
+    expect(
+      find.text('Bu makinede taşıma işlemi yapamazsınız.'),
+      findsOneWidget,
+    );
+    expect(find.text('Operasyon'), findsNothing);
     harness.dispose();
   });
 
@@ -210,7 +241,15 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
       await tester.pumpAndSettle();
-      expect(find.text('Sistem tarafından seçilecek'), findsOneWidget);
+      expect(find.text('Boş kasa getirmek istiyor musunuz?'), findsOneWidget);
+      expect(find.text('Sistem tarafından seçilecek'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('confirm-direct-transport')),
+          matching: find.text('Boş Kasa Getir'),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('confirm-direct-transport')));
       await tester.pumpAndSettle();
 
@@ -234,31 +273,56 @@ void main() {
             .onPressed,
         isNull,
       );
-      expect(
-        find.text('Bu işlem için aktif bir taşıma talebi var.'),
-        findsOneWidget,
-      );
+      expect(find.text('Aktif taşıma: 1'), findsOneWidget);
       harness.dispose();
     });
 
-    for (final operation in const ['REMOVE_FULL', 'REMOVE_EMPTY']) {
-      testWidgets('$operation submits without a client physical slot', (
-        tester,
-      ) async {
-        final repository = FakePdaRepository();
-        final harness = await _operationHarness(tester, repository: repository);
+    for (final operationCase in const [
+      (
+        operation: 'REMOVE_FULL',
+        question: 'Dolu kasayı kaldırmak istiyor musunuz?',
+        label: 'Dolu Kasayı Kaldır',
+      ),
+      (
+        operation: 'REMOVE_EMPTY',
+        question: 'Boş kasayı kaldırmak istiyor musunuz?',
+        label: 'Boş Kasayı Kaldır',
+      ),
+    ]) {
+      testWidgets(
+        '${operationCase.operation} submits without a client physical slot',
+        (tester) async {
+          final repository = FakePdaRepository();
+          final harness = await _operationHarness(
+            tester,
+            repository: repository,
+          );
 
-        await _scrollTo(tester, find.byKey(Key('direct-action-$operation')));
-        await tester.tap(find.byKey(Key('direct-action-$operation')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-        await tester.pumpAndSettle();
+          await _scrollTo(
+            tester,
+            find.byKey(Key('direct-action-${operationCase.operation}')),
+          );
+          await tester.tap(
+            find.byKey(Key('direct-action-${operationCase.operation}')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text(operationCase.question), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byKey(const Key('confirm-direct-transport')),
+              matching: find.text(operationCase.label),
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(find.byKey(const Key('confirm-direct-transport')));
+          await tester.pumpAndSettle();
 
-        expect(repository.lastCommand!.operation, operation);
-        expect(repository.lastCommand!.sourceSlotId, isNull);
-        expect(repository.lastCommand!.destinationSlotId, isNull);
-        harness.dispose();
-      });
+          expect(repository.lastCommand!.operation, operationCase.operation);
+          expect(repository.lastCommand!.sourceSlotId, isNull);
+          expect(repository.lastCommand!.destinationSlotId, isNull);
+          harness.dispose();
+        },
+      );
     }
 
     for (final errorCase in const [
@@ -323,6 +387,7 @@ void main() {
     await tester.pump();
 
     expect(harness.controller.busy, isTrue);
+    expect(find.text('Talep gönderiliyor...'), findsOneWidget);
     expect(
       tester
           .widget<ElevatedButton>(
@@ -415,12 +480,13 @@ void main() {
     await _scrollTo(tester, find.byKey(const Key('active-transport-section')));
     expect(find.text('Robot bekleniyor'), findsOneWidget);
     expect(find.text('#42 · Boş Kasa Getir'), findsOneWidget);
+    expect(find.text('Aktif taşıma: 1'), findsOneWidget);
     expect(find.textContaining('AGV'), findsNothing);
     harness.dispose();
   });
 
   testWidgets(
-    'failure state prioritizes operator message and support reference',
+    'failure state shows operational language without technical references',
     (tester) async {
       final failure = _failureRequest();
       final repository = FakePdaRepository()
@@ -433,7 +499,8 @@ void main() {
       );
       expect(find.text('Tamamlanamadı'), findsOneWidget);
       expect(find.text('Robot görevi tamamlayamadı.'), findsOneWidget);
-      expect(find.text('Destek referansı'), findsOneWidget);
+      expect(find.text('Destek referansı'), findsNothing);
+      expect(find.textContaining('failure-correlation'), findsNothing);
       harness.dispose();
     },
   );

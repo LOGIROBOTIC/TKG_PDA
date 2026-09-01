@@ -4,10 +4,11 @@ import '../../app/app_controller.dart';
 import '../../data/models/pda_models.dart';
 import '../../shared/presentation.dart';
 
-/// Final Operator action surface. The Operator chooses only the business
-/// operation; the backend resolves every physical source/destination slot.
-class OperatorTransportPanel extends StatelessWidget {
-  const OperatorTransportPanel({required this.controller, super.key});
+/// Stable PDA action surface. It remains reachable after the effective part
+/// and compatible variant are resolved; the backend still owns every physical
+/// source/destination decision.
+class OperatorTransportActions extends StatelessWidget {
+  const OperatorTransportActions({required this.controller, super.key});
 
   final AppController controller;
 
@@ -18,22 +19,17 @@ class OperatorTransportPanel extends StatelessWidget {
     if (!controller.transportActionsReady) {
       return const SizedBox.shrink();
     }
-    final requests = controller.context?.activeTransportRequests ?? const [];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _ActionCard(controller: controller),
-        if (requests.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _ActiveTransportSection(requests: requests, controller: controller),
-        ],
-      ],
+    return Material(
+      key: const Key('direct-actions'),
+      elevation: 10,
+      color: Colors.white,
+      child: SafeArea(top: false, child: _ActionArea(controller: controller)),
     );
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({required this.controller});
+class _ActionArea extends StatelessWidget {
+  const _ActionArea({required this.controller});
 
   final AppController controller;
 
@@ -44,33 +40,65 @@ class _ActionCard extends StatelessWidget {
     if (!canOperate) return const SizedBox.shrink();
 
     final effectivePart = controller.selectedEffectivePart!;
-    final mainPart = controller.selectedMainPart;
-    return Card(
-      key: const Key('direct-actions'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Taşıma İşlemi',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-            ),
+    final variant = controller.resolvedCompatibleVariant!;
+    final machine = controller.selectedMachine!;
+    final submitting = controller.submittingOperation;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${machine.code} · ${effectivePart.partCode} · ${variant.variantCode}',
+            key: const Key('operation-effective-part'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          if (submitting != null) ...[
             const SizedBox(height: 4),
-            Text(
-              effectivePart.isMain || mainPart == null
-                  ? 'Parça: ${effectivePart.partCode}'
-                  : 'Ana parça: ${mainPart.partCode} · İşlem parçası: ${effectivePart.partCode}',
-              key: const Key('operation-effective-part'),
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            const Row(
+              key: Key('transport-submitting'),
+              children: [
+                SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Talep gönderiliyor...',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            const Text('Fiziksel konumu sistem otomatik seçecek.'),
-            const SizedBox(height: 12),
-            for (final operation in OperatorTransportPanel._operations)
-              _OperationButton(operation: operation, controller: controller),
           ],
-        ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 82,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final operation in OperatorTransportActions._operations)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right:
+                            operation ==
+                                OperatorTransportActions._operations.last
+                            ? 0
+                            : 6,
+                      ),
+                      child: _OperationButton(
+                        operation: operation,
+                        controller: controller,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -86,27 +114,24 @@ class _OperationButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final inProgress = controller.operationInProgress(operation);
     final enabled = controller.mutationEnabled && !inProgress;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    return ElevatedButton(
+      key: Key('direct-action-$operation'),
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+      ),
+      onPressed: enabled ? () => _confirm(context) : null,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              key: Key('direct-action-$operation'),
-              onPressed: enabled ? () => _confirm(context) : null,
-              child: Text(actionLabel(operation)),
-            ),
+          Icon(actionIcon(operation), size: 24),
+          const SizedBox(height: 3),
+          Text(
+            actionLabel(operation),
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
           ),
-          if (inProgress)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text(
-                'Bu işlem için aktif bir taşıma talebi var.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
-              ),
-            ),
         ],
       ),
     );
@@ -132,31 +157,42 @@ class _OperationButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Taşıma Talebini Onaylayın',
-                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+              Text(
+                actionQuestion(operation),
+                key: const Key('operation-confirmation-question'),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-              const SizedBox(height: 16),
-              _ConfirmationLine('Makine', machineCode),
-              _ConfirmationLine('Varyant', variantCode),
-              _ConfirmationLine('Parça', partCode),
-              _ConfirmationLine('Konum', 'Sistem tarafından seçilecek'),
-              _ConfirmationLine('İşlem', actionLabel(operation)),
+              const SizedBox(height: 12),
+              Text(
+                '$machineCode · $partCode · $variantCode',
+                key: const Key('operation-confirmation-context'),
+                style: const TextStyle(
+                  color: Color(0xFF475569),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('İptal'),
+                      child: const Text('Vazgeç'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
+                    child: ElevatedButton.icon(
                       key: const Key('confirm-direct-transport'),
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Onayla'),
+                      icon: Icon(actionIcon(operation)),
+                      label: Text(
+                        actionLabel(operation),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                 ],
@@ -175,35 +211,11 @@ class _OperationButton extends StatelessWidget {
   }
 }
 
-class _ConfirmationLine extends StatelessWidget {
-  const _ConfirmationLine(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-        Expanded(child: Text(value)),
-      ],
-    ),
-  );
-}
-
-class _ActiveTransportSection extends StatelessWidget {
-  const _ActiveTransportSection({
+class OperatorActiveTransportList extends StatelessWidget {
+  const OperatorActiveTransportList({
     required this.requests,
     required this.controller,
+    super.key,
   });
 
   final List<ActiveTransportRequest> requests;
@@ -281,24 +293,11 @@ class _TransportCard extends StatelessWidget {
                 Chip(label: Text(executionStateLabel(execution.state))),
               ],
             ),
-            if (execution.agvId != null) Text('Atanan AGV: ${execution.agvId}'),
             if (execution.failureCode != null)
               Text(
                 failureLabel(execution.failureCode, execution.operatorMessage),
                 key: const Key('operator-failure-message'),
                 style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            if (execution.correlationId.isNotEmpty)
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: const Text('Destek referansı'),
-                children: [
-                  SelectableText(execution.correlationId),
-                  if (execution.technicalMessage != null)
-                    SelectableText(
-                      'Teknik ayrıntı: ${execution.technicalMessage}',
-                    ),
-                ],
               ),
             if (request.canCancel)
               OutlinedButton.icon(

@@ -659,7 +659,7 @@ class _SlotDetails extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${slot.displayName} · ${slot.code}',
+                    operatorLocationLabel(slot.displayName, slot.code),
                     style: const TextStyle(
                       fontSize: 21,
                       fontWeight: FontWeight.w900,

@@ -58,6 +58,26 @@ String readinessLabel(String? code) => switch (code) {
 String knownOr(String? value) =>
     value == null || value.trim().isEmpty ? 'Tanımlı değil' : value;
 
+/// Returns the customer-facing part/location evidence without exposing the
+/// generated database slot code. Slot codes remain available to Admin and the
+/// backend, but they are not knowledge a line Operator needs for routing.
+String operatorLocationLabel(String? displayName, String? slotCode) {
+  var label = displayName?.trim() ?? '';
+  final code = slotCode?.trim() ?? '';
+  if (code.isNotEmpty && label.startsWith(code)) {
+    label = label.substring(code.length).trimLeft();
+    for (final separator in const ['—', '–', '·', '-', ':']) {
+      if (label.startsWith(separator)) {
+        label = label.substring(separator.length).trimLeft();
+        break;
+      }
+    }
+  }
+  if (label.isEmpty || label == code) return 'Konum';
+  if (label.toLowerCase() == 'unresolved') return 'Eşleşmesi beklenen konum';
+  return label;
+}
+
 /// The backend always supplies a friendly Turkish `disabledMessage` today.
 /// This is defensive hardening only, so a raw uppercase code (e.g.
 /// `SLOT_BUSY`) is never shown to the operator if that ever stops being true.

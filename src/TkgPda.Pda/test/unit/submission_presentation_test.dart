@@ -7,6 +7,29 @@ import 'package:tkg_pda/features/transport/submission_coordinator.dart';
 import 'package:tkg_pda/shared/presentation.dart';
 
 void main() {
+  group('operator location presentation', () {
+    test('generated slot code is stripped from customer-facing text', () {
+      expect(
+        operatorLocationLabel('SLOT-001 — 67115BN050-10-HAOS', 'SLOT-001'),
+        '67115BN050-10-HAOS',
+      );
+    });
+
+    test('unresolved extraction evidence has a Turkish operator label', () {
+      expect(
+        operatorLocationLabel('SLOT-009 — unresolved', 'SLOT-009'),
+        'Eşleşmesi beklenen konum',
+      );
+    });
+
+    test('friendly labels are preserved', () {
+      expect(
+        operatorLocationLabel('Boş Kasa Konumu', 'SLOT-E'),
+        'Boş Kasa Konumu',
+      );
+    });
+  });
+
   var sequence = 0;
   late SubmissionCoordinator coordinator;
 

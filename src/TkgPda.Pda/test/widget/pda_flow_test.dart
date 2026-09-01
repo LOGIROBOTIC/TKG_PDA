@@ -207,6 +207,9 @@ void main() {
       find.textContaining('robot veya SEER haritası değildir'),
       findsOneWidget,
     );
+    expect(find.textContaining('SLOT-V'), findsNothing);
+    expect(find.textContaining('SLOT-E'), findsNothing);
+    expect(find.textContaining('SLOT-F'), findsNothing);
     harness.dispose();
   });
 

@@ -7,6 +7,9 @@ Bu dizin, tamamlanmış Phase 01–09 baseline'ının mimari kararlarını, veri
 - [PROJECT_BASELINE.md](PROJECT_BASELINE.md) — mevcut kapsam, sayılar, kararlar, riskler ve phase durumu
 - [database/ERD.md](database/ERD.md) — GitHub uyumlu Mermaid mimari ve ER diyagramları
 - [TKG_PDA_DATABASE_SPEC_v0.1.md](TKG_PDA_DATABASE_SPEC_v0.1.md) — özgün database specification
+- [commissioning/CUSTOMER_ACCEPTANCE_AUDIT.md](commissioning/CUSTOMER_ACCEPTANCE_AUDIT.md) — kaynak/doğruluk ve Operator kabul matrisi
+- [commissioning/CUSTOMER_DATA_REQUEST.md](commissioning/CUSTOMER_DATA_REQUEST.md) — müşteri, saha ve RDS için açık bilgi talep listesi
+- [commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md](commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md) — physical robot öncesi fail-closed devreye alma kapıları
 
 ## Uygulama ve doğrulama raporları
 

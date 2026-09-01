@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/models/pda_models.dart';
+import '../../shared/presentation.dart';
 
 class LayoutCanvas extends StatelessWidget {
   const LayoutCanvas({
@@ -132,8 +133,8 @@ class LayoutCanvas extends StatelessWidget {
         fit: BoxFit.scaleDown,
         child: Text(
           machine
-              ? 'Makine Alanı\n${slot.code}'
-              : '${slot.code}\n${slot.displayName}',
+              ? 'Makine Alanı'
+              : operatorLocationLabel(slot.displayName, slot.code),
           textAlign: TextAlign.center,
           style: TextStyle(
             color: foreground,
@@ -145,13 +146,15 @@ class LayoutCanvas extends StatelessWidget {
     );
     if (machine) {
       return Semantics(
-        label: 'Makine Alanı ${slot.code}; taşıma dışı',
+        label: 'Makine Alanı; taşıma dışı',
         button: false,
         child: child,
       );
     }
     return Semantics(
-      label: '${slot.displayName}; ${slot.occupancyState}; ${slot.loadState}',
+      label:
+          '${operatorLocationLabel(slot.displayName, slot.code)}; '
+          '${slot.occupancyState}; ${slot.loadState}',
       button: true,
       selected: selected,
       child: Material(

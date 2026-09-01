@@ -297,9 +297,9 @@ void main() {
       await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
       await tester.pumpAndSettle();
       check(
-        find.text('Taşıma Talebini Onaylayın'),
+        find.text('Boş kasa getirmek istiyor musunuz?'),
         findsOneWidget,
-        'confirmation opens',
+        'operation-specific confirmation opens',
       );
       await tester.tap(find.byKey(const Key('confirm-direct-transport')));
       await tester.pumpAndSettle();

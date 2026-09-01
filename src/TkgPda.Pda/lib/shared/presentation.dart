@@ -1,8 +1,24 @@
+import 'package:flutter/material.dart';
+
 String actionLabel(String action) => switch (action) {
   'BRING_EMPTY' => 'Boş Kasa Getir',
   'REMOVE_FULL' => 'Dolu Kasayı Kaldır',
   'REMOVE_EMPTY' => 'Boş Kasayı Kaldır',
   _ => action,
+};
+
+String actionQuestion(String action) => switch (action) {
+  'BRING_EMPTY' => 'Boş kasa getirmek istiyor musunuz?',
+  'REMOVE_FULL' => 'Dolu kasayı kaldırmak istiyor musunuz?',
+  'REMOVE_EMPTY' => 'Boş kasayı kaldırmak istiyor musunuz?',
+  _ => 'Taşıma talebi oluşturulsun mu?',
+};
+
+IconData actionIcon(String action) => switch (action) {
+  'BRING_EMPTY' => Icons.move_to_inbox_outlined,
+  'REMOVE_FULL' => Icons.outbox,
+  'REMOVE_EMPTY' => Icons.outbox_outlined,
+  _ => Icons.local_shipping_outlined,
 };
 
 String executionStateLabel(String state) => switch (state) {

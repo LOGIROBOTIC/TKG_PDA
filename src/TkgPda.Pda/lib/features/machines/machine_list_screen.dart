@@ -145,28 +145,17 @@ class _MachineCard extends StatelessWidget {
                     machine.displayName,
                     style: const TextStyle(fontSize: 16),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _PermissionChip(
-                        icon: Icons.visibility,
-                        label: 'Görüntüleme',
-                        enabled: machine.permissions.canView,
+                  if (!machine.permissions.canOperate) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Bu makinede taşıma işlemi yapamazsınız.',
+                      key: Key('machine-unavailable-reason-${machine.id}'),
+                      style: const TextStyle(
+                        color: Color(0xFF9A3412),
+                        fontWeight: FontWeight.w700,
                       ),
-                      _PermissionChip(
-                        icon: Icons.local_shipping,
-                        label: 'Operasyon',
-                        enabled: machine.permissions.canOperate,
-                      ),
-                      if (machine.permissions.canChangeVariant)
-                        const _PermissionChip(
-                          icon: Icons.swap_horiz,
-                          label: 'Varyant',
-                          enabled: true,
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -175,24 +164,5 @@ class _MachineCard extends StatelessWidget {
         ),
       ),
     ),
-  );
-}
-
-class _PermissionChip extends StatelessWidget {
-  const _PermissionChip({
-    required this.icon,
-    required this.label,
-    required this.enabled,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) => Chip(
-    avatar: Icon(icon, size: 18),
-    label: Text(label),
-    backgroundColor: enabled ? const Color(0xFFDCFCE7) : Colors.grey.shade200,
   );
 }

@@ -4,6 +4,7 @@ import '../../app/app_controller.dart';
 import '../../shared/widgets/feedback_banners.dart';
 import 'multi_part_batch_screen.dart';
 import 'part_first_screen.dart';
+import 'transport_action_panel.dart';
 
 /// Machine-scoped Operator workspace. Part/variant resolution and transport
 /// actions share one page; there is no second physical-layout screen.
@@ -63,6 +64,10 @@ class OperationScreen extends StatelessWidget {
               error: controller.robotAlarmError,
               onRetry: controller.retryRobotAlarmSummary,
             ),
+            if ((controller.context?.activeTransportRequests.length ?? 0) > 0)
+              _ActiveTransportIndicator(
+                count: controller.context!.activeTransportRequests.length,
+              ),
             if (controller.hasAmbiguousSubmission)
               _AmbiguousSubmissionBanner(controller: controller),
             if (controller.hasAmbiguousBatchSubmission)
@@ -78,6 +83,33 @@ class OperationScreen extends StatelessWidget {
           ],
         ),
       ),
+      bottomNavigationBar: controller.transportActionsReady
+          ? OperatorTransportActions(controller: controller)
+          : null,
+    ),
+  );
+}
+
+class _ActiveTransportIndicator extends StatelessWidget {
+  const _ActiveTransportIndicator({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('active-transport-indicator'),
+    width: double.infinity,
+    color: const Color(0xFFEFF6FF),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+    child: Row(
+      children: [
+        const Icon(Icons.local_shipping_outlined, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          'Aktif taşıma: $count',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ],
     ),
   );
 }

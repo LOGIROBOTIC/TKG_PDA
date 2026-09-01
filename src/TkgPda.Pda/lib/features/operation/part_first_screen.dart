@@ -7,10 +7,28 @@ import 'transport_action_panel.dart';
 /// Final Operator workspace after a machine is selected. Part and compatible
 /// variant resolution stay on this page; once proven, the business-operation
 /// buttons appear here without a physical-slot or layout step.
-class PartFirstSelector extends StatelessWidget {
+class PartFirstSelector extends StatefulWidget {
   const PartFirstSelector({required this.controller, super.key});
 
   final AppController controller;
+
+  @override
+  State<PartFirstSelector> createState() => _PartFirstSelectorState();
+}
+
+class _PartFirstSelectorState extends State<PartFirstSelector> {
+  static const _searchThreshold = 10;
+
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  AppController get controller => widget.controller;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +49,18 @@ class PartFirstSelector extends StatelessWidget {
         ),
       );
     }
+    final showSearch = controller.partOptions.length > _searchThreshold;
+    final normalizedQuery = _query.trim().toUpperCase();
+    final visibleOptions = normalizedQuery.isEmpty
+        ? controller.partOptions
+        : controller.partOptions
+              .where(
+                (option) =>
+                    option.partCode.toUpperCase().contains(normalizedQuery),
+              )
+              .toList(growable: false);
+    final activeRequests =
+        controller.context?.activeTransportRequests ?? const [];
     return RefreshIndicator(
       onRefresh: controller.reloadPartOptions,
       child: ListView(
@@ -46,10 +76,40 @@ class PartFirstSelector extends StatelessWidget {
           const SizedBox(height: 20),
           const _SectionLabel('Ana Parçalar'),
           const SizedBox(height: 10),
+          if (showSearch) ...[
+            TextField(
+              key: const Key('main-part-search'),
+              controller: _searchController,
+              autocorrect: false,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                labelText: 'Parça kodu ara',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        key: const Key('clear-main-part-search'),
+                        tooltip: 'Aramayı temizle',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (controller.partOptions.isEmpty)
             const Text('Bu makine için tanımlı parça bulunamadı.')
+          else if (visibleOptions.isEmpty)
+            const Text(
+              'Bu kodla eşleşen parça bulunamadı.',
+              key: Key('main-part-search-empty'),
+            )
           else
-            _MainPartChips(controller: controller),
+            _MainPartChips(controller: controller, options: visibleOptions),
           if (controller.selectedMainPart case final main?) ...[
             const SizedBox(height: 22),
             _EffectivePartCard(main: main, controller: controller),
@@ -58,9 +118,12 @@ class PartFirstSelector extends StatelessWidget {
             const SizedBox(height: 18),
             _CompatibleVariantCard(controller: controller),
           ],
-          if (controller.transportActionsReady) ...[
+          if (activeRequests.isNotEmpty) ...[
             const SizedBox(height: 18),
-            OperatorTransportPanel(controller: controller),
+            OperatorActiveTransportList(
+              requests: activeRequests,
+              controller: controller,
+            ),
           ],
           const SizedBox(height: 40),
         ],
@@ -91,9 +154,10 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _MainPartChips extends StatelessWidget {
-  const _MainPartChips({required this.controller});
+  const _MainPartChips({required this.controller, required this.options});
 
   final AppController controller;
+  final List<MachineMainPartOption> options;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -101,7 +165,7 @@ class _MainPartChips extends StatelessWidget {
       spacing: 10,
       runSpacing: 10,
       children: [
-        for (final option in controller.partOptions)
+        for (final option in options)
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: constraints.maxWidth),
             child: _MainPartChip(option: option, controller: controller),
@@ -161,7 +225,10 @@ class _MainPartChip extends StatelessWidget {
       ),
       onSelected: controller.busy
           ? null
-          : (_) => controller.selectMainPartOption(option),
+          : (_) {
+              FocusScope.of(context).unfocus();
+              controller.selectMainPartOption(option);
+            },
     );
   }
 }
@@ -357,13 +424,16 @@ class _RelatedPartChip extends StatelessWidget {
     ),
     onSelected: controller.busy
         ? null
-        : (_) => controller.selectEffectivePart(
-            EffectivePartSelection(
-              partId: part.partId,
-              partCode: part.partCode,
-              isMain: false,
-            ),
-          ),
+        : (_) {
+            FocusScope.of(context).unfocus();
+            controller.selectEffectivePart(
+              EffectivePartSelection(
+                partId: part.partId,
+                partCode: part.partCode,
+                isMain: false,
+              ),
+            );
+          },
   );
 }
 
@@ -459,7 +529,10 @@ class _CompatibleVariantCard extends StatelessWidget {
                   : null,
               onTap: controller.busy
                   ? null
-                  : () => controller.selectCompatibleVariant(variant),
+                  : () {
+                      FocusScope.of(context).unfocus();
+                      controller.selectCompatibleVariant(variant);
+                    },
             ),
           const SizedBox(height: 8),
         ],

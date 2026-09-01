@@ -45,12 +45,6 @@ class ProblemBanner extends StatelessWidget {
           problem.operatorMessage,
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        if (problem.correlationId != null)
-          Text(
-            'Destek referansı: ${problem.correlationId}',
-            key: const Key('problem-correlation'),
-            style: const TextStyle(fontSize: 12),
-          ),
       ],
     ),
   );

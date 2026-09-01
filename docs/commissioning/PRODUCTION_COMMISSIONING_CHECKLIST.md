@@ -71,8 +71,8 @@ Bu checklist tamamlanmadan simulator sonuçları fiziksel robot kabulü olarak y
 - [ ] Ana parça, ALT ve varsa RELATED akışı müşteri tarafından kabul edildi.
 - [ ] Tek/multi compatible variant davranışı ve machine değişiminde stale-state temizliği doğrulandı.
 - [ ] Her operation normal `machine -> part -> operation` akışından oluşturuldu; Operator fiziksel slot seçmedi.
-- [ ] Backend-resolved konum layout'ta highlight edildi ve "Konum otomatik seçildi" mesajı görüldü.
-- [ ] Layout tap'in yalnız inspection/status olduğu ve request route edemediği kabul edildi.
+- [ ] Part + compatible variant sonrası üç operation aynı ekranda göründü; ayrı "İşleme Devam Et" veya layout sayfası gerekmedi.
+- [ ] Normal Operator UI'da fiziksel layout/slot seçimi olmadığı ve backend'in machine-side slot ile `EMPTY_STORAGE` allocation'ını yaptığı kabul edildi.
 - [ ] Warehouse readiness ile execution status'un ayrı kaldığı kabul edildi.
 - [ ] Operator alarm metni sade/actionable; kaynak `GET /api/agv-report/core`; reset/ack/clear/history yok.
 - [ ] Gerçek Android PDA ve hedef Chrome/Edge terminalde touch, scroll, keyboard, offline/error/success durumları kabul edildi.

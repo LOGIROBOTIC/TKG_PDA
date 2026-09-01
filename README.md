@@ -19,7 +19,7 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 | Phase 05 — Admin Configuration API | Tamamlandı | Admin Web auth boundary, provisioning, draft/publish/versioning, ETag ve audit |
 | Phase 06 — Admin Web | Tamamlandı | React/TypeScript yönetim ekranları ve normalize fiziksel layout editörü |
 | Phase 07A — PDA + RDS Contract Readiness | Tamamlandı | PDA operational context, available-actions ve persisted RDS execution/readiness projeksiyonu |
-| Phase 07B — Flutter PDA Application | Tamamlandı | Device-bound Android istemci, normalize layout, server-authoritative transport ve güvenli offline/idempotency UX |
+| Phase 07B — Flutter PDA Application | Tamamlandı | Device-bound Android istemci, aynı sayfada part/variant/operation akışı, server-authoritative slot routing ve güvenli offline/idempotency UX |
 | Phase 08A — Live RDS Readiness | Uygulandı | Salt-okunur RDS client, WorkSite mirror, explicit admin mapping ve readiness projection |
 | Phase 08B — RDS Execution Integration | Tamamlandı | Server-side dispatch, callback, reconciliation, stop boundary ve load-state entegrasyonu |
 | Phase 08C — RDS Simulator Commissioning | Tamamlandı | `TKG_SIM_MOVE`, tek TKG UUID, canlı `sim_01`, callback ve duplicate-safe retry kanıtlandı |

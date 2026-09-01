@@ -187,7 +187,7 @@ void main() {
 
   testWidgets(
     'exactly one compatible variant auto-resolves on the first main-part '
-    'click but waits for an explicit continue before leaving the gate',
+    'click and exposes operations on the same page',
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
@@ -196,20 +196,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Resolved internally, but still on the part-first gate: alternatives
-      // stay reachable until the operator explicitly continues.
-      expect(harness.controller.needsPartSelection, isTrue);
-      expect(harness.controller.partFirstReadyToContinue, isTrue);
+      expect(harness.controller.transportActionsReady, isTrue);
       expect(harness.controller.context?.activeVariantId, testVariantV1Id);
       expect(repository.switchCount, 0); // already active — no switch needed
-      await _scrollTo(tester, const Key('part-first-continue'));
-      expect(find.byKey(const Key('part-first-continue')), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('part-first-continue')));
-      await tester.pumpAndSettle();
-
-      expect(harness.controller.needsPartSelection, isFalse);
-      expect(find.byKey(const Key('operation-content')), findsOneWidget);
+      await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
+      expect(
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        findsOneWidget,
+      );
+      expect(find.text('İşleme Devam Et'), findsNothing);
+      expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
       harness.dispose();
     },
   );
@@ -266,14 +262,13 @@ void main() {
       expect(harness.controller.selectedEffectivePart?.partId, testAltPartId);
       expect(repository.switchCount, 1);
       expect(repository.lastSwitchVariantId, testVariantV2Id);
-      expect(harness.controller.needsPartSelection, isTrue);
-      expect(harness.controller.partFirstReadyToContinue, isTrue);
-
-      await _scrollTo(tester, const Key('part-first-continue'));
-      await tester.tap(find.byKey(const Key('part-first-continue')));
-      await tester.pumpAndSettle();
-
-      expect(harness.controller.needsPartSelection, isFalse);
+      expect(harness.controller.transportActionsReady, isTrue);
+      await _scrollTo(tester, const Key('direct-action-REMOVE_FULL'));
+      expect(
+        find.byKey(const Key('direct-action-REMOVE_FULL')),
+        findsOneWidget,
+      );
+      expect(find.text('İşleme Devam Et'), findsNothing);
       harness.dispose();
     },
   );
@@ -294,8 +289,8 @@ void main() {
     await _scrollTo(tester, const Key('zero-compatible-variants'));
     expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
     expect(find.text('Uyumlu varyant bulunamadı.'), findsOneWidget);
-    // Non-destructive: still on the gate, free to pick a different part.
-    expect(harness.controller.needsPartSelection, isTrue);
+    expect(harness.controller.transportActionsReady, isFalse);
+    expect(find.byKey(const Key('direct-actions')), findsNothing);
     expect(find.byKey(Key('alt-part-$testAltPartId')), findsOneWidget);
     harness.dispose();
   });
@@ -319,6 +314,8 @@ void main() {
       find.byKey(Key('compatible-variant-$testVariantV2Id')),
       findsOneWidget,
     );
+    expect(harness.controller.transportActionsReady, isFalse);
+    expect(find.byKey(const Key('direct-actions')), findsNothing);
 
     await tester.ensureVisible(
       find.byKey(Key('compatible-variant-$testVariantV2Id')),
@@ -329,14 +326,9 @@ void main() {
 
     expect(repository.switchCount, 1);
     expect(repository.lastSwitchVariantId, testVariantV2Id);
-    expect(harness.controller.needsPartSelection, isTrue);
-    expect(harness.controller.partFirstReadyToContinue, isTrue);
-
-    await _scrollTo(tester, const Key('part-first-continue'));
-    await tester.tap(find.byKey(const Key('part-first-continue')));
-    await tester.pumpAndSettle();
-
-    expect(harness.controller.needsPartSelection, isFalse);
+    expect(harness.controller.transportActionsReady, isTrue);
+    await _scrollTo(tester, const Key('direct-action-REMOVE_EMPTY'));
+    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsOneWidget);
     harness.dispose();
   });
 
@@ -371,7 +363,7 @@ void main() {
     expect(harness.controller.selectedMainPart, isNull);
     expect(harness.controller.selectedEffectivePart, isNull);
     expect(harness.controller.compatibleVariants, isNull);
-    expect(harness.controller.needsPartSelection, isTrue);
+    expect(harness.controller.transportActionsReady, isFalse);
     harness.dispose();
   });
 
@@ -424,74 +416,50 @@ void main() {
     await tester.tap(find.byKey(const Key('compatible-variants-retry')));
     await tester.pumpAndSettle();
 
-    expect(harness.controller.needsPartSelection, isTrue);
-    expect(harness.controller.partFirstReadyToContinue, isTrue);
-
-    await _scrollTo(tester, const Key('part-first-continue'));
-    await tester.tap(find.byKey(const Key('part-first-continue')));
-    await tester.pumpAndSettle();
-
-    expect(harness.controller.needsPartSelection, isFalse);
+    expect(harness.controller.transportActionsReady, isTrue);
+    await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
+    expect(find.byKey(const Key('direct-action-BRING_EMPTY')), findsOneWidget);
     harness.dispose();
   });
 
-  testWidgets('authorized machine selection still opens the operation screen', (
+  testWidgets('authorized machine selection opens the combined workspace', (
     tester,
   ) async {
     final harness = await _harness(tester);
 
     expect(harness.controller.selectedMachine?.id, testMachine.id);
-    expect(find.text('${testMachine.code} · Operasyon'), findsOneWidget);
+    expect(find.text('${testMachine.code} · Parça ve İşlem'), findsOneWidget);
+    expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
     harness.dispose();
   });
 
   testWidgets(
-    'existing transport actions remain reachable after part-first resolves '
-    'the variant',
+    'all transport actions appear on part selection without another page',
     (tester) async {
       final harness = await _harness(tester);
       await tester.tap(
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
-      await _scrollTo(tester, const Key('part-first-continue'));
-      await tester.tap(find.byKey(const Key('part-first-continue')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('operation-content')), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('slot-slot-vacant')),
-        300,
-        scrollable: find.descendant(
-          of: find.byKey(const Key('operation-content')),
-          matching: find.byType(Scrollable),
-        ),
+      await _scrollTo(tester, const Key('direct-action-REMOVE_EMPTY'));
+      expect(
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        findsOneWidget,
       );
-      expect(find.byKey(const Key('slot-slot-vacant')), findsOneWidget);
+      expect(
+        find.byKey(const Key('direct-action-REMOVE_FULL')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+        findsOneWidget,
+      );
+      expect(find.text('İşleme Devam Et'), findsNothing);
+      expect(find.byKey(const Key('operation-content')), findsNothing);
+      expect(find.text('Fiziksel Yerleşim'), findsNothing);
       harness.dispose();
     },
   );
-
-  testWidgets('the "Parça Değiştir" control returns to the part-first gate', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await tester.tap(find.byKey(Key('main-part-${testMainPartOption.partId}')));
-    await tester.pumpAndSettle();
-    await _scrollTo(tester, const Key('part-first-continue'));
-    await tester.tap(find.byKey(const Key('part-first-continue')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('operation-content')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('change-part-button')));
-    await tester.pumpAndSettle();
-
-    expect(harness.controller.needsPartSelection, isTrue);
-    expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
-    // Operational context/slots are not lost — just the part-first gate reopens.
-    expect(harness.controller.context, isNotNull);
-    harness.dispose();
-  });
 }
 
 /// Scrolls the part-first list until [key] is built and visible. The card

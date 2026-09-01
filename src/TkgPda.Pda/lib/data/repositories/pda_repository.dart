@@ -33,11 +33,6 @@ abstract interface class PdaDataSource {
   /// Customer UI — Warehouse Preparation Console.
   Future<List<WarehousePreparationRequest>> warehousePreparationRequests();
   Future<void> markTransportReady(String requestId);
-  Future<void> updateLoadState({
-    required String machineId,
-    required String slotId,
-    required String loadState,
-  });
 
   /// Customer Monitoring — Robot Alarm Visibility.
   Future<RobotAlarmSummary> robotAlarmSummary();
@@ -189,18 +184,6 @@ class PdaRepository implements PdaDataSource {
   @override
   Future<void> markTransportReady(String requestId) async {
     await _api.post('/api/v1/transport-requests/$requestId/ready');
-  }
-
-  @override
-  Future<void> updateLoadState({
-    required String machineId,
-    required String slotId,
-    required String loadState,
-  }) async {
-    await _api.put(
-      '/api/v1/machines/$machineId/slots/$slotId/load-state',
-      body: {'loadState': loadState},
-    );
   }
 
   @override

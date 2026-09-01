@@ -6,9 +6,9 @@ import '../../shared/presentation.dart';
 
 /// Customer UI — Multi-Part Transport Batch: the "Select Parts" and
 /// "Review -> Submit Batch" steps of the wizard. Per-item variant/operation
-/// configuration reuses the existing [PartFirstSelector] / operation-screen
-/// widgets directly (driven by [AppController.isConfiguringBatchItem]) and
-/// is therefore NOT part of this file.
+/// configuration reuses the same-page [PartFirstSelector] action flow
+/// (driven by [AppController.isConfiguringBatchItem]) and is therefore NOT
+/// part of this file.
 class MultiPartBatchWorkspace extends StatelessWidget {
   const MultiPartBatchWorkspace({required this.controller, super.key});
 

@@ -190,8 +190,9 @@ Normative gelecek entegrasyon sözleşmesi [RDS_PDA_INTEGRATION_SPEC.md](RDS_PDA
 ### 7.3 Flutter PDA sınırı
 
 - Aynı Flutter operator istemcisi Android endüstriyel PDA ve Windows Edge/Chrome Web/PWA hedeflerini destekler. Android Device Code secure storage'da, Web Device Code yalnız `tkg.pda.device-code` origin-local key'inde tutulur; JWT her iki platformda yalnız process/tab belleğindedir. Parola ve operational state persist edilmez.
-- Makine listesi, variant capability, `availableActions`, cancellation ve execution state tamamen backend projection'ından gelir; Flutter iş kuralı veya canonical makine listesi üretmez.
-- Normalize layout yalnız ekran geometrisidir. `MACHINE` bölgeleri görünür ama transport seçilemez.
+- Makine listesi, compatible variant, cancellation ve execution state tamamen backend projection'ından gelir; Flutter iş kuralı veya canonical makine listesi üretmez.
+- Normal Operator akışı `machine -> part -> optional ALT/RELATED -> compatible variant -> operation` şeklindedir. Üç operation aynı seçim sayfasında görünür; ayrı "İşleme Devam Et" veya physical-layout ekranı yoktur.
+- Flutter source/destination slot veya `EMPTY_STORAGE` seçmez. Normalize layout Admin konfigürasyonunda korunur; normal Operator routing yüzeyi değildir.
 - Aynı maddi transport retry'ı aynı idempotency key'i kullanır; çift dokunma tek in-flight submission ile sınırlanır.
 - Offline command queue yoktur. Ağ kaybında bütün mutation'lar kapanır ve context yeniden doğrulanmadan açılmaz.
 - Flutter yalnız TKG API'ye bağlanır; canlı RDS, PLC, SAP veya robot API çağrısı içermez.

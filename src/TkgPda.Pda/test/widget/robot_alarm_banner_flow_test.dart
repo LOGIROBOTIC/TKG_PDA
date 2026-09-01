@@ -10,7 +10,7 @@ import 'package:tkg_pda/data/models/pda_models.dart';
 import '../support/fakes.dart';
 
 // Customer Monitoring — Robot Alarm Visibility: the Operator-facing banner
-// on the operation screen must reflect the coarse fleet-wide summary from
+// on the machine/part/action workspace must reflect the coarse summary from
 // GET /api/v1/rds/robot-alarm-summary, and must not confuse an RDS-read
 // failure with "no active alarm".
 void main() {

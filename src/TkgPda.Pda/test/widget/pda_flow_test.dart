@@ -153,114 +153,22 @@ void main() {
     await tester.tap(find.byKey(Key('machine-${testMachine.id}')));
     await tester.pumpAndSettle();
 
-    expect(find.text('${testMachine.code} · Operasyon'), findsOneWidget);
+    expect(find.text('${testMachine.code} · Parça ve İşlem'), findsOneWidget);
     expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
     expect(harness.controller.context, isNotNull);
     harness.dispose();
   });
 
-  testWidgets('active variant is shown prominently', (tester) async {
-    final harness = await _operationHarness(tester);
-
-    expect(find.byKey(const Key('active-variant')), findsOneWidget);
-    expect(find.textContaining('Aktif Varyant: V1'), findsOneWidget);
-    harness.dispose();
-  });
-
-  testWidgets('variant selection requires confirmation and calls backend port', (
+  testWidgets('resolved variant remains visible on the part screen', (
     tester,
   ) async {
-    final repository = FakePdaRepository();
-    final harness = await _operationHarness(tester, repository: repository);
+    final harness = await _operationHarness(tester);
 
-    await tester.tap(find.byKey(const Key('variant-selection-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(
-        const Key(
-          'variant-40000000-0000-0000-0000-000000000002-50000000-0000-0000-0000-000000000001',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-variant-switch')));
-    await tester.pumpAndSettle();
-
-    expect(repository.switchCount, 1);
-    expect(harness.controller.selectedEffectivePart, isNull);
-    expect(harness.controller.needsPartSelection, isTrue);
+    await _scrollTo(tester, find.byKey(const Key('single-compatible-variant')));
+    expect(find.textContaining('V1 · Varyant 1'), findsOneWidget);
     expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
     harness.dispose();
   });
-
-  testWidgets('normalized layout renders all proven regions and slots', (
-    tester,
-  ) async {
-    final harness = await _operationHarness(tester);
-
-    await _scrollTo(tester, find.byKey(const Key('slot-slot-machine')));
-    expect(find.byKey(const Key('slot-slot-machine')), findsOneWidget);
-    expect(find.byKey(const Key('slot-slot-vacant')), findsOneWidget);
-    expect(find.byKey(const Key('slot-slot-empty')), findsOneWidget);
-    expect(find.byKey(const Key('slot-slot-full')), findsOneWidget);
-    expect(
-      find.textContaining('robot veya SEER haritası değildir'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('SLOT-V'), findsNothing);
-    expect(find.textContaining('SLOT-E'), findsNothing);
-    expect(find.textContaining('SLOT-F'), findsNothing);
-    harness.dispose();
-  });
-
-  testWidgets('MACHINE region is visibly nontransport and not selectable', (
-    tester,
-  ) async {
-    final harness = await _operationHarness(tester);
-
-    await _scrollTo(tester, find.byKey(const Key('slot-slot-machine')));
-    await tester.tap(find.byKey(const Key('slot-slot-machine')));
-    await tester.pump();
-
-    expect(find.textContaining('Makine Alanı'), findsWidgets);
-    expect(harness.controller.autoHighlightedSlot, isNull);
-    expect(find.byKey(const Key('slot-details')), findsNothing);
-    harness.dispose();
-  });
-
-  testWidgets(
-    'layout slot tap is passive and creates no manual state or detail panel',
-    (tester) async {
-      final repository = FakePdaRepository();
-      final harness = await _operationHarness(tester, repository: repository);
-
-      await _tapLayoutSlot(tester, 'slot-vacant');
-
-      expect(find.byKey(const Key('slot-details')), findsNothing);
-      expect(harness.controller.autoHighlightedSlot, isNull);
-      expect(repository.createCount, 0);
-      harness.dispose();
-    },
-  );
-
-  testWidgets(
-    'passive layout exposes no load-state or manual transport controls',
-    (tester) async {
-      final repository = FakePdaRepository();
-      final harness = await _operationHarness(tester, repository: repository);
-
-      await _tapLayoutSlot(tester, 'slot-empty');
-
-      expect(find.byKey(const Key('slot-details')), findsNothing);
-      expect(find.byKey(const Key('load-state-MARK_FULL')), findsNothing);
-      expect(find.byKey(const Key('load-state-MARK_EMPTY')), findsNothing);
-      expect(find.byKey(const Key('action-REMOVE_EMPTY')), findsNothing);
-      expect(find.byKey(const Key('action-REMOVE_FULL')), findsNothing);
-      expect(repository.createCount, 0);
-      expect(repository.loadStateCount, 0);
-      harness.dispose();
-    },
-  );
 
   group('Customer UX — Automatic Machine Slot Resolution', () {
     testWidgets(
@@ -268,6 +176,10 @@ void main() {
       (tester) async {
         final harness = await _operationHarness(tester);
 
+        await _scrollTo(
+          tester,
+          find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+        );
         expect(
           find.byKey(const Key('direct-action-BRING_EMPTY')),
           findsOneWidget,
@@ -280,145 +192,120 @@ void main() {
           find.byKey(const Key('direct-action-REMOVE_EMPTY')),
           findsOneWidget,
         );
-        expect(harness.controller.autoHighlightedSlot, isNull);
+        expect(find.text('İşleme Devam Et'), findsNothing);
+        expect(find.text('Fiziksel Yerleşim'), findsNothing);
         harness.dispose();
       },
     );
 
-    testWidgets(
-      'a direct BRING_EMPTY submits with no chosen slot and highlights the '
-      'backend-resolved slot',
-      (tester) async {
+    testWidgets('BRING_EMPTY submits with no client-selected physical slot', (
+      tester,
+    ) async {
+      final repository = FakePdaRepository();
+      final harness = await _operationHarness(tester, repository: repository);
+
+      await _scrollTo(
+        tester,
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+      );
+      await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
+      await tester.pumpAndSettle();
+      expect(find.text('Sistem tarafından seçilecek'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirm-direct-transport')));
+      await tester.pumpAndSettle();
+
+      expect(repository.createCount, 1);
+      expect(repository.lastCommand!.sourceSlotId, isNull);
+      expect(repository.lastCommand!.destinationSlotId, isNull);
+      expect(repository.lastCommand!.productGroupId, testProductGroupId);
+      expect(repository.lastCommand!.partId, testMainPartId);
+      expect(repository.lastCommand!.operation, 'BRING_EMPTY');
+      expect(find.text('Taşıma talebi oluşturuldu.'), findsOneWidget);
+      expect(find.text('Fiziksel Yerleşim'), findsNothing);
+      await _scrollTo(
+        tester,
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+      );
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.byKey(const Key('direct-action-BRING_EMPTY')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        find.text('Bu işlem için aktif bir taşıma talebi var.'),
+        findsOneWidget,
+      );
+      harness.dispose();
+    });
+
+    for (final operation in const ['REMOVE_FULL', 'REMOVE_EMPTY']) {
+      testWidgets('$operation submits without a client physical slot', (
+        tester,
+      ) async {
         final repository = FakePdaRepository();
         final harness = await _operationHarness(tester, repository: repository);
 
-        await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
+        await _scrollTo(tester, find.byKey(Key('direct-action-$operation')));
+        await tester.tap(find.byKey(Key('direct-action-$operation')));
         await tester.pumpAndSettle();
-        expect(find.text('Otomatik seçilecek'), findsOneWidget);
         await tester.tap(find.byKey(const Key('confirm-direct-transport')));
         await tester.pumpAndSettle();
 
-        expect(repository.createCount, 1);
+        expect(repository.lastCommand!.operation, operation);
         expect(repository.lastCommand!.sourceSlotId, isNull);
         expect(repository.lastCommand!.destinationSlotId, isNull);
-        expect(repository.lastCommand!.productGroupId, testProductGroupId);
-        expect(repository.lastCommand!.partId, testMainPartId);
-        expect(repository.lastCommand!.operation, 'BRING_EMPTY');
-
-        // The fake's post-create context carries testActiveRequest, whose
-        // destinationSlotId is 'slot-vacant' — the controller should mirror
-        // that into passive highlighting without any operator tap.
-        expect(harness.controller.autoHighlightedSlot?.id, 'slot-vacant');
-        await _scrollTo(
-          tester,
-          find.byKey(const Key('slot-auto-resolved-indicator')),
-        );
-        expect(
-          find.byKey(const Key('slot-auto-resolved-indicator')),
-          findsOneWidget,
-        );
-        expect(find.text('Konum otomatik seçildi'), findsOneWidget);
-        expect(
-          find.byKey(const Key('slot-auto-highlight-badge')),
-          findsOneWidget,
-        );
         harness.dispose();
-      },
-    );
+      });
+    }
 
-    testWidgets(
-      'tapping a slot after automatic resolution preserves backend highlight',
-      (tester) async {
-        final repository = FakePdaRepository();
-        final harness = await _operationHarness(tester, repository: repository);
-
-        await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-        await tester.pumpAndSettle();
-        expect(harness.controller.autoHighlightedSlot?.id, 'slot-vacant');
-
-        await _tapLayoutSlot(tester, 'slot-empty');
-
-        expect(harness.controller.autoHighlightedSlot?.id, 'slot-vacant');
-        expect(
-          find.byKey(const Key('slot-auto-resolved-indicator')),
-          findsOneWidget,
-        );
-        harness.dispose();
-      },
-    );
-
-    testWidgets(
-      'an existing REMOVE_EMPTY request highlights its source machine slot',
-      (tester) async {
-        final request = ActiveTransportRequest.fromJson({
-          'requestId': 'remove-empty-request',
-          'requestNo': 91,
-          'operation': 'REMOVE_EMPTY',
-          'status': 'QUEUED',
-          'requestedBy': testUser.id,
-          'requestedByUsername': testUser.username,
-          'isMine': true,
-          'sourceSlotId': 'slot-empty',
-          'destinationSlotId': 'slot-vacant',
-          'productGroupId': testProductGroupId,
-          'partId': testMainPartId,
-          'containerTypeId': null,
-          'priority': 100,
-          'createdAt': '2026-08-24T09:00:00Z',
-          'canCancel': true,
-          'cancelDisabledCode': null,
-          'cancelDisabledMessage': null,
-          'execution': {
-            'state': 'WAITING_FOR_ROBOT',
-            'correlationId': 'remove-empty-correlation',
-          },
-        });
+    for (final errorCase in const [
+      (
+        operation: 'BRING_EMPTY',
+        code: 'BRING_EMPTY_SLOT_NOT_FOUND',
+        message: 'Bu parça için boş konum bulunamadı.',
+      ),
+      (
+        operation: 'REMOVE_FULL',
+        code: 'REMOVE_FULL_SLOT_NOT_FOUND',
+        message: 'Bu parça için dolu kasa bulunamadı.',
+      ),
+      (
+        operation: 'REMOVE_EMPTY',
+        code: 'REMOVE_EMPTY_SLOT_NOT_FOUND',
+        message: 'Bu parça için boş kasa bulunamadı.',
+      ),
+    ]) {
+      testWidgets('${errorCase.operation} shows a friendly resolver error', (
+        tester,
+      ) async {
         final repository = FakePdaRepository()
-          ..contextValue = testContext(activeRequests: [request]);
-        final harness = await _operationHarness(tester, repository: repository);
-
-        expect(harness.controller.autoHighlightedSlot?.id, 'slot-empty');
-        await _scrollTo(
-          tester,
-          find.byKey(const Key('slot-auto-resolved-indicator')),
-        );
-        expect(
-          find.byKey(const Key('slot-auto-highlight-badge')),
-          findsOneWidget,
-        );
-        harness.dispose();
-      },
-    );
-
-    testWidgets(
-      'a friendly no-slot message from the backend surfaces without any '
-      'raw rule code',
-      (tester) async {
-        final repository = FakePdaRepository()
-          ..createError = const ApiProblem(
+          ..createError = ApiProblem(
             status: 422,
-            code: 'BRING_EMPTY_SLOT_NOT_FOUND',
-            detail: 'Bu parça için boş konum bulunamadı.',
+            code: errorCase.code,
+            detail: errorCase.message,
             correlationId: null,
           );
         final harness = await _operationHarness(tester, repository: repository);
 
-        await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
+        await _scrollTo(
+          tester,
+          find.byKey(Key('direct-action-${errorCase.operation}')),
+        );
+        await tester.tap(
+          find.byKey(Key('direct-action-${errorCase.operation}')),
+        );
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('confirm-direct-transport')));
         await tester.pumpAndSettle();
 
-        expect(
-          find.text('Bu parça için boş konum bulunamadı.'),
-          findsOneWidget,
-        );
-        expect(find.textContaining('BRING_EMPTY_SLOT_NOT_FOUND'), findsNothing);
-        expect(harness.controller.autoHighlightedSlot, isNull);
+        expect(find.text(errorCase.message), findsOneWidget);
+        expect(find.textContaining(errorCase.code), findsNothing);
         harness.dispose();
-      },
-    );
+      });
+    }
   });
 
   testWidgets('the action button is disabled while a submission is in flight, '
@@ -427,6 +314,7 @@ void main() {
       ..createCompleter = Completer<TransportResult>();
     final harness = await _operationHarness(tester, repository: repository);
 
+    await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
     await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-direct-transport')));
@@ -504,6 +392,7 @@ void main() {
   ) async {
     final repository = FakePdaRepository();
     final harness = await _operationHarness(tester, repository: repository);
+    await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
     repository.contextError = const ConnectivityException();
 
     await harness.controller.refreshContext(showBusy: true);
@@ -662,7 +551,7 @@ void main() {
     Size(1920, 1080),
   ]) {
     testWidgets(
-      'wide touch layout is usable at ${size.width.toInt()}x${size.height.toInt()}',
+      'combined workspace is usable at ${size.width.toInt()}x${size.height.toInt()}',
       (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = size;
@@ -672,32 +561,20 @@ void main() {
           ..contextValue = testContext(activeRequests: [testActiveRequest]);
         final harness = await _operationHarness(tester, repository: repository);
 
-        expect(find.byKey(const Key('operation-wide-layout')), findsOneWidget);
-        await tester.scrollUntilVisible(
+        expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
+        await _scrollTo(
+          tester,
           find.byKey(const Key('active-transport-section')),
-          240,
-          scrollable: find.descendant(
-            of: find.byKey(const Key('operation-wide-left')),
-            matching: find.byType(Scrollable),
-          ),
         );
         expect(
           find.byKey(const Key('active-transport-section')),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
-
-        expect(harness.controller.autoHighlightedSlot, isNull);
-
-        await tester.scrollUntilVisible(
+        await _scrollTo(
+          tester,
           find.byKey(const Key('direct-action-BRING_EMPTY')),
-          240,
-          scrollable: find.descendant(
-            of: find.byKey(const Key('operation-wide-left')),
-            matching: find.byType(Scrollable),
-          ),
         );
-        await tester.pumpAndSettle();
         expect(
           tester
               .getSize(find.byKey(const Key('direct-action-BRING_EMPTY')))
@@ -711,7 +588,7 @@ void main() {
   }
 
   testWidgets(
-    'the layout canvas grows taller on narrow/mobile widths for bigger touch targets',
+    'the combined part and action flow remains usable on a narrow PDA',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(360, 800);
@@ -719,9 +596,24 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       final harness = await _operationHarness(tester);
 
-      await _scrollTo(tester, find.byType(AspectRatio));
-      final aspectRatio = tester.widget<AspectRatio>(find.byType(AspectRatio));
-      expect(aspectRatio.aspectRatio, 1.0);
+      await _scrollTo(
+        tester,
+        find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+      );
+      expect(
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('direct-action-REMOVE_FULL')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+        findsOneWidget,
+      );
+      expect(find.text('İşleme Devam Et'), findsNothing);
+      expect(find.text('Fiziksel Yerleşim'), findsNothing);
       expect(tester.takeException(), isNull);
       harness.dispose();
     },
@@ -768,10 +660,8 @@ Future<_Harness> _operationHarness(
   final harness = await _loggedInHarness(tester, repository: repository);
   await harness.controller.selectMachine(testMachine);
   await tester.pumpAndSettle();
-  // WP-03B: the operation screen now gates behind part-first selection.
-  // Resolve the default fixture's main part, which auto-resolves to the
-  // already-active variant (no switchVariant round-trip), to reach the
-  // existing operation content exactly as before.
+  // Resolve the default fixture's main part. Its single compatible variant
+  // is already active, so transport actions appear on this same page.
   await _resolveDefaultPartFirstSelection(harness.controller);
   await tester.pumpAndSettle();
   return harness;
@@ -779,11 +669,6 @@ Future<_Harness> _operationHarness(
 
 Future<void> _resolveDefaultPartFirstSelection(AppController controller) async {
   await controller.selectMainPartOption(testMainPartOption);
-  // Customer UX — Part Selection Flow: a single compatible variant now
-  // pauses at partFirstReadyToContinue instead of resolving immediately, so
-  // fixtures reaching into the operation screen directly must explicitly
-  // continue past that gate.
-  controller.confirmPartFirstSelection();
 }
 
 Future<void> _loginFromUi(
@@ -798,16 +683,8 @@ Future<void> _loginFromUi(
   await tester.pumpAndSettle();
 }
 
-Future<void> _tapLayoutSlot(WidgetTester tester, String slotId) async {
-  // The direct-actions card above the layout can push slots beyond the
-  // ListView's cache extent, so they aren't built yet — scrollUntilVisible
-  // (rather than ensureVisible) incrementally scrolls until the slot mounts.
-  await _scrollTo(tester, find.byKey(Key('slot-$slotId')));
-  await tester.tap(find.byKey(Key('slot-$slotId')));
-  await tester.pump();
-}
-
 Future<void> _submitBringEmpty(WidgetTester tester) async {
+  await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
   await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('confirm-direct-transport')));

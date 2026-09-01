@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
 import '../../data/models/pda_models.dart';
+import 'transport_action_panel.dart';
 
-/// WP-03B: the part-first gate shown after a machine is selected and before
-/// the existing variant/layout/slot/operation flow. Reuses the existing
-/// backend endpoints (part-options, compatible-variants) and the existing
-/// variant-selection mechanism; never duplicates compatibility logic.
+/// Final Operator workspace after a machine is selected. Part and compatible
+/// variant resolution stay on this page; once proven, the business-operation
+/// buttons appear here without a physical-slot or layout step.
 class PartFirstSelector extends StatelessWidget {
   const PartFirstSelector({required this.controller, super.key});
 
@@ -58,9 +58,9 @@ class PartFirstSelector extends StatelessWidget {
             const SizedBox(height: 18),
             _CompatibleVariantCard(controller: controller),
           ],
-          if (controller.partFirstReadyToContinue) ...[
+          if (controller.transportActionsReady) ...[
             const SizedBox(height: 18),
-            _ContinueAction(controller: controller),
+            OperatorTransportPanel(controller: controller),
           ],
           const SizedBox(height: 40),
         ],
@@ -411,11 +411,9 @@ class _CompatibleVariantCard extends StatelessWidget {
         ),
       );
     }
-    // A single compatible variant is resolved internally by the controller
-    // (see _resolveVariant/_markVariantResolved) but no longer navigates
-    // away immediately — it pauses at partFirstReadyToContinue so RELATED/
-    // ALT alternatives above stay reachable. Show it as an informational,
-    // non-tappable confirmation rather than a one-item selectable list.
+    // A single compatible variant resolves internally while RELATED/ALT
+    // alternatives remain reachable on the same page. It is informational,
+    // not a one-item selectable list.
     if (variants.length == 1) {
       final variant = variants.single;
       return Card(
@@ -468,27 +466,6 @@ class _CompatibleVariantCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The explicit navigation action for the "resolve then continue" part-first
-/// flow (task: "clear Continue/İşleme Devam action once selection is
-/// ready" — not a second "Ana Parçayı Kullan" confirmation, just forward
-/// navigation to the operation screen once part+variant are both settled).
-class _ContinueAction extends StatelessWidget {
-  const _ContinueAction({required this.controller});
-
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: double.infinity,
-    child: FilledButton.icon(
-      key: const Key('part-first-continue'),
-      onPressed: controller.busy ? null : controller.confirmPartFirstSelection,
-      icon: const Icon(Icons.arrow_forward),
-      label: const Text('İşleme Devam Et'),
-    ),
-  );
 }
 
 class _RetryState extends StatelessWidget {

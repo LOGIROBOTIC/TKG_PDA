@@ -161,8 +161,8 @@ final testActiveRequest = ActiveTransportRequest.fromJson({
   'isMine': true,
   'sourceSlotId': null,
   'destinationSlotId': 'slot-vacant',
-  'productGroupId': null,
-  'partId': null,
+  'productGroupId': testProductGroupId,
+  'partId': testMainPartId,
   'containerTypeId': null,
   'priority': 100,
   'createdAt': '2026-08-24T08:00:00Z',
@@ -358,7 +358,6 @@ class FakePdaRepository implements PdaDataSource {
   int switchCount = 0;
   String? lastSwitchVariantId;
   Object? switchVariantError;
-  int loadStateCount = 0;
   int contextCount = 0;
   int meCount = 0;
   List<MachineMainPartOption> partOptionsValue = testPartOptions;
@@ -370,7 +369,6 @@ class FakePdaRepository implements PdaDataSource {
   int compatibleVariantsCount = 0;
   final List<String> compatibleVariantsRequestedMainPartIds = [];
   final List<String> compatibleVariantsRequestedPartIds = [];
-  String? lastLoadState;
   String? lastIdempotencyKey;
   TransportCommand? lastCommand;
   Completer<TransportResult>? createCompleter;
@@ -529,16 +527,6 @@ class FakePdaRepository implements PdaDataSource {
     warehouseRequestsValue = warehouseRequestsValue
         .where((request) => request.requestId != requestId)
         .toList(growable: false);
-  }
-
-  @override
-  Future<void> updateLoadState({
-    required String machineId,
-    required String slotId,
-    required String loadState,
-  }) async {
-    loadStateCount++;
-    lastLoadState = loadState;
   }
 
   @override

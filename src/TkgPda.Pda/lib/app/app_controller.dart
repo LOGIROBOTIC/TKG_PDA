@@ -63,7 +63,6 @@ class BatchCartItem {
   /// Avoid re-deriving the variant later because another cart item may have
   /// switched the machine to a different active variant/layout by then.
   String? slotDisplayName;
-  String? slotCode;
   String? actionCode;
   String? variantCode;
 
@@ -94,8 +93,6 @@ class AppController extends ChangeNotifier {
   List<MachineSummary> _machines = const [];
   MachineSummary? _selectedMachine;
   OperationalContext? _context;
-  LayoutSlot? _autoHighlightedSlot;
-  String? _autoHighlightedRequestId;
   bool _busy = false;
   bool _contextLoading = false;
   bool _offline = false;
@@ -116,15 +113,8 @@ class AppController extends ChangeNotifier {
   List<CompatibleVariant>? _compatibleVariants;
   bool _compatibleVariantsLoading = false;
   String? _compatibleVariantsError;
-  bool _partFirstResolved = false;
   CompatibleVariant? _resolvedCompatibleVariant;
   int _partResolutionGeneration = 0;
-
-  /// True once the effective part's variant has resolved (single-part flow
-  /// only) but the operator has not yet pressed "İşleme Devam Et" — RELATED/
-  /// ALT alternatives stay reachable during this window instead of
-  /// navigating straight to the operation screen.
-  bool _readyToContinue = false;
 
   // Customer UI — Multi-Part Transport Batch: cart state, independent of the
   // single-item part-first fields above (which drive whichever cart item is
@@ -155,10 +145,6 @@ class AppController extends ChangeNotifier {
   List<MachineSummary> get machines => _machines;
   MachineSummary? get selectedMachine => _selectedMachine;
   OperationalContext? get context => _context;
-
-  /// Passive visualization state derived only from a backend TransportRequest.
-  /// There is deliberately no public/manual setter for an Operator slot.
-  LayoutSlot? get autoHighlightedSlot => _autoHighlightedSlot;
   bool get busy => _busy;
   bool get offline => _offline;
   ApiProblem? get problem => _problem;
@@ -220,14 +206,15 @@ class AppController extends ChangeNotifier {
   bool isMarkingReady(String requestId) =>
       _warehouseMarkingReady.contains(requestId);
 
-  /// WP-03B: true while a machine is selected but the operator has not yet
-  /// completed the part-first -> compatible-variant resolution gate.
-  bool get needsPartSelection =>
-      _selectedMachine != null && !_partFirstResolved;
+  /// The final Operator action surface becomes available only after the
+  /// effective part and its compatible active variant are both proven.
+  bool get transportActionsReady =>
+      _selectedEffectivePart != null &&
+      _resolvedCompatibleVariant != null &&
+      _context?.activeVariantId == _resolvedCompatibleVariant!.variantId;
 
-  /// Customer UX — Part Selection Flow: true once the effective part's
-  /// variant has resolved and a "İşleme Devam Et" action should appear.
-  bool get partFirstReadyToContinue => _readyToContinue;
+  bool operationInProgress(String operation) =>
+      _operationInProgress(operation, _selectedEffectivePart?.partId);
 
   Future<void> initialize() async {
     _deviceCode = await _deviceCodeStore.read();
@@ -335,7 +322,6 @@ class AppController extends ChangeNotifier {
   Future<void> selectMachine(MachineSummary machine) async {
     _selectedMachine = machine;
     _context = null;
-    _clearAutoHighlight();
     _resetPartFirstState();
     _stage = AppStage.operation;
     notifyListeners();
@@ -346,7 +332,6 @@ class AppController extends ChangeNotifier {
     _stopPolling();
     _selectedMachine = null;
     _context = null;
-    _clearAutoHighlight();
     _resetPartFirstState();
     _stage = AppStage.machines;
     _clearFeedback();
@@ -370,7 +355,6 @@ class AppController extends ChangeNotifier {
       _context = next;
       _offline = false;
       _problem = null;
-      _reconcileAutoHighlight(next);
       if (_submission.hasAmbiguousRequest) {
         _submission.resolveByRefresh();
         _ambiguousCommand = null;
@@ -429,7 +413,6 @@ class AppController extends ChangeNotifier {
         navigationProfileId: null,
       );
       _context = null;
-      _clearAutoHighlight();
       await refreshContext();
       if (!preservePartSelection) {
         resetPartSelection();
@@ -480,8 +463,6 @@ class AppController extends ChangeNotifier {
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     _resolvedCompatibleVariant = null;
-    _readyToContinue = false;
-    _clearAutoHighlight();
     notifyListeners();
     await _loadCompatibleVariants(generation);
   }
@@ -502,10 +483,7 @@ class AppController extends ChangeNotifier {
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     _resolvedCompatibleVariant = null;
-    _partFirstResolved = false;
-    _readyToContinue = false;
     _partResolutionGeneration++;
-    _clearAutoHighlight();
     notifyListeners();
   }
 
@@ -584,14 +562,12 @@ class AppController extends ChangeNotifier {
   /// once every item has a command).
   Future<void> confirmBatchItemCommand(
     TransportCommand command, {
-    LayoutSlot? slot,
     required String operation,
   }) async {
     if (!isConfiguringBatchItem) return;
     final item = _batchCart[_batchConfiguringIndex];
     item.command = command;
-    item.slotDisplayName = slot?.displayName ?? 'Otomatik seçilecek';
-    item.slotCode = slot?.code;
+    item.slotDisplayName = 'Otomatik seçilecek';
     item.actionCode = operation;
     item.variantCode = _context?.activeVariantCode;
     _batchConfiguringIndex = -1;
@@ -611,12 +587,10 @@ class AppController extends ChangeNotifier {
 
   Future<void> _loadBatchItemForConfiguration(BatchCartItem item) async {
     _selectedMainPart = item.mainPart;
-    _clearAutoHighlight();
     _selectedEffectivePart = null;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     _resolvedCompatibleVariant = null;
-    _partFirstResolved = false;
     notifyListeners();
     await selectEffectivePart(item.effectivePart);
   }
@@ -633,7 +607,6 @@ class AppController extends ChangeNotifier {
     final item = _batchCart[index];
     item.command = null;
     item.slotDisplayName = null;
-    item.slotCode = null;
     item.actionCode = null;
     item.variantCode = null;
     _batchConfiguringIndex = index;
@@ -869,31 +842,8 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Customer UX — Part Selection Flow: while configuring one multi-part
-  /// batch item, resolution goes straight to the operation screen exactly as
-  /// before (existing, tested TransportBatch behavior is unchanged). In the
-  /// normal single-part flow it instead waits for an explicit
-  /// [confirmPartFirstSelection], so RELATED/ALT alternatives stay reachable.
   void _markVariantResolved(CompatibleVariant variant) {
     _resolvedCompatibleVariant = variant;
-    if (isConfiguringBatchItem) {
-      _partFirstResolved = true;
-    } else {
-      _readyToContinue = true;
-    }
-  }
-
-  /// The operator's explicit "İşleme Devam Et" action once a variant has
-  /// resolved — not a second "use the main part" confirmation, just
-  /// navigation to the next workflow stage.
-  void confirmPartFirstSelection() {
-    if (!_readyToContinue || _resolvedCompatibleVariant == null) return;
-    _readyToContinue = false;
-    _partFirstResolved = true;
-    if (_context case final context?) {
-      _reconcileAutoHighlight(context);
-    }
-    notifyListeners();
   }
 
   void _resetPartFirstState() {
@@ -905,10 +855,8 @@ class AppController extends ChangeNotifier {
     _compatibleVariants = null;
     _compatibleVariantsLoading = false;
     _compatibleVariantsError = null;
-    _partFirstResolved = false;
     _resolvedCompatibleVariant = null;
     _partResolutionGeneration++;
-    _readyToContinue = false;
     _batchMode = false;
     _batchCart.clear();
     _batchConfiguringIndex = -1;
@@ -918,8 +866,8 @@ class AppController extends ChangeNotifier {
   /// Customer UX — Automatic Machine Slot Resolution: builds a command with
   /// no machine-side slot chosen, so the backend resolves and reserves it
   /// atomically from master.layout_slot_parts using [partId]. Always called
-  /// with the part-first-resolved [_selectedEffectivePart], which is
-  /// guaranteed non-null once the operation screen is reachable at all.
+  /// with a compatible [_selectedEffectivePart], which is guaranteed non-null
+  /// once the operation buttons are visible on the selection screen.
   TransportCommand commandForDirect(String operation) {
     final current = _context;
     final part = _selectedEffectivePart;
@@ -972,6 +920,12 @@ class AppController extends ChangeNotifier {
         (_offline && !_submission.hasAmbiguousRequest)) {
       return null;
     }
+    if (!_submission.hasAmbiguousRequest &&
+        _operationInProgress(command.operation, command.partId)) {
+      _notice = 'Bu işlem için aktif bir taşıma talebi zaten var.';
+      notifyListeners();
+      return null;
+    }
     _setBusy(true);
     _clearFeedback();
     try {
@@ -981,11 +935,8 @@ class AppController extends ChangeNotifier {
       );
       _notice = result.idempotentReplay
           ? 'Mevcut talep doğrulandı.'
-          : 'Taşıma talebi oluşturuldu: #${result.requestNo}';
+          : 'Taşıma talebi oluşturuldu.';
       await refreshContext();
-      if (command.sourceSlotId == null && command.destinationSlotId == null) {
-        _highlightAutoResolvedSlot(result.id);
-      }
       _ambiguousCommand = null;
       return result;
     } on AmbiguousMutationException {
@@ -1011,23 +962,6 @@ class AppController extends ChangeNotifier {
     } finally {
       _setBusy(false);
     }
-  }
-
-  /// Customer UX — Automatic Machine Slot Resolution: after a slot-less
-  /// (direct-action) submission, mirrors the backend-resolved machine-side
-  /// slot into passive layout highlighting without an Operator selection.
-  void _highlightAutoResolvedSlot(String requestId) {
-    final current = _context;
-    if (current == null) return;
-    final request = _firstOrNull(
-      current.activeTransportRequests.where((r) => r.requestId == requestId),
-    );
-    final slotId = request == null ? null : _machineSideSlotId(request);
-    if (slotId == null) return;
-    final slot = _firstOrNull(current.slots.where((s) => s.id == slotId));
-    if (slot == null) return;
-    _autoHighlightedRequestId = requestId;
-    _autoHighlightedSlot = slot;
   }
 
   Future<TransportResult?> retryAmbiguousTransport() async {
@@ -1060,37 +994,6 @@ class AppController extends ChangeNotifier {
       if (problem.shouldRefetch) {
         await refreshContext();
       }
-    } finally {
-      _setBusy(false);
-    }
-  }
-
-  Future<void> reportLoadState(LayoutSlot slot, AvailableAction action) async {
-    final machine = _selectedMachine;
-    if (machine == null || !action.enabled || !mutationEnabled) return;
-    final target = action.action == 'MARK_FULL' ? 'FULL' : 'EMPTY';
-    _setBusy(true);
-    _clearFeedback();
-    try {
-      await _repository.updateLoadState(
-        machineId: machine.id,
-        slotId: slot.id,
-        loadState: target,
-      );
-      _notice = target == 'FULL'
-          ? 'Kasa dolu olarak bildirildi.'
-          : 'Kasa boş olarak bildirildi.';
-      await refreshContext();
-    } on ConnectivityException {
-      _offline = true;
-      _notice = 'Yük durumu sonucunun doğrulanması için bağlantıyı yenileyin.';
-    } on AmbiguousMutationException {
-      _offline = true;
-      _notice =
-          'Yük durumu sonucu belirsiz. Yeni bir durum seçmeden önce yenileyin.';
-    } on ApiProblem catch (problem) {
-      _problem = problem;
-      if (problem.shouldRefetch) await refreshContext();
     } finally {
       _setBusy(false);
     }
@@ -1135,62 +1038,13 @@ class AppController extends ChangeNotifier {
     _machines = await _repository.machines();
   }
 
-  void _reconcileAutoHighlight(OperationalContext context) {
-    ActiveTransportRequest? request;
-    if (_autoHighlightedRequestId case final requestId?) {
-      request = _firstOrNull(
-        context.activeTransportRequests.where(
-          (candidate) => candidate.requestId == requestId,
-        ),
-      );
-    }
-
-    final effectivePart = _selectedEffectivePart;
-    if (request == null && effectivePart != null) {
-      final matching =
-          context.activeTransportRequests
-              .where(
-                (candidate) =>
-                    candidate.isMine &&
-                    candidate.partId == effectivePart.partId,
-              )
-              .toList(growable: false)
-            ..sort((left, right) {
-              final byCreated = right.createdAt.compareTo(left.createdAt);
-              return byCreated != 0
-                  ? byCreated
-                  : right.requestNo.compareTo(left.requestNo);
-            });
-      request = _firstOrNull(matching);
-    }
-
-    if (request == null) {
-      _clearAutoHighlight();
-      return;
-    }
-    final slotId = _machineSideSlotId(request);
-    final slot = slotId == null
-        ? null
-        : _firstOrNull(
-            context.slots.where((candidate) => candidate.id == slotId),
-          );
-    if (slot == null || slot.isMachineRegion) {
-      _clearAutoHighlight();
-      return;
-    }
-    _autoHighlightedRequestId = request.requestId;
-    _autoHighlightedSlot = slot;
-  }
-
-  static String? _machineSideSlotId(ActiveTransportRequest request) =>
-      request.operation == 'BRING_EMPTY'
-      ? request.destinationSlotId
-      : request.sourceSlotId;
-
-  void _clearAutoHighlight() {
-    _autoHighlightedSlot = null;
-    _autoHighlightedRequestId = null;
-  }
+  bool _operationInProgress(String operation, String? partId) =>
+      partId != null &&
+      (_context?.activeTransportRequests.any(
+            (request) =>
+                request.partId == partId && request.operation == operation,
+          ) ??
+          false);
 
   void _schedulePolling() {
     _stopPolling();
@@ -1216,7 +1070,6 @@ class AppController extends ChangeNotifier {
     _machines = const [];
     _selectedMachine = null;
     _context = null;
-    _clearAutoHighlight();
     _resetPartFirstState();
     _offline = false;
     _resumeValidationPending = false;

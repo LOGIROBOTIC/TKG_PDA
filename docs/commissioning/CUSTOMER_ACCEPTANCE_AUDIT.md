@@ -115,10 +115,10 @@ Durum yorumları:
 | Dolu Kasayı Kaldır | `Kasa Doldu`/kaldırma niyeti | OCCUPIED+FULL machine source kuralı hazır | BLOCKED_BY_CUSTOMER_DATA | Full destination stratejisi yok |
 | Boş Kasayı Kaldır | `Kasa Boş`/kaldırma niyeti | OCCUPIED+EMPTY source ve EMPTY_STORAGE destination kuralı hazır | BLOCKED_BY_CUSTOMER_DATA | EMPTY_STORAGE pozisyonları yok |
 | Otomatik fiziksel slot | Backend-authoritative kural | Client slot göndermez; backend transaction içinde çözer ve reserve eder | PARTIAL | 48/172 lojistik slotta explicit Part↔Slot mapping yok |
-| Layout görselleştirme | 21 proven layout | Normalize 2D durum/inceleme; robot haritası olmadığı açık; tap execution yapmaz | PASS | SEALER V3 ayrı müşteri gap'i |
+| Layout yönetimi | 21 proven layout | Admin konfigürasyonunda korunur; normal Operator akışında fiziksel layout gösterilmez | PASS | SEALER V3 ayrı müşteri gap'i |
 | Warehouse readiness | Ayrı hazırlık gerçeği | `WAITING_PREPARATION / READY / NOT_REQUIRED`, execution'dan ayrı; Warehouse/Supervisor yetkili | PASS | Hangi işlerin hazırlık istediği tahmin edilmedi; müşteri kuralı gerekir |
 | Robot alarm görünürlüğü | RDS `GET /api/agv-report/core` | Operator'a sade/actionable read-only banner; reset/ack/clear/history yok | BLOCKED_BY_COMMISSIONING | Production RDS ve fiziksel robot alarm kabulü yapılmadı |
-| Dar PDA / Web/PWA kullanımı | Android + browser hedefi | Narrow-width widget testleri, Chrome/Edge E2E; büyük action ve responsive canvas | PASS | Gerçek terminal/PDA saha kabulü gerekir |
+| Dar PDA / Web/PWA kullanımı | Android + browser hedefi | Narrow-width widget testleri, Chrome/Edge E2E ve aynı sayfada büyük operation action'ları | PASS | Gerçek terminal/PDA saha kabulü gerekir |
 
 ## 5. Operator akışı sonucu
 
@@ -130,14 +130,13 @@ Sicil + kayıtlı cihaz
   -> ana parça
   -> opsiyonel ALT/RELATED
   -> compatible variant
-  -> İşleme Devam Et
   -> Boş Kasa Getir / Dolu Kasayı Kaldır / Boş Kasayı Kaldır
   -> backend slot çözümü ve reservation
   -> request
-  -> "Konum otomatik seçildi" + layout highlight
+  -> aynı ekranda başarı/aktif taşıma durumu
 ```
 
-Operator layout'u pasif visualization/status yüzeyidir; slot tap herhangi bir seçim, detay paneli, load-state aksiyonu veya transport source/destination üretmez. Bir request oluşturulduğunda yalnız backend'in transaction içinde çözdüğü makine tarafındaki slot otomatik vurgulanır. Generated `SLOT-001` benzeri DB kodları Operator presentation'da gösterilmez; backend/Admin kimliği veya routing değişmez.
+Normal Operator akışında ayrı operation/layout sayfası yoktur. Part ve compatible variant çözüldüğünde üç business action aynı seçim ekranında görünür. Flutter fiziksel slot, `EMPTY_STORAGE`, WorkSite veya RDS hedefi seçmez ve göndermez; bunları backend transaction içinde çözer. Fiziksel layout verisi Admin konfigürasyonu ve backend kanıtı olarak korunur, Operator routing yüzeyi değildir.
 
 ## 6. Production readiness sınırı
 

@@ -300,7 +300,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Item 1: main part -> single variant, already active -> no switch.
-      expect(harness.controller.needsPartSelection, isFalse);
+      expect(harness.controller.transportActionsReady, isTrue);
       expect(harness.controller.context?.activeVariantId, testVariantV1Id);
       expect(repository.switchCount, 0);
       await _tapAction(tester, 'direct-action-BRING_EMPTY');
@@ -495,13 +495,11 @@ void main() {
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
-      // Never enters batch mode. One click on the main part resolves its
-      // single compatible variant and opens the operation flow directly.
+      // Never enters batch mode. One click resolves the single compatible
+      // variant and exposes operations on the same page.
       await tester.tap(
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('part-first-continue')));
       await tester.pumpAndSettle();
 
       await _tapAction(tester, 'direct-action-BRING_EMPTY');
@@ -516,7 +514,7 @@ void main() {
 }
 
 /// Adds main + RELATED (both compatible with V1) and walks each through the
-/// operation screen to Review without exposing physical slot selection.
+/// same-page action step to Review without exposing physical slot selection.
 Future<void> _configureTwoItemCart(WidgetTester tester) async {
   await _enterBatchMode(tester);
   await _expandMain(tester, testMainPartOption);

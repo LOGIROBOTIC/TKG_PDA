@@ -107,7 +107,7 @@ void main() {
       check(
         first.stage,
         AppStage.operation,
-        'machine selection opens operation',
+        'machine selection opens combined part and action workspace',
       );
       check(context.machine.code, 'SH-01-A', 'context stays in machine scope');
       check(context.activeVariantId, isNotNull, 'active variant projected');
@@ -118,7 +118,6 @@ void main() {
         'alt parts projected',
       );
 
-      // WP-03B: the operation view now gates behind part-first selection.
       // Resolve the active variant's own main part through the real
       // part-options/compatible-variants endpoints (preferring the
       // already-active variant if the part resolves to more than one, so
@@ -129,7 +128,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      if (first.needsPartSelection) {
+      if (!first.transportActionsReady) {
         final variants = first.compatibleVariants ?? const [];
         final match = variants.firstWhere(
           (option) => option.variantId == context.activeVariantId,
@@ -138,18 +137,15 @@ void main() {
         await first.selectCompatibleVariant(match);
         await tester.pumpAndSettle();
       }
-      // Customer UX — Part Selection Flow: the variant resolves internally
-      // but now pauses at partFirstReadyToContinue (RELATED/ALT stay
-      // reachable) instead of leaving the gate immediately — confirm to
-      // proceed, exactly as the "İşleme Devam Et" button does.
-      if (first.partFirstReadyToContinue) {
-        first.confirmPartFirstSelection();
-        await tester.pumpAndSettle();
-      }
       check(
-        first.needsPartSelection,
-        isFalse,
-        'part-first resolves before entering the operation view',
+        first.transportActionsReady,
+        isTrue,
+        'part and compatible variant expose operations on the same page',
+      );
+      check(
+        find.text('İşleme Devam Et'),
+        findsNothing,
+        'no forward-navigation step remains',
       );
 
       check(
@@ -204,7 +200,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      if (first.needsPartSelection) {
+      if (!first.transportActionsReady) {
         final variants = first.compatibleVariants ?? const [];
         await first.selectCompatibleVariant(
           variants.firstWhere(
@@ -212,10 +208,6 @@ void main() {
             orElse: () => variants.first,
           ),
         );
-        await tester.pumpAndSettle();
-      }
-      if (first.partFirstReadyToContinue) {
-        first.confirmPartFirstSelection();
         await tester.pumpAndSettle();
       }
 
@@ -281,23 +273,20 @@ void main() {
         'Kasa Boş comes from API',
       );
 
-      await _reveal(tester, find.byKey(Key('slot-${vacant.id}')));
-      await tester.tap(find.byKey(Key('slot-${vacant.id}')));
-      await tester.pumpAndSettle();
       check(
-        first.autoHighlightedSlot,
-        isNull,
-        'physical slot tap creates no manual selection',
+        find.text('Fiziksel Yerleşim'),
+        findsNothing,
+        'physical layout is absent from the normal Operator workspace',
+      );
+      check(
+        find.byKey(Key('slot-${vacant.id}')),
+        findsNothing,
+        'physical slot is not exposed as an Operator control',
       );
       check(
         find.byKey(const Key('slot-details')),
         findsNothing,
-        'physical slot tap opens no detail/action panel',
-      );
-      check(
-        find.byKey(const Key('slot-auto-highlight-badge')),
-        findsNothing,
-        'physical slot tap creates no highlight',
+        'legacy physical-slot detail panel is absent',
       );
       await _reveal(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
       check(
@@ -324,19 +313,20 @@ void main() {
         'BRING_EMPTY',
         'submitted operation preserved',
       );
+      await _reveal(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
       check(
-        first.autoHighlightedSlot?.id,
-        first.context!.activeTransportRequests.single.destinationSlotId,
-        'backend-resolved machine slot is highlighted',
-      );
-      await _reveal(
-        tester,
-        find.byKey(const Key('slot-auto-resolved-indicator')),
+        tester
+            .widget<ElevatedButton>(
+              find.byKey(const Key('direct-action-BRING_EMPTY')),
+            )
+            .onPressed,
+        isNull,
+        'active request prevents repeated submission',
       );
       check(
-        find.byKey(const Key('slot-auto-resolved-indicator')),
+        find.text('Taşıma talebi oluşturuldu.'),
         findsOneWidget,
-        'automatic slot resolution is visible as passive status',
+        'successful creation stays in context with Turkish feedback',
       );
 
       await _reveal(
@@ -391,7 +381,7 @@ void main() {
         0,
         'reload leaves sessionStorage empty',
       );
-      check(checks, 52, 'all frozen browser checks ran');
+      check(checks, 53, 'all frozen browser checks ran');
 
       first.dispose();
       second.dispose();
@@ -426,10 +416,8 @@ bool _enabledLoad(LayoutSlot slot, String action) => slot.loadStateActions.any(
 );
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
-  // The wide layout splits content across two independent scrollables
-  // (operation-wide-left/-right); the target can live in either one
-  // depending on how much content precedes it, so try each in turn rather
-  // than assuming it is always the right column.
+  // Discover the target in whichever scrollable currently owns the combined
+  // machine/part/action workspace.
   if (finder.evaluate().isNotEmpty) {
     try {
       await tester.ensureVisible(finder);

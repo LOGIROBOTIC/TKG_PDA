@@ -137,7 +137,7 @@ Sicil + kayıtlı cihaz
   -> "Konum otomatik seçildi" + layout highlight
 ```
 
-Layout tap yalnız inspection/status/load-state bilgisidir; tap edilen `selectedSlot`, transport source/destination'a dönüşmez. Tek software defect olarak, generated `SLOT-001` benzeri DB kodlarının Operator layout/detail ve warehouse kartında görünmesi bulundu. Kodlar sadece Operator presentation'dan kaldırıldı; backend/Admin kimliği veya routing değişmedi.
+Operator layout'u pasif visualization/status yüzeyidir; slot tap herhangi bir seçim, detay paneli, load-state aksiyonu veya transport source/destination üretmez. Bir request oluşturulduğunda yalnız backend'in transaction içinde çözdüğü makine tarafındaki slot otomatik vurgulanır. Generated `SLOT-001` benzeri DB kodları Operator presentation'da gösterilmez; backend/Admin kimliği veya routing değişmez.
 
 ## 6. Production readiness sınırı
 

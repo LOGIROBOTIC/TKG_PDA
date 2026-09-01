@@ -6,14 +6,12 @@ import '../../shared/presentation.dart';
 class LayoutCanvas extends StatelessWidget {
   const LayoutCanvas({
     required this.slots,
-    required this.selectedSlotId,
-    required this.onSlotSelected,
+    required this.highlightedSlotId,
     super.key,
   });
 
   final List<LayoutSlot> slots;
-  final String? selectedSlotId;
-  final ValueChanged<LayoutSlot> onSlotSelected;
+  final String? highlightedSlotId;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +54,7 @@ class LayoutCanvas extends StatelessWidget {
                     clipBehavior: Clip.hardEdge,
                     children: [
                       for (final slot in positioned)
-                        _positionedSlot(context, constraints, slot),
+                        _positionedSlot(constraints, slot),
                     ],
                   ),
                 ),
@@ -81,11 +79,7 @@ class LayoutCanvas extends StatelessWidget {
     );
   }
 
-  Widget _positionedSlot(
-    BuildContext context,
-    BoxConstraints constraints,
-    LayoutSlot slot,
-  ) {
+  Widget _positionedSlot(BoxConstraints constraints, LayoutSlot slot) {
     final x = slot.x!.clamp(0.0, 1.0);
     final y = slot.y!.clamp(0.0, 1.0);
     final width = slot.width!.clamp(0.0, 1.0 - x);
@@ -95,23 +89,19 @@ class LayoutCanvas extends StatelessWidget {
       top: constraints.maxHeight * y,
       width: constraints.maxWidth * width,
       height: constraints.maxHeight * height,
-      child: _slotSurface(context, slot),
+      child: _slotSurface(slot),
     );
   }
 
   Widget _unpositioned(LayoutSlot slot) =>
-      SizedBox(height: 52, child: _slotSurface(null, slot, compact: true));
+      SizedBox(height: 52, child: _slotSurface(slot, compact: true));
 
-  Widget _slotSurface(
-    BuildContext? context,
-    LayoutSlot slot, {
-    bool compact = false,
-  }) {
-    final selected = selectedSlotId == slot.id;
+  Widget _slotSurface(LayoutSlot slot, {bool compact = false}) {
+    final highlighted = highlightedSlotId == slot.id;
     final machine = slot.isMachineRegion;
     final background = machine
         ? const Color(0xFF334155)
-        : selected
+        : highlighted
         ? const Color(0xFFF59E0B)
         : _slotColor(slot);
     final foreground = machine || slot.occupancyState == 'OCCUPIED'
@@ -122,8 +112,8 @@ class LayoutCanvas extends StatelessWidget {
       decoration: BoxDecoration(
         color: background,
         border: Border.all(
-          color: selected ? const Color(0xFF7C2D12) : Colors.white70,
-          width: selected ? 3 : 1,
+          color: highlighted ? const Color(0xFF7C2D12) : Colors.white70,
+          width: highlighted ? 3 : 1,
         ),
         borderRadius: BorderRadius.circular(5),
       ),
@@ -154,28 +144,22 @@ class LayoutCanvas extends StatelessWidget {
     return Semantics(
       label:
           '${operatorLocationLabel(slot.displayName, slot.code)}; '
-          '${slot.occupancyState}; ${slot.loadState}',
-      button: true,
-      selected: selected,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: slot.transportEligible ? () => onSlotSelected(slot) : null,
-          child: selected
-              ? Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    child,
-                    const Positioned(
-                      top: -6,
-                      right: -6,
-                      child: _SelectedBadge(),
-                    ),
-                  ],
-                )
-              : child,
-        ),
-      ),
+          '${slot.occupancyState}; ${slot.loadState}'
+          '${highlighted ? '; otomatik seçilen konum' : ''}',
+      button: false,
+      child: highlighted
+          ? Stack(
+              clipBehavior: Clip.none,
+              children: [
+                child,
+                const Positioned(
+                  top: -6,
+                  right: -6,
+                  child: _AutoResolvedBadge(),
+                ),
+              ],
+            )
+          : child,
     );
   }
 
@@ -195,14 +179,13 @@ class LayoutCanvas extends StatelessWidget {
       slot.height! > 0;
 }
 
-/// A small, unambiguous "this is the selected slot" marker that survives
-/// regardless of the slot's own occupancy color.
-class _SelectedBadge extends StatelessWidget {
-  const _SelectedBadge();
+/// Passive status marker for the machine-side slot resolved by the backend.
+class _AutoResolvedBadge extends StatelessWidget {
+  const _AutoResolvedBadge();
 
   @override
   Widget build(BuildContext context) => Container(
-    key: const Key('slot-selected-badge'),
+    key: const Key('slot-auto-highlight-badge'),
     width: 20,
     height: 20,
     decoration: const BoxDecoration(

@@ -262,10 +262,6 @@ class _OperationContent extends StatelessWidget {
         _DirectActions(controller: controller),
         const SizedBox(height: 14),
         _LayoutCard(contextData: contextData, controller: controller),
-        if (controller.selectedSlot case final slot?) ...[
-          const SizedBox(height: 14),
-          _SlotDetails(slot: slot, controller: controller),
-        ],
         const SizedBox(height: 14),
         _ActiveTransportSection(
           requests: contextData.activeTransportRequests,
@@ -310,10 +306,6 @@ class _OperationContent extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(8, 16, 16, 24),
             children: [
               _LayoutCard(contextData: contextData, controller: controller),
-              if (controller.selectedSlot case final slot?) ...[
-                const SizedBox(height: 14),
-                _SlotDetails(slot: slot, controller: controller),
-              ],
             ],
           ),
         ),
@@ -343,11 +335,27 @@ class _LayoutCard extends StatelessWidget {
           const Text(
             'Yalnız görüntüleme ve durum takibi içindir. Taşıma konumunu sunucu otomatik seçer.',
           ),
+          if (controller.autoHighlightedSlot != null) ...[
+            const SizedBox(height: 8),
+            const Row(
+              key: Key('slot-auto-resolved-indicator'),
+              children: [
+                Icon(Icons.auto_awesome, size: 16, color: Color(0xFF15803D)),
+                SizedBox(width: 6),
+                Text(
+                  'Konum otomatik seçildi',
+                  style: TextStyle(
+                    color: Color(0xFF15803D),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           LayoutCanvas(
             slots: contextData.slots,
-            selectedSlotId: controller.selectedSlot?.id,
-            onSlotSelected: controller.selectSlot,
+            highlightedSlotId: controller.autoHighlightedSlot?.id,
           ),
         ],
       ),
@@ -509,8 +517,7 @@ class _MachineHeader extends StatelessWidget {
 /// BRING_EMPTY/REMOVE_FULL/REMOVE_EMPTY directly once part+variant have
 /// resolved, without tapping a layout slot first. The backend resolves and
 /// reserves the machine-side slot from master.layout_slot_parts; this widget
-/// never picks a slot itself. Tapping a slot in the layout below still works
-/// as a secondary, view-oriented path (see [_SlotDetails]).
+/// never picks a slot itself. The layout below is a passive status surface.
 class _DirectActions extends StatelessWidget {
   const _DirectActions({required this.controller});
 
@@ -634,203 +641,6 @@ class _DirectActions extends StatelessWidget {
         await controller.submitTransport(command);
       }
     }
-  }
-}
-
-class _SlotDetails extends StatelessWidget {
-  const _SlotDetails({required this.slot, required this.controller});
-
-  final LayoutSlot slot;
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final busy = slot.availableActions.any(
-      (action) => action.disabledCode == 'SLOT_BUSY',
-    );
-    return Card(
-      key: const Key('slot-details'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    operatorLocationLabel(slot.displayName, slot.code),
-                    style: const TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                if (busy)
-                  const Chip(
-                    avatar: Icon(Icons.lock_clock, size: 18),
-                    label: Text('Kullanımda'),
-                    backgroundColor: Color(0xFFFED7AA),
-                  ),
-              ],
-            ),
-            if (controller.slotWasAutoResolved) ...[
-              const SizedBox(height: 6),
-              const Row(
-                key: Key('slot-auto-resolved-indicator'),
-                children: [
-                  Icon(Icons.auto_awesome, size: 16, color: Color(0xFF15803D)),
-                  SizedBox(width: 6),
-                  Text(
-                    'Konum otomatik seçildi',
-                    style: TextStyle(
-                      color: Color(0xFF15803D),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(label: Text(occupancyLabel(slot.occupancyState))),
-                Chip(label: Text(loadLabel(slot.loadState))),
-                Chip(label: Text('Parça: ${knownOr(slot.currentPartCode)}')),
-                Chip(
-                  label: Text(
-                    'Kasa: ${knownOr(slot.currentContainerCode ?? slot.defaultContainerCode)}',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _RdsReadiness(slot: slot),
-            if (slot.loadStateActions.isNotEmpty) ...[
-              const Divider(height: 28),
-              const Text(
-                'Kasa Yük Durumu',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              for (final action in slot.loadStateActions)
-                _LoadStateActionRow(
-                  slot: slot,
-                  action: action,
-                  controller: controller,
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadStateActionRow extends StatelessWidget {
-  const _LoadStateActionRow({
-    required this.slot,
-    required this.action,
-    required this.controller,
-  });
-
-  final LayoutSlot slot;
-  final AvailableAction action;
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = action.enabled && controller.mutationEnabled;
-    final label = action.action == 'MARK_FULL' ? 'Kasa Doldu' : 'Kasa Boş';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: OutlinedButton(
-              key: Key('load-state-${action.action}'),
-              onPressed: enabled ? () => _confirm(context, label) : null,
-              child: Text(label),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 3,
-            child: Text(
-              enabled
-                  ? 'Sunucu bu durum bildirimine izin veriyor.'
-                  : disabledReason(action.disabledMessage),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirm(BuildContext context, String label) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$label olarak işaretle'),
-        content: Text(
-          '${slot.displayName} için yük durumu değiştirilsin mi? Bu işlem taşıma talebi oluşturmaz.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Vazgeç'),
-          ),
-          ElevatedButton(
-            key: Key('confirm-${action.action}'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Onayla'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await controller.reportLoadState(slot, action);
-  }
-}
-
-class _RdsReadiness extends StatelessWidget {
-  const _RdsReadiness({required this.slot});
-
-  final LayoutSlot slot;
-
-  @override
-  Widget build(BuildContext context) {
-    final messages = <String>[];
-    if (!slot.executionReadiness.isExecutionReady) {
-      messages.add(readinessLabel(slot.executionReadiness.readinessCode));
-    }
-    if (messages.isEmpty && slot.executionReadiness.isExecutionReady) {
-      messages.add('Robot noktası eşleme bilgisi hazır.');
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final message in messages)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                Icon(
-                  messages.length == 1 &&
-                          slot.executionReadiness.isExecutionReady
-                      ? Icons.check_circle
-                      : Icons.info_outline,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(message)),
-              ],
-            ),
-          ),
-      ],
-    );
   }
 }
 

@@ -45,7 +45,7 @@ class EffectivePartSelection {
 /// Customer UI — Multi-Part Transport Batch: one effective part added to the
 /// multi-select cart. [command] stays null until the operator has walked
 /// this item through the existing part-first -> compatible-variant ->
-/// operation/slot flow and confirmed an action for it.
+/// operation flow and confirmed an action for it.
 class BatchCartItem {
   BatchCartItem({
     required this.cartItemId,
@@ -58,10 +58,10 @@ class BatchCartItem {
   final EffectivePartSelection effectivePart;
   TransportCommand? command;
 
-  /// Display-only snapshot captured at confirm time (the widget has the
-  /// resolved [LayoutSlot]/variant right there); avoided re-deriving these
-  /// from [AppController.context] later since a different cart item may by
-  /// then have switched the machine to a different active variant/layout.
+  /// Display-only snapshot captured at confirm time. The physical slot stays
+  /// backend-resolved, so it is shown as automatic until a request exists.
+  /// Avoid re-deriving the variant later because another cart item may have
+  /// switched the machine to a different active variant/layout by then.
   String? slotDisplayName;
   String? slotCode;
   String? actionCode;
@@ -94,8 +94,8 @@ class AppController extends ChangeNotifier {
   List<MachineSummary> _machines = const [];
   MachineSummary? _selectedMachine;
   OperationalContext? _context;
-  LayoutSlot? _selectedSlot;
-  bool _slotAutoResolved = false;
+  LayoutSlot? _autoHighlightedSlot;
+  String? _autoHighlightedRequestId;
   bool _busy = false;
   bool _contextLoading = false;
   bool _offline = false;
@@ -155,12 +155,10 @@ class AppController extends ChangeNotifier {
   List<MachineSummary> get machines => _machines;
   MachineSummary? get selectedMachine => _selectedMachine;
   OperationalContext? get context => _context;
-  LayoutSlot? get selectedSlot => _selectedSlot;
 
-  /// True when [selectedSlot] became the current selection through backend
-  /// automatic machine-slot resolution rather than an operator tap — drives
-  /// the "Konum otomatik seçildi" indicator.
-  bool get slotWasAutoResolved => _slotAutoResolved && _selectedSlot != null;
+  /// Passive visualization state derived only from a backend TransportRequest.
+  /// There is deliberately no public/manual setter for an Operator slot.
+  LayoutSlot? get autoHighlightedSlot => _autoHighlightedSlot;
   bool get busy => _busy;
   bool get offline => _offline;
   ApiProblem? get problem => _problem;
@@ -337,7 +335,7 @@ class AppController extends ChangeNotifier {
   Future<void> selectMachine(MachineSummary machine) async {
     _selectedMachine = machine;
     _context = null;
-    _clearSelectedSlot();
+    _clearAutoHighlight();
     _resetPartFirstState();
     _stage = AppStage.operation;
     notifyListeners();
@@ -348,7 +346,7 @@ class AppController extends ChangeNotifier {
     _stopPolling();
     _selectedMachine = null;
     _context = null;
-    _clearSelectedSlot();
+    _clearAutoHighlight();
     _resetPartFirstState();
     _stage = AppStage.machines;
     _clearFeedback();
@@ -372,7 +370,7 @@ class AppController extends ChangeNotifier {
       _context = next;
       _offline = false;
       _problem = null;
-      _reconcileSelections(next);
+      _reconcileAutoHighlight(next);
       if (_submission.hasAmbiguousRequest) {
         _submission.resolveByRefresh();
         _ambiguousCommand = null;
@@ -431,7 +429,7 @@ class AppController extends ChangeNotifier {
         navigationProfileId: null,
       );
       _context = null;
-      _clearSelectedSlot();
+      _clearAutoHighlight();
       await refreshContext();
       if (!preservePartSelection) {
         resetPartSelection();
@@ -483,7 +481,7 @@ class AppController extends ChangeNotifier {
     _compatibleVariantsError = null;
     _resolvedCompatibleVariant = null;
     _readyToContinue = false;
-    _clearSelectedSlot();
+    _clearAutoHighlight();
     notifyListeners();
     await _loadCompatibleVariants(generation);
   }
@@ -507,7 +505,7 @@ class AppController extends ChangeNotifier {
     _partFirstResolved = false;
     _readyToContinue = false;
     _partResolutionGeneration++;
-    _clearSelectedSlot();
+    _clearAutoHighlight();
     notifyListeners();
   }
 
@@ -613,7 +611,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> _loadBatchItemForConfiguration(BatchCartItem item) async {
     _selectedMainPart = item.mainPart;
-    _clearSelectedSlot();
+    _clearAutoHighlight();
     _selectedEffectivePart = null;
     _compatibleVariants = null;
     _compatibleVariantsError = null;
@@ -892,6 +890,9 @@ class AppController extends ChangeNotifier {
     if (!_readyToContinue || _resolvedCompatibleVariant == null) return;
     _readyToContinue = false;
     _partFirstResolved = true;
+    if (_context case final context?) {
+      _reconcileAutoHighlight(context);
+    }
     notifyListeners();
   }
 
@@ -912,15 +913,6 @@ class AppController extends ChangeNotifier {
     _batchCart.clear();
     _batchConfiguringIndex = -1;
     _batchSubmission.clear();
-  }
-
-  void selectSlot(LayoutSlot? slot) {
-    if (slot?.isMachineRegion ?? false) {
-      return;
-    }
-    _selectedSlot = slot;
-    _slotAutoResolved = false;
-    notifyListeners();
   }
 
   /// Customer UX — Automatic Machine Slot Resolution: builds a command with
@@ -1022,21 +1014,20 @@ class AppController extends ChangeNotifier {
   }
 
   /// Customer UX — Automatic Machine Slot Resolution: after a slot-less
-  /// (direct-action) submission, mirrors the backend-resolved slot into
-  /// [selectedSlot] so the existing layout highlighting shows it without
-  /// requiring the operator to tap it.
+  /// (direct-action) submission, mirrors the backend-resolved machine-side
+  /// slot into passive layout highlighting without an Operator selection.
   void _highlightAutoResolvedSlot(String requestId) {
     final current = _context;
     if (current == null) return;
     final request = _firstOrNull(
       current.activeTransportRequests.where((r) => r.requestId == requestId),
     );
-    final slotId = request?.destinationSlotId ?? request?.sourceSlotId;
+    final slotId = request == null ? null : _machineSideSlotId(request);
     if (slotId == null) return;
     final slot = _firstOrNull(current.slots.where((s) => s.id == slotId));
     if (slot == null) return;
-    _selectedSlot = slot;
-    _slotAutoResolved = true;
+    _autoHighlightedRequestId = requestId;
+    _autoHighlightedSlot = slot;
   }
 
   Future<TransportResult?> retryAmbiguousTransport() async {
@@ -1144,20 +1135,61 @@ class AppController extends ChangeNotifier {
     _machines = await _repository.machines();
   }
 
-  void _reconcileSelections(OperationalContext context) {
-    if (_selectedSlot != null) {
-      _selectedSlot = _firstOrNull(
-        context.slots.where((slot) => slot.id == _selectedSlot!.id),
+  void _reconcileAutoHighlight(OperationalContext context) {
+    ActiveTransportRequest? request;
+    if (_autoHighlightedRequestId case final requestId?) {
+      request = _firstOrNull(
+        context.activeTransportRequests.where(
+          (candidate) => candidate.requestId == requestId,
+        ),
       );
-      if (_selectedSlot == null) {
-        _slotAutoResolved = false;
-      }
     }
+
+    final effectivePart = _selectedEffectivePart;
+    if (request == null && effectivePart != null) {
+      final matching =
+          context.activeTransportRequests
+              .where(
+                (candidate) =>
+                    candidate.isMine &&
+                    candidate.partId == effectivePart.partId,
+              )
+              .toList(growable: false)
+            ..sort((left, right) {
+              final byCreated = right.createdAt.compareTo(left.createdAt);
+              return byCreated != 0
+                  ? byCreated
+                  : right.requestNo.compareTo(left.requestNo);
+            });
+      request = _firstOrNull(matching);
+    }
+
+    if (request == null) {
+      _clearAutoHighlight();
+      return;
+    }
+    final slotId = _machineSideSlotId(request);
+    final slot = slotId == null
+        ? null
+        : _firstOrNull(
+            context.slots.where((candidate) => candidate.id == slotId),
+          );
+    if (slot == null || slot.isMachineRegion) {
+      _clearAutoHighlight();
+      return;
+    }
+    _autoHighlightedRequestId = request.requestId;
+    _autoHighlightedSlot = slot;
   }
 
-  void _clearSelectedSlot() {
-    _selectedSlot = null;
-    _slotAutoResolved = false;
+  static String? _machineSideSlotId(ActiveTransportRequest request) =>
+      request.operation == 'BRING_EMPTY'
+      ? request.destinationSlotId
+      : request.sourceSlotId;
+
+  void _clearAutoHighlight() {
+    _autoHighlightedSlot = null;
+    _autoHighlightedRequestId = null;
   }
 
   void _schedulePolling() {
@@ -1184,7 +1216,7 @@ class AppController extends ChangeNotifier {
     _machines = const [];
     _selectedMachine = null;
     _context = null;
-    _clearSelectedSlot();
+    _clearAutoHighlight();
     _resetPartFirstState();
     _offline = false;
     _resumeValidationPending = false;

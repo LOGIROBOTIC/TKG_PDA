@@ -281,16 +281,23 @@ void main() {
         'Kasa Boş comes from API',
       );
 
-      first.selectSlot(
-        context.slots.firstWhere((slot) => slot.isMachineRegion),
-      );
-      check(first.selectedSlot, isNull, 'MACHINE cannot be selected');
-      first.selectSlot(vacant);
-      await tester.pump();
+      await _reveal(tester, find.byKey(Key('slot-${vacant.id}')));
+      await tester.tap(find.byKey(Key('slot-${vacant.id}')));
+      await tester.pumpAndSettle();
       check(
-        find.byKey(const Key('action-BRING_EMPTY')),
+        first.autoHighlightedSlot,
+        isNull,
+        'physical slot tap creates no manual selection',
+      );
+      check(
+        find.byKey(const Key('slot-details')),
         findsNothing,
-        'physical slot inspection does not expose transport commands',
+        'physical slot tap opens no detail/action panel',
+      );
+      check(
+        find.byKey(const Key('slot-auto-highlight-badge')),
+        findsNothing,
+        'physical slot tap creates no highlight',
       );
       await _reveal(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
       check(
@@ -316,6 +323,20 @@ void main() {
         first.context!.activeTransportRequests.single.operation,
         'BRING_EMPTY',
         'submitted operation preserved',
+      );
+      check(
+        first.autoHighlightedSlot?.id,
+        first.context!.activeTransportRequests.single.destinationSlotId,
+        'backend-resolved machine slot is highlighted',
+      );
+      await _reveal(
+        tester,
+        find.byKey(const Key('slot-auto-resolved-indicator')),
+      );
+      check(
+        find.byKey(const Key('slot-auto-resolved-indicator')),
+        findsOneWidget,
+        'automatic slot resolution is visible as passive status',
       );
 
       await _reveal(
@@ -370,7 +391,7 @@ void main() {
         0,
         'reload leaves sessionStorage empty',
       );
-      check(checks, 49, 'all frozen Phase 09 browser checks ran');
+      check(checks, 52, 'all frozen browser checks ran');
 
       first.dispose();
       second.dispose();

@@ -1,0 +1,365 @@
+using System.Net;
+using System.Reflection;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using TkgPda.Application;
+using Xunit;
+
+namespace TkgPda.Api.Tests;
+
+public sealed class RdsCoreNativeOrderClientTests
+{
+    private static readonly Guid RequestId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+
+    [Fact]
+    public async Task Navigation_order_serializes_all_supported_fields_with_sealed_deterministic_contract()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok","order_details":{"errors":[],"warnings":[],"notices":[]},"future":{"x":1}}"""));
+        var client = Client(handler);
+        var order = RdsCoreNormalOrder.Create(
+            RequestId,
+            Navigation("pickup", "SIM-A"),
+            Navigation("dropoff", "SIM-B"),
+            externalId: "business-1",
+            vehicle: "sim_01",
+            group: "g2",
+            label: "commissioning",
+            keyRoute: ["route-key", "route-key-2"],
+            keyTask: "task-key",
+            priority: 10);
+
+        var result = await client.SetOrderAsync(order, Guid.NewGuid());
+
+        Assert.True(result.HttpAccepted);
+        Assert.True(result.CoreAccepted);
+        Assert.True(result.ExecutionValidated);
+        Assert.True(result.RawResponse!.Value.GetProperty("future").GetProperty("x").GetInt32() == 1);
+        var payload = JsonDocument.Parse(handler.Single().Body).RootElement;
+        Assert.Equal(RequestId.ToString("D"), payload.GetProperty("id").GetString());
+        Assert.Equal("business-1", payload.GetProperty("externalId").GetString());
+        Assert.Equal("sim_01", payload.GetProperty("vehicle").GetString());
+        Assert.Equal("g2", payload.GetProperty("group").GetString());
+        Assert.Equal("commissioning", payload.GetProperty("label").GetString());
+        Assert.Equal(new string?[] { "route-key", "route-key-2" }, payload.GetProperty("keyRoute").EnumerateArray().Select(value => value.GetString()).ToArray());
+        Assert.Equal("task-key", payload.GetProperty("keyTask").GetString());
+        Assert.Equal(10, payload.GetProperty("priority").GetInt32());
+        Assert.True(payload.GetProperty("complete").GetBoolean());
+        var blocks = payload.GetProperty("blocks");
+        Assert.Equal($"{RequestId:D}:pickup", blocks[0].GetProperty("blockId").GetString());
+        Assert.Equal($"{RequestId:D}:dropoff", blocks[1].GetProperty("blockId").GetString());
+        Assert.False(blocks[0].TryGetProperty("operation", out _));
+    }
+
+    [Fact]
+    public async Task Operation_script_and_binTask_shapes_are_serialized_without_invented_fields()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"order_details":{"errors":[]}}"""));
+        var client = Client(handler);
+        var args = Element("""{"height":1}""");
+        var post = Element("""{"wait":true}""");
+        var orders = new[]
+        {
+            RdsCoreNormalOrder.Create(RequestId,
+                new RdsCoreOperationBlock(Block("pickup"), "A", "ExplicitOperation", args, post), Navigation("dropoff", "B")),
+            RdsCoreNormalOrder.Create(RequestId,
+                new RdsCoreScriptBlock(Block("pickup"), "A", "ExplicitScript", args, post), Navigation("dropoff", "B")),
+            RdsCoreNormalOrder.Create(RequestId,
+                new RdsCoreBinTaskBlock(Block("pickup"), "A", "ExplicitBinTask", "goods-1", post), Navigation("dropoff", "B"))
+        };
+
+        foreach (var order in orders) await client.SetOrderAsync(order, Guid.NewGuid());
+
+        var operation = JsonDocument.Parse(handler.Requests[0].Body).RootElement.GetProperty("blocks")[0];
+        Assert.Equal("ExplicitOperation", operation.GetProperty("operation").GetString());
+        Assert.Equal(1, operation.GetProperty("operationArgs").GetProperty("height").GetInt32());
+        var script = JsonDocument.Parse(handler.Requests[1].Body).RootElement.GetProperty("blocks")[0];
+        Assert.Equal("Script", script.GetProperty("operation").GetString());
+        Assert.Equal("ExplicitScript", script.GetProperty("scriptName").GetString());
+        Assert.True(script.GetProperty("postAction").GetProperty("wait").GetBoolean());
+        var bin = JsonDocument.Parse(handler.Requests[2].Body).RootElement.GetProperty("blocks")[0];
+        Assert.Equal("ExplicitBinTask", bin.GetProperty("binTask").GetString());
+        Assert.Equal("goods-1", bin.GetProperty("goodsId").GetString());
+        Assert.False(bin.TryGetProperty("operation", out _));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway, "{\"code\":0}", false, false, false, false)]
+    [InlineData(HttpStatusCode.OK, "{\"code\":0}", true, true, false, false)]
+    [InlineData(HttpStatusCode.OK, "{\"code\":42,\"msg\":\"no\"}", true, false, false, false)]
+    [InlineData(HttpStatusCode.BadRequest, "{\"code\":50003,\"msg\":\"duplicate\"}", false, false, false, true)]
+    [InlineData(HttpStatusCode.OK, "{\"code\":0,\"order_details\":{\"errors\":[{\"code\":\"E\"}]}}", true, true, false, false)]
+    public async Task SetOrder_distinguishes_http_core_execution_and_duplicate_semantics(
+        HttpStatusCode status,
+        string body,
+        bool http,
+        bool core,
+        bool execution,
+        bool duplicate)
+    {
+        var client = Client(new RecordingHandler(_ => Json(body, status)));
+
+        var result = await client.SetOrderAsync(NavigationOrder(), Guid.NewGuid());
+
+        Assert.Equal(http, result.HttpAccepted);
+        Assert.Equal(core, result.CoreAccepted);
+        Assert.Equal(execution, result.ExecutionValidated);
+        Assert.Equal(duplicate, result.DuplicateOrderId);
+    }
+
+    [Fact]
+    public async Task SetOrder_preserves_errors_warnings_and_notices()
+    {
+        var client = Client(new RecordingHandler(_ => Json("""
+            {"code":0,"order_details":{"errors":[],"warnings":[{"code":"W1"}],"notices":["N1"]}}
+            """)));
+
+        var result = await client.SetOrderAsync(NavigationOrder(), Guid.NewGuid());
+
+        Assert.True(result.ExecutionValidated);
+        Assert.Empty(result.Diagnostics.Errors);
+        Assert.Equal("W1", result.Diagnostics.Warnings[0].Value.GetProperty("code").GetString());
+        Assert.Equal("N1", result.Diagnostics.Notices[0].Value.GetString());
+    }
+
+    [Fact]
+    public async Task Successful_malformed_JSON_is_rejected()
+    {
+        var client = Client(new RecordingHandler(_ => Json("not-json")));
+
+        var error = await Assert.ThrowsAsync<RdsCoreNativeOrderException>(() =>
+            client.SetOrderAsync(NavigationOrder(), Guid.NewGuid()));
+
+        Assert.Equal("RDSCORE_INVALID_JSON", error.Code);
+    }
+
+    public static TheoryData<string, RdsCoreKnownOrderState> OrderStates => new()
+    {
+        { "CREATED", RdsCoreKnownOrderState.Created },
+        { "WAITING", RdsCoreKnownOrderState.Waiting },
+        { "RUNNING", RdsCoreKnownOrderState.Running },
+        { "SUSPENDED", RdsCoreKnownOrderState.Suspended },
+        { "FINISHED", RdsCoreKnownOrderState.Finished },
+        { "FAILED", RdsCoreKnownOrderState.Failed },
+        { "STOPPED", RdsCoreKnownOrderState.Stopped },
+        { "Error", RdsCoreKnownOrderState.Error },
+        { "TOBEDISPATCHED", RdsCoreKnownOrderState.ToBeDispatched },
+        { "FUTURE_STATE", RdsCoreKnownOrderState.Unknown }
+    };
+
+    [Theory]
+    [MemberData(nameof(OrderStates))]
+    public async Task Order_details_parses_known_and_unknown_states_without_losing_raw(string raw, RdsCoreKnownOrderState known)
+    {
+        var response = JsonSerializer.Serialize(new { code = 0, data = new { id = RequestId.ToString("D"), state = raw, future = true } });
+        var handler = new RecordingHandler(_ => Json(response));
+
+        var order = await Client(handler).GetOrderDetailsAsync(RequestId.ToString("D"), Guid.NewGuid());
+
+        Assert.Equal(known, order.State.Known);
+        Assert.Equal(raw, order.State.Raw);
+        Assert.True(order.Raw.GetProperty("future").GetBoolean());
+        Assert.Empty(order.Blocks);
+    }
+
+    public static TheoryData<string, RdsCoreKnownBlockState> BlockStates => new()
+    {
+        { "CREATED", RdsCoreKnownBlockState.Created },
+        { "RUNNING", RdsCoreKnownBlockState.Running },
+        { "WAITING", RdsCoreKnownBlockState.Waiting },
+        { "POSTING", RdsCoreKnownBlockState.Posting },
+        { "SUSPENDED", RdsCoreKnownBlockState.Suspended },
+        { "FINISHED", RdsCoreKnownBlockState.Finished },
+        { "FAILED", RdsCoreKnownBlockState.Failed },
+        { "STOPPED", RdsCoreKnownBlockState.Stopped },
+        { "MANUAL_FINISHED", RdsCoreKnownBlockState.ManualFinished },
+        { "Error", RdsCoreKnownBlockState.Error },
+        { "FUTURE_BLOCK", RdsCoreKnownBlockState.Unknown }
+    };
+
+    [Theory]
+    [MemberData(nameof(BlockStates))]
+    public async Task Block_details_parses_known_unknown_and_missing_optional_fields(string raw, RdsCoreKnownBlockState known)
+    {
+        var response = JsonSerializer.Serialize(new { code = 0, data = new { blockId = "b1", state = raw, future = 1 } });
+        var client = Client(new RecordingHandler(_ => Json(response)));
+
+        var block = await client.GetBlockDetailsByIdAsync("b1", Guid.NewGuid());
+
+        Assert.Equal(known, block.State.Known);
+        Assert.Equal(raw, block.State.Raw);
+        Assert.Null(block.Location);
+        Assert.Equal(1, block.Raw.GetProperty("future").GetInt32());
+    }
+
+    [Fact]
+    public async Task Order_list_parses_envelope_paging_and_unknown_fields()
+    {
+        var handler = new RecordingHandler(_ => Json("""
+            {"list":[{"id":"o1","state":"WAITING"},{"id":"o2","state":"RUNNING","newField":7}],"total":12,"page":2,"size":5}
+            """));
+        var client = Client(handler);
+
+        var result = await client.GetOrdersAsync(
+            new(2, 5, RdsCoreOrderSortField.State, RdsCoreOrderSortDirection.Ascending),
+            Guid.NewGuid());
+
+        Assert.Equal(2, result.Orders.Count);
+        Assert.Equal(12, result.Total);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(5, result.PageSize);
+        Assert.Equal(7, result.Orders[1].Raw.GetProperty("newField").GetInt32());
+        Assert.Equal("/orders?page=2&size=5&orderBy=state&orderMethod=ascending", handler.Single().Path);
+    }
+
+    [Fact]
+    public async Task Lookups_use_closed_escaped_paths_and_external_or_block_lookup_returns_arrays()
+    {
+        var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/orderDetailsByExternalId/ext%2F1" => Json("""[{"id":"a","externalId":"ext/1"},{"id":"b","externalId":"ext/1"}]"""),
+            "/orderDetailsByBlockId/id%3Apickup" => Json("""{"id":"a","state":"RUNNING"}"""),
+            _ => Json("""{"code":0,"data":{"id":"a","state":"WAITING"}}""")
+        });
+        var client = Client(handler);
+
+        var byExternal = await client.GetOrderDetailsByExternalIdAsync("ext/1", Guid.NewGuid());
+        var byBlock = await client.GetOrderDetailsByBlockIdAsync("id:pickup", Guid.NewGuid());
+        var byId = await client.GetOrderDetailsAsync("a", Guid.NewGuid());
+
+        Assert.Equal(2, byExternal.Count);
+        Assert.Equal("a", byBlock.Id);
+        Assert.Equal("a", byId.Id);
+        Assert.Equal(
+            ["/orderDetailsByExternalId/ext%2F1", "/orderDetailsByBlockId/id%3Apickup", "/orderDetails/a"],
+            handler.Requests.Select(item => item.Path).ToArray());
+    }
+
+    [Fact]
+    public async Task Terminate_can_only_target_one_nonempty_order_and_never_disables_vehicle()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var result = await client.TerminateAsync(RequestId.ToString("D"), Guid.NewGuid());
+
+        Assert.True(result.CoreAccepted);
+        var payload = JsonDocument.Parse(handler.Single().Body).RootElement;
+        Assert.Equal(RequestId.ToString("D"), payload.GetProperty("id").GetString());
+        Assert.False(payload.TryGetProperty("idList", out _));
+        Assert.False(payload.TryGetProperty("vehicles", out _));
+        Assert.False(payload.GetProperty("disableVehicle").GetBoolean());
+        await Assert.ThrowsAsync<ArgumentException>(() => client.TerminateAsync("", Guid.NewGuid()));
+        Assert.Single(handler.Requests);
+        var terminateMethod = typeof(IRdsCoreNativeOrderClient).GetMethod(nameof(IRdsCoreNativeOrderClient.TerminateAsync))!;
+        Assert.DoesNotContain(terminateMethod.GetParameters(), parameter => typeof(System.Collections.IEnumerable).IsAssignableFrom(parameter.ParameterType) && parameter.ParameterType != typeof(string));
+    }
+
+    [Fact]
+    public async Task Disabled_or_non_native_mode_fails_closed_before_any_HTTP_call()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0}"""));
+        var disabled = Client(handler, new(false, RdsExecutionMode.RdsCoreNativeOrder, "http://127.0.0.1:18088/", 5, true));
+        var windTask = Client(handler, new(false, RdsExecutionMode.WindTask, "http://127.0.0.1:18088/", 5, true));
+
+        var disabledError = await Assert.ThrowsAsync<RdsCoreNativeOrderException>(() => disabled.SetOrderAsync(NavigationOrder(), Guid.NewGuid()));
+        var modeError = await Assert.ThrowsAsync<RdsCoreNativeOrderException>(() => windTask.TerminateAsync(RequestId.ToString("D"), Guid.NewGuid()));
+
+        Assert.Equal("RDSCORE_EXECUTION_DISABLED", disabledError.Code);
+        Assert.Equal("RDSCORE_EXECUTION_DISABLED", modeError.Code);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public void Configuration_requires_explicit_native_enable_and_shares_only_explicit_core_origin()
+    {
+        var defaults = RdsCoreExecutionOptions.FromConfiguration(new ConfigurationBuilder().Build());
+        Assert.False(defaults.Enabled);
+        Assert.Equal(RdsExecutionMode.WindTask, defaults.Mode);
+        Assert.Null(defaults.BaseAddress);
+
+        var discoveryOnly = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["RdsCore:BaseUrl"] = "http://127.0.0.1:18088/",
+            ["RdsCoreDiscovery:Enabled"] = "true"
+        }).Build();
+        var execution = RdsCoreExecutionOptions.FromConfiguration(discoveryOnly);
+        var discovery = RdsCoreDiscoveryOptions.FromConfiguration(discoveryOnly);
+        Assert.True(discovery.Enabled);
+        Assert.False(execution.Enabled);
+        Assert.False(execution.MutationEnabled);
+
+        var enabled = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["RdsCore:BaseUrl"] = "http://127.0.0.1:18088/",
+            ["RdsCoreExecution:Enabled"] = "true",
+            ["RdsCoreExecution:Mode"] = "RDSCORE_NATIVE_ORDER"
+        }).Build();
+        Assert.True(RdsCoreExecutionOptions.FromConfiguration(enabled).MutationEnabled);
+        Assert.Throws<InvalidOperationException>(() => RdsCoreExecutionOptions.FromConfiguration(
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RdsCoreExecution:Enabled"] = "true",
+                ["RdsCoreExecution:Mode"] = "RDSCORE_NATIVE_ORDER"
+            }).Build()));
+        Assert.Throws<InvalidOperationException>(() => RdsCoreExecutionOptions.FromConfiguration(
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RdsCore:BaseUrl"] = "http://127.0.0.1:18088/",
+                ["RdsCoreExecution:Enabled"] = "true",
+                ["RdsCoreExecution:Mode"] = "WIND_TASK"
+            }).Build()));
+    }
+
+    [Fact]
+    public void Operation_registry_is_closed_and_excludes_recovery_or_arbitrary_request_surfaces()
+    {
+        Assert.Equal(
+            ["/setOrder", "/orderDetails/{id}", "/orders", "/orderDetailsByExternalId/{externalId}", "/orderDetailsByBlockId/{blockId}", "/blockDetailsById/{blockId}", "/terminate"],
+            RdsCoreNativeOrderClient.AllowedOperations.Select(item => item.Endpoint).ToArray());
+        var forbidden = new[] { "/addBlocks", "/manualFinished", "/cancelBlock", "/setPriority", "/setLabel", "/unassignOrder", "/redoFailedOrder", "/problemVehicle", "/setChargeOrder" };
+        Assert.DoesNotContain(RdsCoreNativeOrderClient.AllowedOperations, item => forbidden.Contains(item.Endpoint, StringComparer.Ordinal));
+        var publicMethods = typeof(RdsCoreNativeOrderClient).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+        Assert.DoesNotContain(publicMethods.SelectMany(method => method.GetParameters()), parameter => parameter.ParameterType == typeof(HttpMethod));
+    }
+
+    private static RdsCoreNormalOrder NavigationOrder() => RdsCoreNormalOrder.Create(
+        RequestId,
+        Navigation("pickup", "SIM-A"),
+        Navigation("dropoff", "SIM-B"));
+
+    private static RdsCoreNavigationBlock Navigation(string suffix, string location) => new(Block(suffix), location);
+    private static string Block(string suffix) => $"{RequestId:D}:{suffix}";
+    private static JsonElement Element(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    private static RdsCoreNativeOrderClient Client(RecordingHandler handler, RdsCoreExecutionOptions? options = null)
+    {
+        options ??= new(true, RdsExecutionMode.RdsCoreNativeOrder, "http://127.0.0.1:18088/", 5, true);
+        options.Validate();
+        return new(new Factory(handler, options.BaseAddress), options);
+    }
+
+    private static HttpResponseMessage Json(string value, HttpStatusCode status = HttpStatusCode.OK) =>
+        new(status) { Content = new StringContent(value) };
+
+    private sealed class Factory(HttpMessageHandler handler, Uri? baseAddress) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler, false) { BaseAddress = baseAddress };
+    }
+
+    private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> route) : HttpMessageHandler
+    {
+        public List<ObservedRequest> Requests { get; } = [];
+        public ObservedRequest Single() => Assert.Single(Requests);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(new(
+                request.Method,
+                request.RequestUri!.PathAndQuery,
+                request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken)));
+            return route(request);
+        }
+    }
+
+    private sealed record ObservedRequest(HttpMethod Method, string Path, string Body);
+}

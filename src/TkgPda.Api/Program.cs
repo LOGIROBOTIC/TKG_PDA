@@ -21,6 +21,7 @@ var jwtOptions = new JwtOptions(
 jwtOptions.Validate();
 var rdsOptions = RdsOptions.FromConfiguration(builder.Configuration);
 var rdsCoreDiscoveryOptions = RdsCoreDiscoveryOptions.FromConfiguration(builder.Configuration);
+var rdsCoreExecutionOptions = RdsCoreExecutionOptions.FromConfiguration(builder.Configuration);
 var operatorWebOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>()?
@@ -52,6 +53,7 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton(rdsOptions);
 builder.Services.AddSingleton(rdsCoreDiscoveryOptions);
+builder.Services.AddSingleton(rdsCoreExecutionOptions);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordHashService>(services => services.GetRequiredService<Pbkdf2PasswordHasher>());
@@ -91,6 +93,20 @@ builder.Services.AddHttpClient("RdsCoreDiscovery", client =>
 });
 builder.Services.AddSingleton<IRdsCoreDiscoveryClient, RdsCoreDiscoveryClient>();
 builder.Services.AddSingleton<RdsCommissioningDiscoveryService>();
+builder.Services.AddHttpClient("RdsCoreNativeOrder", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(rdsCoreExecutionOptions.TimeoutSeconds);
+    if (rdsCoreExecutionOptions.BaseAddress is { } baseAddress)
+    {
+        client.BaseAddress = baseAddress;
+    }
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    UseCookies = false,
+    AllowAutoRedirect = false
+});
+builder.Services.AddSingleton<IRdsCoreNativeOrderClient, RdsCoreNativeOrderClient>();
 builder.Services.AddHttpClient("RdsMutation", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);

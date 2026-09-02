@@ -14,6 +14,7 @@ Bu dizin, tamamlanmış Phase 01–09 baseline'ının mimari kararlarını, veri
 - [commissioning/RDS_COMMISSIONING_DISCOVERY.md](commissioning/RDS_COMMISSIONING_DISCOVERY.md) — ayrı RDSCore yüzeyi, kapalı read allowlist'i ve commissioning karşılaştırması
 - [commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md](commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md) — deterministik snapshot alanları ve redaction sözleşmesi
 - [commissioning/RDS_FIRST_SNAPSHOT_RUNBOOK.md](commissioning/RDS_FIRST_SNAPSHOT_RUNBOOK.md) — ilk simulator/local/production salt-okunur RDSCore snapshot'ı için çalıştırılmamış güvenlik runbook'u
+- [integration/RDSCORE_NATIVE_ORDER_CONTRACT.md](integration/RDSCORE_NATIVE_ORDER_CONTRACT.md) — kapalı Native Order portu, sealed order/block kimliği, response semantiği ve güvenli terminate sözleşmesi
 
 ## Uygulama ve doğrulama raporları
 

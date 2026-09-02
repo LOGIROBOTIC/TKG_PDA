@@ -13,6 +13,7 @@ Bu dizin, tamamlanmış Phase 01–09 baseline'ının mimari kararlarını, veri
 - [commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md](commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md) — physical robot öncesi fail-closed devreye alma kapıları
 - [commissioning/RDS_COMMISSIONING_DISCOVERY.md](commissioning/RDS_COMMISSIONING_DISCOVERY.md) — ayrı RDSCore yüzeyi, kapalı read allowlist'i ve commissioning karşılaştırması
 - [commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md](commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md) — deterministik snapshot alanları ve redaction sözleşmesi
+- [commissioning/RDS_FIRST_SNAPSHOT_RUNBOOK.md](commissioning/RDS_FIRST_SNAPSHOT_RUNBOOK.md) — ilk simulator/local/production salt-okunur RDSCore snapshot'ı için çalıştırılmamış güvenlik runbook'u
 
 ## Uygulama ve doğrulama raporları
 

@@ -14,9 +14,9 @@ public sealed record RdsCoreDiscoveryOptions(
     {
         var value = new RdsCoreDiscoveryOptions(
             configuration.GetValue("RdsCoreDiscovery:Enabled", false),
-            configuration["RdsCoreDiscovery:BaseUrl"],
-            configuration.GetValue("RdsCoreDiscovery:TimeoutSeconds", 5),
-            configuration.GetValue("RdsCoreDiscovery:AllowInsecureRemoteHttp", false));
+            RdsCoreConfiguration.BaseUrl(configuration),
+            RdsCoreConfiguration.TimeoutSeconds(configuration),
+            RdsCoreConfiguration.AllowInsecureRemoteHttp(configuration));
         value.Validate();
         return value;
     }
@@ -26,7 +26,7 @@ public sealed record RdsCoreDiscoveryOptions(
     public void Validate()
     {
         if (TimeoutSeconds is < 1 or > 60)
-            throw new InvalidOperationException("RdsCoreDiscovery:TimeoutSeconds must be between 1 and 60.");
+            throw new InvalidOperationException("RdsCore:TimeoutSeconds must be between 1 and 60.");
         if (string.IsNullOrWhiteSpace(BaseUrl))
         {
             if (Enabled)

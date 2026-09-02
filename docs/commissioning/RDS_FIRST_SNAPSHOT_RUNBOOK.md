@@ -21,9 +21,9 @@ Uygulama ayarları servis ortamında açıkça sağlanır:
 
 ```text
 RdsCoreDiscovery__Enabled=true
-RdsCoreDiscovery__BaseUrl=<EXPLICIT_RDSCORE_ORIGIN>
-RdsCoreDiscovery__TimeoutSeconds=5
-RdsCoreDiscovery__AllowInsecureRemoteHttp=false
+RdsCore__BaseUrl=<EXPLICIT_RDSCORE_ORIGIN>
+RdsCore__TimeoutSeconds=5
+RdsCore__AllowInsecureRemoteHttp=false
 ```
 
 Loopback dışındaki HTTP ancak saha güvenlik değerlendirmesi ve açık commissioning kararıyla `AllowInsecureRemoteHttp=true` yapılabilir. BaseURL credential, path, query veya fragment içeremez. Admin parolası/JWT, RDS anahtarı veya başka secret runbook'a, komut geçmişine ya da çıktı klasörü adına yazılmaz.

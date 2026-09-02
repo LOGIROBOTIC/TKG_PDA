@@ -9,7 +9,7 @@ Bu bileşen, üretim RDS sözleşmeleri devreye alınmadan önce RDSCore'un salt
 | Yüzey | TKG kullanımı | Adresleme | Yanıt yaklaşımı |
 |---|---|---|---|
 | RDS Web API | Mevcut WorkSite/Wind Task entegrasyonu | Sahada çoğunlukla `:8080` | Mevcut Web API envelope sözleşmesi |
-| RDSCore HTTP | Bu commissioning discovery | Ayrı `RdsCoreDiscovery:BaseUrl`; SEER referansında çoğunlukla `:8088` | Endpoint'e göre `code: 0`, codesuz nesne veya doğrudan dizi |
+| RDSCore HTTP | Commissioning discovery ve kapalı native-order adayı | Ortak, açık `RdsCore:BaseUrl`; SEER referansında çoğunlukla `:8088` | Endpoint'e göre `code: 0`, codesuz nesne veya doğrudan dizi |
 
 `8088` üretim için garanti değildir. RDSCore adresi RDS Web API adresinden port değiştirilerek türetilmez; commissioning sırasında açıkça yapılandırılır.
 
@@ -17,11 +17,13 @@ Bu bileşen, üretim RDS sözleşmeleri devreye alınmadan önce RDSCore'un salt
 
 ```json
 {
-  "RdsCoreDiscovery": {
-    "Enabled": false,
+  "RdsCore": {
     "BaseUrl": "",
     "TimeoutSeconds": 5,
     "AllowInsecureRemoteHttp": false
+  },
+  "RdsCoreDiscovery": {
+    "Enabled": false
   }
 }
 ```
@@ -31,6 +33,7 @@ Bu bileşen, üretim RDS sözleşmeleri devreye alınmadan önce RDSCore'un salt
 - Loopback dışındaki düz HTTP, ancak commissioning için açık override ile kabul edilir.
 - Tanılama ve audit yalnız sanitize edilmiş origin'i (`scheme://host:port`) taşır; credential, request body veya response body normal loglara yazılmaz.
 - Capture API'si yalnız `ADMIN_WEB` JWT policy'sine açıktır ve body'de `confirmReadOnlyDiscovery: true` ister.
+- `RdsCoreExecution:Enabled` ayrı ve varsayılan kapalı bir sınırdır. Discovery'nin etkin olması native-order mutation yetkisi vermez.
 
 ## Kapalı endpoint registry'si
 

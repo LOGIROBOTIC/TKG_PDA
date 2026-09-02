@@ -1,0 +1,528 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using TkgPda.Application;
+
+namespace TkgPda.Api;
+
+public sealed record RdsCoreExecutionOptions(
+    bool Enabled,
+    RdsExecutionMode Mode,
+    string? BaseUrl,
+    int TimeoutSeconds,
+    bool AllowInsecureRemoteHttp = false)
+{
+    public static RdsCoreExecutionOptions FromConfiguration(IConfiguration configuration)
+    {
+        var modeText = configuration["RdsCoreExecution:Mode"] ?? "WIND_TASK";
+        var mode = modeText.Trim().ToUpperInvariant() switch
+        {
+            "WIND_TASK" => RdsExecutionMode.WindTask,
+            "RDSCORE_NATIVE_ORDER" => RdsExecutionMode.RdsCoreNativeOrder,
+            _ => throw new InvalidOperationException("RdsCoreExecution:Mode must be WIND_TASK or RDSCORE_NATIVE_ORDER.")
+        };
+        var value = new RdsCoreExecutionOptions(
+            configuration.GetValue("RdsCoreExecution:Enabled", false),
+            mode,
+            RdsCoreConfiguration.BaseUrl(configuration),
+            RdsCoreConfiguration.TimeoutSeconds(configuration),
+            RdsCoreConfiguration.AllowInsecureRemoteHttp(configuration));
+        value.Validate();
+        return value;
+    }
+
+    public Uri? BaseAddress => string.IsNullOrWhiteSpace(BaseUrl) ? null : new Uri(BaseUrl.Trim(), UriKind.Absolute);
+    public bool MutationEnabled => Enabled && Mode == RdsExecutionMode.RdsCoreNativeOrder && BaseAddress is not null;
+
+    public void Validate()
+    {
+        RdsCoreConfiguration.ValidateOrigin(BaseUrl, TimeoutSeconds, Enabled, AllowInsecureRemoteHttp, "execution");
+        if (Enabled && Mode != RdsExecutionMode.RdsCoreNativeOrder)
+            throw new InvalidOperationException("Enabled RDSCore execution requires explicit RDSCORE_NATIVE_ORDER mode.");
+    }
+}
+
+internal static class RdsCoreConfiguration
+{
+    public static string? BaseUrl(IConfiguration configuration) =>
+        configuration["RdsCore:BaseUrl"] ?? configuration["RdsCoreDiscovery:BaseUrl"];
+
+    public static int TimeoutSeconds(IConfiguration configuration) =>
+        configuration.GetValue<int?>("RdsCore:TimeoutSeconds")
+        ?? configuration.GetValue("RdsCoreDiscovery:TimeoutSeconds", 5);
+
+    public static bool AllowInsecureRemoteHttp(IConfiguration configuration) =>
+        configuration["RdsCore:AllowInsecureRemoteHttp"] is not null
+            ? configuration.GetValue("RdsCore:AllowInsecureRemoteHttp", false)
+            : configuration.GetValue("RdsCoreDiscovery:AllowInsecureRemoteHttp", false);
+
+    public static void ValidateOrigin(
+        string? baseUrl,
+        int timeoutSeconds,
+        bool enabled,
+        bool allowInsecureRemoteHttp,
+        string purpose)
+    {
+        if (timeoutSeconds is < 1 or > 60)
+            throw new InvalidOperationException($"RDSCore {purpose} timeout must be between 1 and 60 seconds.");
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            if (enabled)
+                throw new InvalidOperationException($"Enabled RDSCore {purpose} requires an explicit BaseURL.");
+            return;
+        }
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment)
+            || uri.AbsolutePath != "/")
+        {
+            throw new InvalidOperationException($"RDSCore {purpose} requires an explicit HTTP(S) origin without credentials, path, query, or fragment.");
+        }
+        if (enabled && uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback && !allowInsecureRemoteHttp)
+            throw new InvalidOperationException($"RDSCore {purpose} refuses insecure non-loopback HTTP unless the explicit commissioning override is enabled.");
+    }
+}
+
+public sealed record RdsCoreNativeOrderOperationDescriptor(string Operation, string Method, string Endpoint);
+
+public sealed class RdsCoreNativeOrderClient(
+    IHttpClientFactory httpClientFactory,
+    RdsCoreExecutionOptions options) : IRdsCoreNativeOrderClient
+{
+    private enum Operation
+    {
+        SetOrder,
+        OrderDetails,
+        Orders,
+        OrderDetailsByExternalId,
+        OrderDetailsByBlockId,
+        BlockDetailsById,
+        Terminate
+    }
+
+    private sealed record Spec(HttpMethod Method, string Path, bool Mutation);
+
+    private static readonly IReadOnlyDictionary<Operation, Spec> Registry = new Dictionary<Operation, Spec>
+    {
+        [Operation.SetOrder] = new(HttpMethod.Post, "/setOrder", true),
+        [Operation.OrderDetails] = new(HttpMethod.Get, "/orderDetails/{id}", false),
+        [Operation.Orders] = new(HttpMethod.Get, "/orders", false),
+        [Operation.OrderDetailsByExternalId] = new(HttpMethod.Get, "/orderDetailsByExternalId/{externalId}", false),
+        [Operation.OrderDetailsByBlockId] = new(HttpMethod.Get, "/orderDetailsByBlockId/{blockId}", false),
+        [Operation.BlockDetailsById] = new(HttpMethod.Get, "/blockDetailsById/{blockId}", false),
+        [Operation.Terminate] = new(HttpMethod.Post, "/terminate", true)
+    };
+
+    public static IReadOnlyList<RdsCoreNativeOrderOperationDescriptor> AllowedOperations { get; } = Registry
+        .OrderBy(item => item.Key)
+        .Select(item => new RdsCoreNativeOrderOperationDescriptor(item.Key.ToString(), item.Value.Method.Method, item.Value.Path))
+        .ToArray();
+
+    public bool MutationEnabled => options.MutationEnabled;
+    public RdsExecutionMode Mode => options.Mode;
+
+    public async Task<RdsCoreSetOrderResult> SetOrderAsync(
+        RdsCoreNormalOrder order,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+        using var response = await SendAsync(Operation.SetOrder, BuildOrderPayload(order), null, correlationId, cancellationToken);
+        var root = response.Document?.RootElement.Clone();
+        var code = root is { } value ? Number(value, "code") : null;
+        var diagnostics = root is { } result ? ParseDiagnostics(result) : RdsCoreOrderDiagnostics.Empty;
+        var httpAccepted = response.StatusCode is >= 200 and <= 299;
+        var coreAccepted = httpAccepted && code == 0;
+        return new(
+            httpAccepted,
+            coreAccepted,
+            coreAccepted && HasOrderDetails(root) && diagnostics.Errors.Count == 0,
+            response.StatusCode,
+            code,
+            root is { } messageRoot ? Text(messageRoot, "msg") ?? Text(messageRoot, "message") : null,
+            code == 50003,
+            diagnostics,
+            root);
+    }
+
+    public async Task<RdsCoreOrderDetails> GetOrderDetailsAsync(
+        string orderId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(Operation.OrderDetails, null, ValidateToken(orderId, "order ID"), correlationId, cancellationToken);
+        var root = RequireSuccessfulRead(response);
+        return ParseOrder(FindSingleOrder(root));
+    }
+
+    public async Task<RdsCoreOrderList> GetOrdersAsync(
+        RdsCoreOrderQuery query,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        query.Validate();
+        var endpoint = string.Concat(
+            "?page=", query.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "&size=", query.Size.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "&orderBy=", SortField(query.SortBy),
+            "&orderMethod=", query.SortDirection == RdsCoreOrderSortDirection.Ascending ? "ascending" : "descending");
+        using var response = await SendAsync(Operation.Orders, null, null, correlationId, cancellationToken, endpoint);
+        var root = RequireSuccessfulRead(response);
+        var payload = UnwrapData(root);
+        var array = FindArray(payload, "list");
+        return new(
+            array.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object).Select(ParseOrder).ToArray(),
+            Number(payload, "total") ?? Number(root, "total"),
+            Number(payload, "page") ?? Number(payload, "currentPage"),
+            Number(payload, "size"),
+            root.Clone());
+    }
+
+    public async Task<IReadOnlyList<RdsCoreOrderDetails>> GetOrderDetailsByExternalIdAsync(
+        string externalId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default) =>
+        await GetOrderArrayAsync(Operation.OrderDetailsByExternalId, ValidateToken(externalId, "external order ID"), correlationId, cancellationToken);
+
+    public async Task<RdsCoreOrderDetails> GetOrderDetailsByBlockIdAsync(
+        string blockId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(Operation.OrderDetailsByBlockId, null, ValidateToken(blockId, "block ID"), correlationId, cancellationToken);
+        return ParseOrder(FindSingleOrder(RequireSuccessfulRead(response)));
+    }
+
+    public async Task<RdsCoreBlockDetails> GetBlockDetailsByIdAsync(
+        string blockId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(Operation.BlockDetailsById, null, ValidateToken(blockId, "block ID"), correlationId, cancellationToken);
+        var root = RequireSuccessfulRead(response);
+        var payload = UnwrapData(root);
+        if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("block", out var block)) payload = block;
+        return ParseBlock(payload);
+    }
+
+    public async Task<RdsCoreTerminateResult> TerminateAsync(
+        string orderId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var id = ValidateToken(orderId, "order ID");
+        using var response = await SendAsync(
+            Operation.Terminate,
+            new { id, disableVehicle = false },
+            null,
+            correlationId,
+            cancellationToken);
+        var root = response.Document?.RootElement.Clone();
+        var code = root is { } value ? Number(value, "code") : null;
+        var httpAccepted = response.StatusCode is >= 200 and <= 299;
+        return new(
+            httpAccepted,
+            httpAccepted && code == 0,
+            response.StatusCode,
+            code,
+            root is { } messageRoot ? Text(messageRoot, "msg") ?? Text(messageRoot, "message") : null,
+            root);
+    }
+
+    private async Task<IReadOnlyList<RdsCoreOrderDetails>> GetOrderArrayAsync(
+        Operation operation,
+        string token,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(operation, null, token, correlationId, cancellationToken);
+        var root = RequireSuccessfulRead(response);
+        var payload = UnwrapData(root);
+        if (payload.ValueKind == JsonValueKind.Array)
+            return payload.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object).Select(ParseOrder).ToArray();
+        if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("orders", out var orders) && orders.ValueKind == JsonValueKind.Array)
+            return orders.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object).Select(ParseOrder).ToArray();
+        return payload.ValueKind == JsonValueKind.Object ? [ParseOrder(payload)] : [];
+    }
+
+    private async Task<RdsCoreHttpResponse> SendAsync(
+        Operation operation,
+        object? payload,
+        string? pathToken,
+        Guid correlationId,
+        CancellationToken cancellationToken,
+        string? queryString = null)
+    {
+        if (!options.MutationEnabled)
+            throw new RdsCoreNativeOrderException("RDSCORE_EXECUTION_DISABLED", "RDSCore native-order execution is disabled or is not the selected mode.");
+
+        var spec = Registry[operation];
+        var endpoint = (pathToken is null ? spec.Path : BindPath(spec.Path, pathToken)) + queryString;
+        try
+        {
+            using var request = new HttpRequestMessage(spec.Method, endpoint);
+            if (payload is not null) request.Content = JsonContent.Create(payload);
+            request.Headers.TryAddWithoutValidation("language", "en");
+            request.Headers.TryAddWithoutValidation("X-Correlation-ID", correlationId.ToString("D"));
+            using var response = await httpClientFactory.CreateClient("RdsCoreNativeOrder").SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            try
+            {
+                var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                return new((int)response.StatusCode, document);
+            }
+            catch (JsonException) when (!response.IsSuccessStatusCode)
+            {
+                return new((int)response.StatusCode, null);
+            }
+        }
+        catch (RdsCoreNativeOrderException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new RdsCoreNativeOrderException("RDSCORE_TIMEOUT", "RDSCore native-order request timed out.", error);
+        }
+        catch (HttpRequestException error)
+        {
+            throw new RdsCoreNativeOrderException("RDSCORE_UNAVAILABLE", "RDSCore native-order endpoint is unavailable.", error);
+        }
+        catch (JsonException error)
+        {
+            throw new RdsCoreNativeOrderException("RDSCORE_INVALID_JSON", "RDSCore returned invalid JSON.", error);
+        }
+    }
+
+    private static object BuildOrderPayload(RdsCoreNormalOrder order)
+    {
+        var root = new JsonObject
+        {
+            ["id"] = order.Id,
+            ["blocks"] = new JsonArray(order.Blocks.Select(BuildBlockPayload).ToArray()),
+            ["complete"] = true
+        };
+        Add(root, "externalId", order.ExternalId);
+        Add(root, "vehicle", order.Vehicle);
+        Add(root, "group", order.Group);
+        Add(root, "label", order.Label);
+        if (order.KeyRoute is { Count: > 0 })
+            root["keyRoute"] = new JsonArray(order.KeyRoute.Select(value => JsonValue.Create(value)).ToArray());
+        Add(root, "keyTask", order.KeyTask);
+        if (order.Priority is { } priority) root["priority"] = priority;
+        return root;
+    }
+
+    private static JsonNode BuildBlockPayload(RdsCoreOrderBlock block)
+    {
+        var value = new JsonObject
+        {
+            ["blockId"] = block.BlockId,
+            ["location"] = block.Location
+        };
+        switch (block)
+        {
+            case RdsCoreOperationBlock operation:
+                value["operation"] = operation.Operation;
+                Add(value, "operationArgs", operation.OperationArgs);
+                Add(value, "postAction", operation.PostAction);
+                break;
+            case RdsCoreScriptBlock script:
+                value["operation"] = "Script";
+                value["scriptName"] = script.ScriptName;
+                Add(value, "scriptArgs", script.ScriptArgs);
+                Add(value, "postAction", script.PostAction);
+                break;
+            case RdsCoreBinTaskBlock binTask:
+                value["binTask"] = binTask.BinTask;
+                Add(value, "goodsId", binTask.GoodsId);
+                Add(value, "postAction", binTask.PostAction);
+                break;
+        }
+        return value;
+    }
+
+    private static void Add(JsonObject target, string name, string? value)
+    {
+        if (value is not null) target[name] = value;
+    }
+
+    private static void Add(JsonObject target, string name, JsonElement? value)
+    {
+        if (value is { } element) target[name] = JsonNode.Parse(element.GetRawText());
+    }
+
+    private static JsonElement RequireSuccessfulRead(RdsCoreHttpResponse response)
+    {
+        if (response.StatusCode is < 200 or > 299)
+            throw new RdsCoreNativeOrderException("RDSCORE_HTTP_FAILURE", $"RDSCore returned HTTP {response.StatusCode}.");
+        if (response.Document is null)
+            throw new RdsCoreNativeOrderException("RDSCORE_INVALID_JSON", "RDSCore returned invalid JSON.");
+        var root = response.Document.RootElement;
+        var code = Number(root, "code");
+        if (code is not null and not 0)
+            throw new RdsCoreNativeOrderException("RDSCORE_BUSINESS_FAILURE", $"RDSCore rejected the read request with code {code}.");
+        return root.Clone();
+    }
+
+    private static JsonElement FindSingleOrder(JsonElement root)
+    {
+        var payload = UnwrapData(root);
+        foreach (var name in new[] { "order", "order_details", "orderDetails" })
+        {
+            if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object)
+                return value;
+        }
+        return payload;
+    }
+
+    private static JsonElement UnwrapData(JsonElement root) =>
+        root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data)
+            ? data
+            : root;
+
+    private static JsonElement FindArray(JsonElement root, string name)
+    {
+        if (root.ValueKind == JsonValueKind.Array) return root;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var array) && array.ValueKind == JsonValueKind.Array) return array;
+        using var empty = JsonDocument.Parse("[]");
+        return empty.RootElement.Clone();
+    }
+
+    private static RdsCoreOrderDetails ParseOrder(JsonElement value)
+    {
+        var blocks = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("blocks", out var array) && array.ValueKind == JsonValueKind.Array
+            ? array.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object).Select(ParseBlock).ToArray()
+            : [];
+        return new(
+            Text(value, "id"),
+            Text(value, "externalId"),
+            ParseOrderState(Text(value, "state") ?? Text(value, "status")),
+            blocks,
+            ParseDirectDiagnostics(value),
+            value.Clone());
+    }
+
+    private static RdsCoreBlockDetails ParseBlock(JsonElement value) => new(
+        Text(value, "blockId") ?? Text(value, "id"),
+        Text(value, "location"),
+        ParseBlockState(Text(value, "state") ?? Text(value, "status")),
+        value.Clone());
+
+    internal static RdsCoreOrderState ParseOrderState(string? raw) => new(raw switch
+    {
+        "CREATED" => RdsCoreKnownOrderState.Created,
+        "WAITING" => RdsCoreKnownOrderState.Waiting,
+        "RUNNING" => RdsCoreKnownOrderState.Running,
+        "SUSPENDED" => RdsCoreKnownOrderState.Suspended,
+        "FINISHED" => RdsCoreKnownOrderState.Finished,
+        "FAILED" => RdsCoreKnownOrderState.Failed,
+        "STOPPED" => RdsCoreKnownOrderState.Stopped,
+        "Error" => RdsCoreKnownOrderState.Error,
+        "TOBEDISPATCHED" => RdsCoreKnownOrderState.ToBeDispatched,
+        _ => RdsCoreKnownOrderState.Unknown
+    }, raw);
+
+    internal static RdsCoreBlockState ParseBlockState(string? raw) => new(raw switch
+    {
+        "CREATED" => RdsCoreKnownBlockState.Created,
+        "RUNNING" => RdsCoreKnownBlockState.Running,
+        "WAITING" => RdsCoreKnownBlockState.Waiting,
+        "POSTING" => RdsCoreKnownBlockState.Posting,
+        "SUSPENDED" => RdsCoreKnownBlockState.Suspended,
+        "FINISHED" => RdsCoreKnownBlockState.Finished,
+        "FAILED" => RdsCoreKnownBlockState.Failed,
+        "STOPPED" => RdsCoreKnownBlockState.Stopped,
+        "MANUAL_FINISHED" => RdsCoreKnownBlockState.ManualFinished,
+        "Error" => RdsCoreKnownBlockState.Error,
+        _ => RdsCoreKnownBlockState.Unknown
+    }, raw);
+
+    private static RdsCoreOrderDiagnostics ParseDiagnostics(JsonElement root)
+    {
+        if (!TryOrderDetails(root, out var details)) return RdsCoreOrderDiagnostics.Empty;
+        return new(ReadDiagnostics(details, "errors"), ReadDiagnostics(details, "warnings"), ReadDiagnostics(details, "notices"));
+    }
+
+    private static RdsCoreOrderDiagnostics ParseDirectDiagnostics(JsonElement value) => new(
+        ReadDiagnostics(value, "errors"),
+        ReadDiagnostics(value, "warnings"),
+        ReadDiagnostics(value, "notices"));
+
+    private static IReadOnlyList<RdsCoreDiagnostic> ReadDiagnostics(JsonElement details, string name)
+    {
+        if (details.ValueKind != JsonValueKind.Object || !details.TryGetProperty(name, out var values)) return [];
+        if (values.ValueKind == JsonValueKind.Array)
+            return values.EnumerateArray().Select(item => new RdsCoreDiagnostic(item.Clone())).ToArray();
+        return values.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined
+            ? []
+            : [new(values.Clone())];
+    }
+
+    private static bool HasOrderDetails(JsonElement? root) => root is { } value && TryOrderDetails(value, out _);
+
+    private static bool TryOrderDetails(JsonElement root, out JsonElement details)
+    {
+        var payload = UnwrapData(root);
+        foreach (var name in new[] { "order_details", "orderDetails" })
+        {
+            if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty(name, out details) && details.ValueKind == JsonValueKind.Object)
+                return true;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out details) && details.ValueKind == JsonValueKind.Object)
+                return true;
+        }
+        details = default;
+        return false;
+    }
+
+    private static int? Number(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(name, out var property)) return null;
+        return property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var number)
+            ? number
+            : int.TryParse(property.ValueKind == JsonValueKind.String ? property.GetString() : null, out number) ? number : null;
+    }
+
+    private static string? Text(JsonElement value, string name) =>
+        value.ValueKind == JsonValueKind.Object && value.TryGetProperty(name, out var property) && property.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+            ? property.ValueKind == JsonValueKind.String ? property.GetString() : property.ToString()
+            : null;
+
+    private static string ValidateToken(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 200 || value.Any(char.IsControl))
+            throw new ArgumentException($"A non-empty {name} within 200 characters is required.", nameof(value));
+        return value.Trim();
+    }
+
+    private static string BindPath(string template, string token)
+    {
+        var start = template.IndexOf('{', StringComparison.Ordinal);
+        var end = template.IndexOf('}', start + 1);
+        if (start < 0 || end < 0) throw new InvalidOperationException("The native-order operation does not define a path token.");
+        return string.Concat(template.AsSpan(0, start), Uri.EscapeDataString(token), template.AsSpan(end + 1));
+    }
+
+    private static string SortField(RdsCoreOrderSortField field) => field switch
+    {
+        RdsCoreOrderSortField.Id => "id",
+        RdsCoreOrderSortField.State => "state",
+        RdsCoreOrderSortField.CreateTime => "createTime",
+        RdsCoreOrderSortField.TerminalTime => "terminalTime",
+        RdsCoreOrderSortField.Vehicle => "vehicle",
+        RdsCoreOrderSortField.ExternalId => "externalId",
+        RdsCoreOrderSortField.Priority => "priority",
+        _ => throw new ArgumentOutOfRangeException(nameof(field))
+    };
+
+    private sealed record RdsCoreHttpResponse(int StatusCode, JsonDocument? Document) : IDisposable
+    {
+        public void Dispose() => Document?.Dispose();
+    }
+}

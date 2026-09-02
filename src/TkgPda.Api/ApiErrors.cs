@@ -55,6 +55,17 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
                 error.Code,
                 "The read-only RDS service is temporarily unavailable.");
         }
+        catch (RdsCommissioningDiscoveryException error)
+        {
+            logger.LogWarning("RDSCore discovery failed with {Code} for request {TraceIdentifier}.", error.Code, context.TraceIdentifier);
+            var status = error.Code switch
+            {
+                "RDSCORE_DISCOVERY_DISABLED" => StatusCodes.Status503ServiceUnavailable,
+                "RDSCORE_PROBE_INVALID" or "RDSCORE_PROBE_LIMIT_EXCEEDED" => StatusCodes.Status400BadRequest,
+                _ => StatusCodes.Status502BadGateway
+            };
+            await ApiErrorWriter.WriteAsync(context, status, error.Code, error.Message);
+        }
         catch (RdsExecutionException error)
         {
             logger.LogWarning("RDS execution operation failed with {Code} for request {TraceIdentifier}.", error.Code, context.TraceIdentifier);

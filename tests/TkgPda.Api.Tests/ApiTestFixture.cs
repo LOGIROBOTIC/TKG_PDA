@@ -15,6 +15,7 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
 {
     public const string CallbackKey = "phase08b-test-callback-key-0000000000000000";
     public TestRdsReadClient RdsClient { get; } = new();
+    public TestRdsCoreDiscoveryClient RdsCoreDiscoveryClient { get; } = new();
 
     public string ConnectionString => Environment.GetEnvironmentVariable("TKG_PDA_API_TEST_CONNECTION_STRING")
         ?? throw new InvalidOperationException("TKG_PDA_API_TEST_CONNECTION_STRING is required.");
@@ -29,12 +30,15 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
         {
             services.RemoveAll<IRdsReadClient>();
             services.AddSingleton<IRdsReadClient>(RdsClient);
+            services.RemoveAll<IRdsCoreDiscoveryClient>();
+            services.AddSingleton<IRdsCoreDiscoveryClient>(RdsCoreDiscoveryClient);
         });
     }
 
     public async Task ResetAsync()
     {
         RdsClient.Reset();
+        RdsCoreDiscoveryClient.Reset();
         await ExecuteAsync(
             """
             TRUNCATE
@@ -415,5 +419,41 @@ public sealed class TestRdsReadClient : IRdsReadClient
 
         LastSuccessfulRead = DateTimeOffset.UtcNow;
         return Task.FromResult(new RdsReadResult<RdsRobotAlarmReport>(RobotAlarms, 200, "Success", "/api/agv-report/core", correlationId, LastSuccessfulRead.Value));
+    }
+}
+
+public sealed class TestRdsCoreDiscoveryClient : IRdsCoreDiscoveryClient
+{
+    public bool Enabled { get; set; }
+    public string? SafeOrigin => Enabled ? "https://rdscore.test:8088" : null;
+    public int Calls { get; private set; }
+
+    public void Reset()
+    {
+        Enabled = false;
+        Calls = 0;
+    }
+
+    public Task<RdsCommissioningSnapshot> CaptureAsync(
+        RdsCoreCaptureCommand command,
+        Guid correlationId,
+        DateTimeOffset capturedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        Calls++;
+        return Task.FromResult(new RdsCommissioningSnapshot(
+            "rds_commissioning_snapshot_v1",
+            capturedAtUtc,
+            correlationId,
+            new(SafeOrigin!, null, [], null, null),
+            [],
+            [],
+            [],
+            [],
+            new([], [], [], []),
+            [],
+            new("NOT_CAPTURED", new Dictionary<string, JsonElement>()),
+            [],
+            []));
     }
 }

@@ -12,6 +12,45 @@ public sealed class RdsAdminApiTests(ApiTestFixture fixture) : IClassFixture<Api
     public async Task DisposeAsync() => await fixture.ResetAsync();
 
     [Fact]
+    public async Task Commissioning_capture_is_admin_only_explicit_and_disabled_by_default()
+    {
+        var operatorIdentity = await fixture.SeedIdentityAsync();
+        using var operatorClient = await fixture.LoginClientAsync(operatorIdentity);
+        var denied = await operatorClient.PostAsJsonAsync(
+            "/api/v1/admin/rds/commissioning/capture",
+            new { confirmReadOnlyDiscovery = true });
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        await fixture.ResetAsync();
+        var adminIdentity = await fixture.SeedIdentityAsync(RoleCodes.Admin, machineCode: null);
+        using var adminClient = await fixture.AdminLoginClientAsync(adminIdentity);
+        var unconfirmed = await adminClient.PostAsJsonAsync(
+            "/api/v1/admin/rds/commissioning/capture",
+            new { confirmReadOnlyDiscovery = false });
+        Assert.Equal(HttpStatusCode.BadRequest, unconfirmed.StatusCode);
+        Assert.Equal("RDSCORE_DISCOVERY_CONFIRMATION_REQUIRED", await ApiTestFixture.ErrorCodeAsync(unconfirmed));
+
+        var disabled = await adminClient.PostAsJsonAsync(
+            "/api/v1/admin/rds/commissioning/capture",
+            new { confirmReadOnlyDiscovery = true });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, disabled.StatusCode);
+        Assert.Equal("RDSCORE_DISCOVERY_DISABLED", await ApiTestFixture.ErrorCodeAsync(disabled));
+        Assert.Equal(0, fixture.RdsCoreDiscoveryClient.Calls);
+        Assert.Equal(0, await fixture.ScalarAsync<long>(
+            "SELECT count(*) FROM audit.audit_logs WHERE action = 'RDS_COMMISSIONING_DISCOVERY_CAPTURED'"));
+
+        fixture.RdsCoreDiscoveryClient.Enabled = true;
+        var captured = await adminClient.PostAsJsonAsync(
+            "/api/v1/admin/rds/commissioning/capture",
+            new { confirmReadOnlyDiscovery = true });
+        captured.EnsureSuccessStatusCode();
+        Assert.Equal(1, fixture.RdsCoreDiscoveryClient.Calls);
+        Assert.Equal(1, await fixture.ScalarAsync<long>(
+            "SELECT count(*) FROM audit.audit_logs WHERE action = 'RDS_COMMISSIONING_DISCOVERY_CAPTURED' AND actor_user_id = @user",
+            ("user", adminIdentity.UserId)));
+    }
+
+    [Fact]
     public async Task Rds_diagnostics_are_admin_web_only_and_use_safe_endpoint_display()
     {
         var operatorIdentity = await fixture.SeedIdentityAsync();

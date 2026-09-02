@@ -128,6 +128,8 @@ Phase 02B pipeline'ı fiziksel metre/milimetre veya robot/map koordinatı üretm
 - [Phase 08B RDS Execution Integration](docs/PHASE_08B_RDS_EXECUTION_INTEGRATION.md)
 - [Phase 08C RDS Simulator Commissioning](docs/PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md)
 - [Phase 09 Android + Web/PWA Operator](docs/PHASE_09_MULTIPLATFORM_OPERATOR.md)
+- [RDSCore commissioning discovery](docs/commissioning/RDS_COMMISSIONING_DISCOVERY.md)
+- [RDS commissioning snapshot schema](docs/commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md)
 - [Operator Web/PWA deployment](docs/OPERATOR_WEB_DEPLOYMENT.md)
 - [Normative RDS/PDA entegrasyon sözleşmesi](docs/RDS_PDA_INTEGRATION_SPEC.md)
 - [Database specification v0.1](docs/TKG_PDA_DATABASE_SPEC_v0.1.md)

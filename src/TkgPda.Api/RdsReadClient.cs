@@ -346,24 +346,16 @@ public sealed class RdsReadClient(
             }
             request.Headers.TryAddWithoutValidation("language", "en");
             request.Headers.TryAddWithoutValidation("X-Correlation-ID", correlationId.ToString());
-            using var response = await httpClientFactory.CreateClient("RdsReadOnly").SendAsync(
+            using var response = await RdsHttpReadTransport.SendAsync(
+                httpClientFactory,
+                "RdsReadOnly",
                 request,
-                HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            if (response.StatusCode is < 200 or > 299)
             {
-                throw Failure("RDS_HTTP_FAILURE", $"RDS returned HTTP {(int)response.StatusCode}.", endpoint, correlationId);
+                throw Failure("RDS_HTTP_FAILURE", $"RDS returned HTTP {response.StatusCode}.", endpoint, correlationId);
             }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            try
-            {
-                return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            }
-            catch (JsonException error)
-            {
-                throw Failure("RDS_INVALID_JSON", "RDS returned invalid JSON.", endpoint, correlationId, innerException: error);
-            }
+            return JsonDocument.Parse(response.Document!.RootElement.GetRawText());
         }
         catch (RdsReadException)
         {
@@ -376,6 +368,10 @@ public sealed class RdsReadClient(
         catch (HttpRequestException error)
         {
             throw Failure("RDS_UNAVAILABLE", "RDS read endpoint is unavailable.", endpoint, correlationId, innerException: error);
+        }
+        catch (JsonException error)
+        {
+            throw Failure("RDS_INVALID_JSON", "RDS returned invalid JSON.", endpoint, correlationId, innerException: error);
         }
     }
 

@@ -331,7 +331,7 @@ void main() {
     expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
     expect(find.text('Uyumlu varyant bulunamadı.'), findsOneWidget);
     expect(harness.controller.transportActionsReady, isFalse);
-    expect(find.byKey(const Key('direct-actions')), findsNothing);
+    expect(find.byKey(const Key('container-position-panel')), findsNothing);
     expect(find.byKey(Key('alt-part-$testAltPartId')), findsOneWidget);
     harness.dispose();
   });
@@ -356,7 +356,7 @@ void main() {
       findsOneWidget,
     );
     expect(harness.controller.transportActionsReady, isFalse);
-    expect(find.byKey(const Key('direct-actions')), findsNothing);
+    expect(find.byKey(const Key('container-position-panel')), findsNothing);
 
     await tester.ensureVisible(
       find.byKey(Key('compatible-variant-$testVariantV2Id')),
@@ -368,8 +368,9 @@ void main() {
     expect(repository.switchCount, 1);
     expect(repository.lastSwitchVariantId, testVariantV2Id);
     expect(harness.controller.transportActionsReady, isTrue);
-    await _scrollTo(tester, const Key('direct-action-REMOVE_EMPTY'));
-    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsOneWidget);
+    await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
+    expect(find.byKey(const Key('direct-action-BRING_EMPTY')), findsOneWidget);
+    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
     harness.dispose();
   });
 
@@ -475,14 +476,14 @@ void main() {
   });
 
   testWidgets(
-    'all transport actions appear on part selection without another page',
+    'customer container actions appear on part selection without another page',
     (tester) async {
       final harness = await _harness(tester);
       await tester.tap(
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
-      await _scrollTo(tester, const Key('direct-action-REMOVE_EMPTY'));
+      await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
       expect(
         find.byKey(const Key('direct-action-BRING_EMPTY')),
         findsOneWidget,
@@ -491,10 +492,7 @@ void main() {
         find.byKey(const Key('direct-action-REMOVE_FULL')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('direct-action-REMOVE_EMPTY')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
       expect(find.text('İşleme Devam Et'), findsNothing);
       expect(find.byKey(const Key('operation-content')), findsNothing);
       expect(find.text('Fiziksel Yerleşim'), findsNothing);
@@ -507,6 +505,11 @@ void main() {
 /// stack (main chips -> alternatives -> compatible variants) can extend past
 /// the test viewport, so lower sections are not built until scrolled to.
 Future<void> _scrollTo(WidgetTester tester, Key key) async {
+  if (find.byKey(key).evaluate().isNotEmpty) {
+    await tester.ensureVisible(find.byKey(key));
+    await tester.pumpAndSettle();
+    return;
+  }
   await tester.scrollUntilVisible(
     find.byKey(key),
     300,

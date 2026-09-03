@@ -59,7 +59,9 @@ builder.Services.AddSingleton<Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordHashService>(services => services.GetRequiredService<Pbkdf2PasswordHasher>());
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
-builder.Services.AddSingleton<IApiDataStore, PostgresApiDataStore>();
+builder.Services.AddSingleton<PostgresApiDataStore>();
+builder.Services.AddSingleton<IApiDataStore>(services => services.GetRequiredService<PostgresApiDataStore>());
+builder.Services.AddSingleton<IOperatorTransportQueueStore>(services => services.GetRequiredService<PostgresApiDataStore>());
 builder.Services.AddSingleton<IAdminConfigurationStore, PostgresAdminConfigurationStore>();
 builder.Services.AddSingleton<IRdsIntegrationStore, PostgresRdsIntegrationStore>();
 builder.Services.AddSingleton<IRdsExecutionStore, PostgresRdsExecutionStore>();
@@ -125,9 +127,13 @@ builder.Services.AddSingleton<RdsIntegrationService>();
 builder.Services.AddSingleton<IRdsWorkSiteReconciler>(services =>
     services.GetRequiredService<RdsIntegrationService>());
 builder.Services.AddSingleton<AdminConfigurationService>();
-builder.Services.AddSingleton<ITransportWorkflowStore>(services =>
+builder.Services.AddSingleton(services =>
     new PostgresTransportWorkflowStore(services.GetRequiredService<NpgsqlDataSource>()));
+builder.Services.AddSingleton<ITransportWorkflowStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
+builder.Services.AddSingleton<IContainerActionStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
 builder.Services.AddSingleton<TransportWorkflowService>();
+builder.Services.AddSingleton<ContainerActionService>();
+builder.Services.AddSingleton<OperatorTransportQueueService>();
 builder.Services.AddSingleton<MachineAccessService>();
 builder.Services.AddSingleton<PdaOperationalContextService>();
 builder.Services.AddSingleton(new RdsExecutionSettings(

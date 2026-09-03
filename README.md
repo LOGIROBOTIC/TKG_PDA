@@ -6,6 +6,8 @@ TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik ta
 
 > **Donmuş ürün şartı:** TKG Operator Client must support both Android industrial PDAs and Windows-based production-line touch terminals through Web/PWA. Both platforms use the same Flutter codebase, TKG API contracts, device-bound security model, and server-authoritative workflow rules.
 
+> **WP-33 Operator akışı:** Operatör `N. Kasa Doldu`, `N. Kasa Boş` veya `Tüm Kasaları Kaldır` eylemini seçer; fiziksel slot ve RDS endpoint çözümü backend'de kalır. Global `Görevler` görünümü tüm makinelerin aktif business kuyruğunu teknik kimlik göstermeden sunar.
+
 ## Mevcut baseline
 
 | Katman | Durum | Sonuç |

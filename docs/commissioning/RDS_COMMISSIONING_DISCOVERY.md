@@ -112,7 +112,7 @@ Explicit expected robot veya required binTask sözleşmesi ileride sağlanır ve
 
 ## Değişmeden kalan veri boşlukları
 
-Discovery; 48 Part↔Slot boşluğunu, 74 container ilişkisini, SEALER V3 layout'unu, EMPTY_STORAGE kararını, REMOVE_FULL destination'ı, container dimension/category konularını, 23 lot değerini veya HAOS/HMTR uyuşmazlığını çözmez. Gerçek bir snapshot yalnız RDS kanıtı sağlar; müşteri master data kararı uydurmaz.
+Discovery; 48 Part↔Slot boşluğunu, 74 container ilişkisini, SEALER V3 layout'unu, container dimension/category konularını, 23 lot değerini veya HAOS/HMTR uyuşmazlığını çözmez. `EMPTY_STORAGE` ve `REMOVE_FULL` iş/fiziksel alanı bilinmektedir; discovery yalnız bunların exact RDS WorkSite/bin/point commissioning eşlemesine kanıt sağlayabilir. Gerçek bir snapshot müşteri master data kararı uydurmaz.
 
 ## Test ve kullanım sınırı
 

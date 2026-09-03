@@ -63,7 +63,7 @@ try {
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     Invoke-Checked 'dotnet' @(
         'test', (Join-Path $projectRoot 'tests\TkgPda.Api.Tests\TkgPda.Api.Tests.csproj'),
-        '--configuration', 'Release', '--no-restore', '--filter', 'FullyQualifiedName~AuthenticatedApiTests|FullyQualifiedName~CompatibleVariantsApiTests|FullyQualifiedName~MachinePartOptionsApiTests|FullyQualifiedName~TransportBatchApiTests|FullyQualifiedName~TransportReadinessApiTests|FullyQualifiedName~WarehousePreparationApiTests',
+        '--configuration', 'Release', '--no-restore', '--filter', 'FullyQualifiedName~AuthenticatedApiTests|FullyQualifiedName~CompatibleVariantsApiTests|FullyQualifiedName~MachinePartOptionsApiTests|FullyQualifiedName~TransportBatchApiTests|FullyQualifiedName~TransportReadinessApiTests|FullyQualifiedName~WarehousePreparationApiTests|FullyQualifiedName~ContainerActionsApiTests',
         '--logger', 'console;verbosity=normal'
     )
 

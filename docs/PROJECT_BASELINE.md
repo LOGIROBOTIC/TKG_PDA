@@ -2,6 +2,8 @@
 
 Bu belge, Phase 01–09 tamamlanması sonrasındaki güncel sistemi özetler. Database/customer-data baseline'ı dondurulmuştur; Phase 08B/08C ve multi-platform operator Phase 09 mevcut şemayı migration değiştirmeden kullanır.
 
+WP-33 Operator UX V2, bu baseline üzerinde migration eklemeden müşterinin `N. Kasa Doldu / N. Kasa Boş / Tüm Kasaları Kaldır` dilini ve global business-only görev kuyruğunu ekler. Mantıksal kasa numarası runtime layout ordering'den türetilir; fiziksel routing backend'de kalır.
+
 > Phase 08B PR #8 `main`e merge edilmiştir. Canlı simulator kabulü için [PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md](PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md) belgesine bakın.
 
 ## 1. Kapsam ve phase durumu
@@ -179,7 +181,7 @@ Güncel komutlar ve yeniden üretim adımları [db/seeds/README.md](../db/seeds/
 
 ### 7.2 PDA/RDS contract sınırı
 
-- PDA iş kurallarını yeniden kurmaz; `BRING_EMPTY`, `REMOVE_FULL`, `REMOVE_EMPTY` seçenekleri Application policy tarafından enabled/disabled sebebiyle döner.
+- PDA iş kurallarını yeniden kurmaz; müşteri kasa eylemleri Application policy tarafından legal `BRING_EMPTY`, `REMOVE_FULL`, `REMOVE_EMPTY` operasyonlarına çevrilir ve enabled/disabled sebebiyle döner.
 - `WAREHOUSE_OPERATOR` yalnız `BRING_EMPTY`; `ADMIN_WEB` ise hiçbir PDA transport capability almaz.
 - Aktif talep bir slotu meşgul ettiğinde ikinci action `SLOT_BUSY` olur; `occupancy_state` değerlerine `RESERVED` eklenmez.
 - RDS WorkSite ve task alanları yalnız `integration` şemasındaki persisted kanıttan okunur. Mapping veya template yokluğu açık/nullable kalır; WorkSite ID veya task label üretilmez.

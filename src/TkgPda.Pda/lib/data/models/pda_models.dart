@@ -221,6 +221,194 @@ class CompatibleVariant {
   );
 }
 
+class ContainerActionAvailability {
+  const ContainerActionAvailability({
+    required this.enabled,
+    required this.status,
+    required this.disabledCode,
+    required this.disabledMessage,
+  });
+
+  final bool enabled;
+  final String status;
+  final String? disabledCode;
+  final String? disabledMessage;
+
+  factory ContainerActionAvailability.fromJson(JsonMap json) =>
+      ContainerActionAvailability(
+        enabled: json['enabled'] as bool? ?? false,
+        status: json['status'] as String? ?? 'READY',
+        disabledCode: json['disabledCode'] as String?,
+        disabledMessage: json['disabledMessage'] as String?,
+      );
+}
+
+class ContainerPosition {
+  const ContainerPosition({
+    required this.positionNumber,
+    required this.label,
+    required this.fullAction,
+    required this.emptyAction,
+    required this.transportState,
+    required this.queuePosition,
+    required this.etaSeconds,
+    required this.etaState,
+  });
+
+  final int positionNumber;
+  final String label;
+  final ContainerActionAvailability fullAction;
+  final ContainerActionAvailability emptyAction;
+  final String transportState;
+  final int? queuePosition;
+  final int? etaSeconds;
+  final String etaState;
+
+  factory ContainerPosition.fromJson(JsonMap json) => ContainerPosition(
+    positionNumber: _integer(json['positionNumber']),
+    label: json['label'] as String? ?? '',
+    fullAction: ContainerActionAvailability.fromJson(_map(json['fullAction'])),
+    emptyAction: ContainerActionAvailability.fromJson(
+      _map(json['emptyAction']),
+    ),
+    transportState: json['transportState'] as String? ?? 'READY',
+    queuePosition: _nullableInteger(json['queuePosition']),
+    etaSeconds: _nullableInteger(json['etaSeconds']),
+    etaState: json['etaState'] as String? ?? 'UNAVAILABLE',
+  );
+}
+
+class ContainerActionResult {
+  const ContainerActionResult({
+    required this.positionNumber,
+    required this.action,
+    required this.requestNo,
+    required this.status,
+    required this.idempotentReplay,
+  });
+
+  final int positionNumber;
+  final String action;
+  final int requestNo;
+  final String status;
+  final bool idempotentReplay;
+
+  factory ContainerActionResult.fromJson(JsonMap json) => ContainerActionResult(
+    positionNumber: _integer(json['positionNumber']),
+    action: json['action'] as String? ?? '',
+    requestNo: _integer(json['requestNo']),
+    status: json['status'] as String? ?? '',
+    idempotentReplay: json['idempotentReplay'] as bool? ?? false,
+  );
+}
+
+class RemoveAllResult {
+  const RemoveAllResult({
+    required this.idempotentReplay,
+    required this.ignoredVacantPositions,
+    required this.itemCount,
+  });
+
+  final bool idempotentReplay;
+  final List<int> ignoredVacantPositions;
+  final int itemCount;
+
+  factory RemoveAllResult.fromJson(JsonMap json) => RemoveAllResult(
+    idempotentReplay: json['idempotentReplay'] as bool? ?? false,
+    ignoredVacantPositions: json['ignoredVacantPositions'] is List
+        ? (json['ignoredVacantPositions'] as List)
+              .whereType<num>()
+              .map((value) => value.toInt())
+              .toList(growable: false)
+        : const [],
+    itemCount: json['items'] is List ? (json['items'] as List).length : 0,
+  );
+}
+
+class ContainerActionBatchItemCommand {
+  const ContainerActionBatchItemCommand({
+    required this.productGroupId,
+    required this.partId,
+    required this.positionNumber,
+    required this.action,
+  });
+
+  final String productGroupId;
+  final String partId;
+  final int positionNumber;
+  final String action;
+
+  JsonMap toJson() => {
+    'productGroupId': productGroupId,
+    'partId': partId,
+    'positionNumber': positionNumber,
+    'action': action,
+  };
+}
+
+class OperatorQueueItem {
+  const OperatorQueueItem({
+    required this.queuePosition,
+    required this.machine,
+    required this.part,
+    required this.logicalContainerNumber,
+    required this.businessAction,
+    required this.requestedAt,
+    required this.state,
+    required this.etaSeconds,
+    required this.etaState,
+  });
+
+  final int queuePosition;
+  final String machine;
+  final String part;
+  final int? logicalContainerNumber;
+  final String businessAction;
+  final DateTime requestedAt;
+  final String state;
+  final int? etaSeconds;
+  final String etaState;
+
+  factory OperatorQueueItem.fromJson(JsonMap json) => OperatorQueueItem(
+    queuePosition: _integer(json['queuePosition']),
+    machine: json['machine'] as String? ?? '',
+    part: json['part'] as String? ?? '',
+    logicalContainerNumber: _nullableInteger(json['logicalContainerNumber']),
+    businessAction: json['businessAction'] as String? ?? '',
+    requestedAt:
+        _date(json['requestedAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+    state: json['state'] as String? ?? 'REQUESTED',
+    etaSeconds: _nullableInteger(json['etaSeconds']),
+    etaState: json['etaState'] as String? ?? 'UNAVAILABLE',
+  );
+}
+
+class OperatorQueuePage {
+  const OperatorQueuePage({
+    required this.terminal,
+    required this.offset,
+    required this.limit,
+    required this.hasMore,
+    required this.items,
+  });
+
+  final bool terminal;
+  final int offset;
+  final int limit;
+  final bool hasMore;
+  final List<OperatorQueueItem> items;
+
+  factory OperatorQueuePage.fromJson(JsonMap json) => OperatorQueuePage(
+    terminal: json['terminal'] as bool? ?? false,
+    offset: _integer(json['offset']),
+    limit: _integer(json['limit']),
+    hasMore: json['hasMore'] as bool? ?? false,
+    items: _maps(
+      json['items'],
+    ).map(OperatorQueueItem.fromJson).toList(growable: false),
+  );
+}
+
 class RdsWorkSiteProjection {
   const RdsWorkSiteProjection({
     required this.isMapped,

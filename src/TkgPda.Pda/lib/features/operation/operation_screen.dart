@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../app/app_controller.dart';
 import '../../shared/widgets/feedback_banners.dart';
 import 'multi_part_batch_screen.dart';
+import 'container_position_panel.dart';
 import 'part_first_screen.dart';
-import 'transport_action_panel.dart';
 
 /// Machine-scoped Operator workspace. Part/variant resolution and transport
 /// actions share one page; there is no second physical-layout screen.
@@ -42,6 +42,12 @@ class OperationScreen extends StatelessWidget {
                   : controller.enterBatchSelection,
               icon: const Icon(Icons.playlist_add),
             ),
+          IconButton(
+            key: const Key('open-operator-queue-from-machine'),
+            tooltip: 'Görevler',
+            onPressed: controller.busy ? null : controller.enterTasks,
+            icon: const Icon(Icons.format_list_numbered),
+          ),
           IconButton(
             tooltip: 'Güncelle',
             onPressed: controller.busy
@@ -83,9 +89,6 @@ class OperationScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: controller.transportActionsReady
-          ? OperatorTransportActions(controller: controller)
-          : null,
     ),
   );
 }
@@ -123,6 +126,8 @@ class _PartFirstWithBatchSkip extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       Expanded(child: PartFirstSelector(controller: controller)),
+      if (controller.transportActionsReady)
+        ContainerPositionPanel(controller: controller),
       if (controller.isConfiguringBatchItem &&
           (controller.compatibleVariants?.isEmpty ?? false))
         Padding(

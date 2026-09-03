@@ -373,6 +373,40 @@ class FakePdaRepository implements PdaDataSource {
   TransportCommand? lastCommand;
   Completer<TransportResult>? createCompleter;
   Completer<AuthenticatedUser>? meCompleter;
+  List<ContainerPosition> containerPositionsValue = const [
+    ContainerPosition(
+      positionNumber: 1,
+      label: '1. Kasa',
+      fullAction: ContainerActionAvailability(
+        enabled: true,
+        status: 'READY',
+        disabledCode: null,
+        disabledMessage: null,
+      ),
+      emptyAction: ContainerActionAvailability(
+        enabled: true,
+        status: 'READY',
+        disabledCode: null,
+        disabledMessage: null,
+      ),
+      transportState: 'READY',
+      queuePosition: null,
+      etaSeconds: null,
+      etaState: 'UNAVAILABLE',
+    ),
+  ];
+  int containerActionCount = 0;
+  int containerActionBatchCount = 0;
+  int removeAllCount = 0;
+  Object? removeAllError;
+  String? lastRemoveAllIdempotencyKey;
+  OperatorQueuePage operatorQueueValue = const OperatorQueuePage(
+    terminal: false,
+    offset: 0,
+    limit: 50,
+    hasMore: false,
+    items: [],
+  );
 
   @override
   Future<LoginSession> login(String employeeNumber) async {
@@ -487,6 +521,158 @@ class FakePdaRepository implements PdaDataSource {
       ],
     );
   }
+
+  @override
+  Future<List<ContainerPosition>> containerPositions({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String productGroupId,
+    required String partId,
+  }) async => containerPositionsValue;
+
+  @override
+  Future<ContainerActionResult> createContainerAction({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required String productGroupId,
+    required String partId,
+    required int positionNumber,
+    required String action,
+    required String idempotencyKey,
+  }) async {
+    containerActionCount++;
+    createCount++;
+    lastIdempotencyKey = idempotencyKey;
+    lastCommand = TransportCommand(
+      machineId: machineId,
+      variantId: variantId,
+      layoutId: layoutId,
+      navigationProfileId: navigationProfileId,
+      productGroupId: productGroupId,
+      partId: partId,
+      containerTypeId: null,
+      operation: action == 'FULL' ? 'REMOVE_FULL' : 'BRING_EMPTY',
+      sourceSlotId: null,
+      destinationSlotId: null,
+      priority: 100,
+    );
+    if (createError case final error?) throw error;
+    if (createCompleter case final completer?) {
+      await completer.future;
+    }
+    containerPositionsValue = [
+      ContainerPosition(
+        positionNumber: positionNumber,
+        label: '$positionNumber. Kasa',
+        fullAction: const ContainerActionAvailability(
+          enabled: false,
+          status: 'QUEUED',
+          disabledCode: 'SLOT_BUSY',
+          disabledMessage:
+              'Bu kasa konumunda aktif bir taşıma talebi bulunuyor.',
+        ),
+        emptyAction: const ContainerActionAvailability(
+          enabled: false,
+          status: 'QUEUED',
+          disabledCode: 'SLOT_BUSY',
+          disabledMessage:
+              'Bu kasa konumunda aktif bir taşıma talebi bulunuyor.',
+        ),
+        transportState: 'QUEUED',
+        queuePosition: 1,
+        etaSeconds: null,
+        etaState: 'UNAVAILABLE',
+      ),
+    ];
+    contextValue = testContext(activeRequests: [testActiveRequest]);
+    return ContainerActionResult(
+      positionNumber: positionNumber,
+      action: action,
+      requestNo: 101,
+      status: 'QUEUED',
+      idempotentReplay: false,
+    );
+  }
+
+  @override
+  Future<TransportBatchResult> createContainerActionBatch({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required List<ContainerActionBatchItemCommand> items,
+    required String idempotencyKey,
+  }) async {
+    containerActionBatchCount++;
+    batchCreateCount++;
+    lastBatchMachineId = machineId;
+    lastBatchIdempotencyKey = idempotencyKey;
+    lastBatchItems = [
+      for (final (index, item) in items.indexed)
+        TransportBatchItemCommand(
+          idempotencyKey: '$idempotencyKey:$index',
+          command: TransportCommand(
+            machineId: machineId,
+            variantId: variantId,
+            layoutId: layoutId,
+            navigationProfileId: navigationProfileId,
+            productGroupId: item.productGroupId,
+            partId: item.partId,
+            containerTypeId: null,
+            operation: item.action == 'FULL' ? 'REMOVE_FULL' : 'BRING_EMPTY',
+            sourceSlotId: null,
+            destinationSlotId: null,
+            priority: 100,
+          ),
+        ),
+    ];
+    if (batchCreateError case final error?) throw error;
+    if (batchCreateCompleter case final completer?) return completer.future;
+    return TransportBatchResult(
+      batchId: '96000000-0000-0000-0000-000000000001',
+      idempotentReplay: false,
+      items: [
+        for (var index = 0; index < items.length; index++)
+          TransportResult(
+            id: '9600000$index-0000-0000-0000-00000000000$index',
+            requestNo: 200 + index,
+            status: 'QUEUED',
+            operation: items[index].action == 'FULL'
+                ? 'REMOVE_FULL'
+                : 'BRING_EMPTY',
+            idempotentReplay: false,
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<RemoveAllResult> removeAllContainers({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required String idempotencyKey,
+  }) async {
+    removeAllCount++;
+    lastRemoveAllIdempotencyKey = idempotencyKey;
+    if (removeAllError case final error?) throw error;
+    return const RemoveAllResult(
+      idempotentReplay: false,
+      ignoredVacantPositions: [],
+      itemCount: 2,
+    );
+  }
+
+  @override
+  Future<OperatorQueuePage> operatorQueue({
+    bool terminal = false,
+    int offset = 0,
+    int limit = 50,
+  }) async => operatorQueueValue;
 
   @override
   Future<TransportResult> transport(String requestId) async =>

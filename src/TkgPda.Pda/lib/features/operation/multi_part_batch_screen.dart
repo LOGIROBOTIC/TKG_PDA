@@ -368,7 +368,7 @@ class _BatchReview extends StatelessWidget {
           child: ListTile(
             title: Text(item.effectivePart.partCode),
             subtitle: Text(
-              '${actionLabel(item.actionCode ?? '')} · '
+              '${_containerActionLabel(item.actionCode)} · '
               '${knownOr(item.slotDisplayName)} · '
               'Varyant ${knownOr(item.variantCode)}',
             ),
@@ -415,3 +415,9 @@ String _partDisplay(String code, String? description) {
   final value = description?.trim();
   return value == null || value.isEmpty ? code : '$code · $value';
 }
+
+String _containerActionLabel(String? action) => switch (action) {
+  'FULL' => 'Kasa Doldu',
+  'EMPTY' => 'Kasa Boş',
+  _ => 'İşlem seçilmedi',
+};

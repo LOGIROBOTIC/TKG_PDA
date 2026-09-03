@@ -209,7 +209,7 @@ void main() {
 
         await _scrollTo(
           tester,
-          find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+          find.byKey(const Key('direct-action-BRING_EMPTY')),
         );
         expect(
           find.byKey(const Key('direct-action-BRING_EMPTY')),
@@ -221,7 +221,7 @@ void main() {
         );
         expect(
           find.byKey(const Key('direct-action-REMOVE_EMPTY')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(find.text('İşleme Devam Et'), findsNothing);
         expect(find.text('Fiziksel Yerleşim'), findsNothing);
@@ -241,17 +241,8 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
       await tester.pumpAndSettle();
-      expect(find.text('Boş kasa getirmek istiyor musunuz?'), findsOneWidget);
+      expect(find.byKey(const Key('confirm-direct-transport')), findsNothing);
       expect(find.text('Sistem tarafından seçilecek'), findsNothing);
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('confirm-direct-transport')),
-          matching: find.text('Boş Kasa Getir'),
-        ),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-      await tester.pumpAndSettle();
 
       expect(repository.createCount, 1);
       expect(repository.lastCommand!.sourceSlotId, isNull);
@@ -259,7 +250,7 @@ void main() {
       expect(repository.lastCommand!.productGroupId, testProductGroupId);
       expect(repository.lastCommand!.partId, testMainPartId);
       expect(repository.lastCommand!.operation, 'BRING_EMPTY');
-      expect(find.text('Taşıma talebi oluşturuldu.'), findsOneWidget);
+      expect(find.text('1. Kasa talebi oluşturuldu.'), findsOneWidget);
       expect(find.text('Fiziksel Yerleşim'), findsNothing);
       await _scrollTo(
         tester,
@@ -277,18 +268,7 @@ void main() {
       harness.dispose();
     });
 
-    for (final operationCase in const [
-      (
-        operation: 'REMOVE_FULL',
-        question: 'Dolu kasayı kaldırmak istiyor musunuz?',
-        label: 'Dolu Kasayı Kaldır',
-      ),
-      (
-        operation: 'REMOVE_EMPTY',
-        question: 'Boş kasayı kaldırmak istiyor musunuz?',
-        label: 'Boş Kasayı Kaldır',
-      ),
-    ]) {
+    for (final operationCase in const [(operation: 'REMOVE_FULL')]) {
       testWidgets(
         '${operationCase.operation} submits without a client physical slot',
         (tester) async {
@@ -306,16 +286,10 @@ void main() {
             find.byKey(Key('direct-action-${operationCase.operation}')),
           );
           await tester.pumpAndSettle();
-          expect(find.text(operationCase.question), findsOneWidget);
           expect(
-            find.descendant(
-              of: find.byKey(const Key('confirm-direct-transport')),
-              matching: find.text(operationCase.label),
-            ),
-            findsOneWidget,
+            find.byKey(const Key('confirm-direct-transport')),
+            findsNothing,
           );
-          await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-          await tester.pumpAndSettle();
 
           expect(repository.lastCommand!.operation, operationCase.operation);
           expect(repository.lastCommand!.sourceSlotId, isNull);
@@ -335,11 +309,6 @@ void main() {
         operation: 'REMOVE_FULL',
         code: 'REMOVE_FULL_SLOT_NOT_FOUND',
         message: 'Bu parça için dolu kasa bulunamadı.',
-      ),
-      (
-        operation: 'REMOVE_EMPTY',
-        code: 'REMOVE_EMPTY_SLOT_NOT_FOUND',
-        message: 'Bu parça için boş kasa bulunamadı.',
       ),
     ]) {
       testWidgets('${errorCase.operation} shows a friendly resolver error', (
@@ -362,9 +331,6 @@ void main() {
           find.byKey(Key('direct-action-${errorCase.operation}')),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-        await tester.pumpAndSettle();
-
         expect(find.text(errorCase.message), findsOneWidget);
         expect(find.textContaining(errorCase.code), findsNothing);
         harness.dispose();
@@ -380,14 +346,12 @@ void main() {
 
     await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
     await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-direct-transport')));
     // A single frame — the pending completer never resolves, and the busy
     // indicator is an indeterminate animation, so pumpAndSettle would hang.
     await tester.pump();
 
-    expect(harness.controller.busy, isTrue);
-    expect(find.text('Talep gönderiliyor...'), findsOneWidget);
+    expect(harness.controller.busy, isFalse);
+    expect(find.text('Gönderiliyor'), findsOneWidget);
     expect(
       tester
           .widget<ElevatedButton>(
@@ -665,7 +629,7 @@ void main() {
 
       await _scrollTo(
         tester,
-        find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY')),
       );
       expect(
         find.byKey(const Key('direct-action-BRING_EMPTY')),
@@ -675,10 +639,7 @@ void main() {
         find.byKey(const Key('direct-action-REMOVE_FULL')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('direct-action-REMOVE_EMPTY')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
       expect(find.text('İşleme Devam Et'), findsNothing);
       expect(find.text('Fiziksel Yerleşim'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -754,15 +715,21 @@ Future<void> _submitBringEmpty(WidgetTester tester) async {
   await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
   await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-  await tester.pumpAndSettle();
 }
 
 Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isNotEmpty) {
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    return;
+  }
   await tester.scrollUntilVisible(
     finder,
     350,
-    scrollable: find.byType(Scrollable).last,
+    scrollable: find.descendant(
+      of: find.byKey(const Key('part-first-selector')),
+      matching: find.byType(Scrollable),
+    ),
   );
   await tester.pumpAndSettle();
 }

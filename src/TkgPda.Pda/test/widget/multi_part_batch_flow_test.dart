@@ -428,8 +428,8 @@ void main() {
     },
   );
 
-  testWidgets('exactly one configured cart item submits through the existing '
-      'single-request path, not the batch endpoint', (tester) async {
+  testWidgets('exactly one configured cart item preserves container-event '
+      'semantics through the atomic action-batch endpoint', (tester) async {
     final repository = FakePdaRepository();
     final harness = await _harness(tester, repository: repository);
     await _enterBatchMode(tester);
@@ -445,8 +445,8 @@ void main() {
     await tester.tap(find.byKey(const Key('batch-submit')));
     await tester.pumpAndSettle();
 
-    expect(repository.createCount, 1);
-    expect(repository.batchCreateCount, 0);
+    expect(repository.createCount, 0);
+    expect(repository.batchCreateCount, 1);
     expect(harness.controller.batchMode, isFalse);
     harness.dispose();
   });
@@ -558,8 +558,8 @@ Future<void> _tapAction(WidgetTester tester, String actionKey) async {
 }
 
 Future<void> _confirmTransport(WidgetTester tester) async {
-  await _scrollUntilVisible(tester, const Key('confirm-direct-transport'));
-  await tester.tap(find.byKey(const Key('confirm-direct-transport')));
+  // WP-33 concrete container buttons submit/configure in one press. There is
+  // intentionally no creation confirmation sheet.
   await tester.pumpAndSettle();
 }
 

@@ -5,7 +5,6 @@ import 'package:tkg_pda/app/app_controller.dart';
 import 'package:tkg_pda/core/auth/session_memory.dart';
 import 'package:tkg_pda/core/errors/api_problem.dart';
 import 'package:tkg_pda/core/storage/device_code_store.dart';
-import 'package:tkg_pda/data/models/pda_models.dart';
 
 import '../support/fakes.dart';
 

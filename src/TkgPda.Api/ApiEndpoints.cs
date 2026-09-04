@@ -75,13 +75,13 @@ public static class ApiEndpoints
             .RequireAuthorization(PolicyNames.Operator);
 
         endpoints.MapPost("/api/v1/rds/robots/pause", PauseRobotAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+            .RequireAuthorization(PolicyNames.VariantManager);
 
         endpoints.MapPost("/api/v1/rds/robots/resume", ResumeRobotAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+            .RequireAuthorization(PolicyNames.VariantManager);
 
         endpoints.MapPost("/api/v1/rds/robots/clear-errors", ClearRobotErrorsAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+            .RequireAuthorization(PolicyNames.VariantManager);
 
         endpoints.MapPost("/api/v1/rds/robots/dispatchable", SetRobotDispatchableAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
@@ -891,8 +891,11 @@ public static class ApiEndpoints
         IRdsCoreNativeOrderClient rdsClient,
         CancellationToken cancellationToken)
     {
+        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
+        }
         var correlationId = CorrelationId(context);
-        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
         var result = await rdsClient.GotoSitePauseAsync(vehicles, correlationId, cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
@@ -903,8 +906,11 @@ public static class ApiEndpoints
         IRdsCoreNativeOrderClient rdsClient,
         CancellationToken cancellationToken)
     {
+        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
+        }
         var correlationId = CorrelationId(context);
-        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
         var result = await rdsClient.GotoSiteResumeAsync(vehicles, correlationId, cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
@@ -915,8 +921,11 @@ public static class ApiEndpoints
         IRdsCoreNativeOrderClient rdsClient,
         CancellationToken cancellationToken)
     {
+        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
+        }
         var correlationId = CorrelationId(context);
-        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
         var result = await rdsClient.ClearRobotAllErrorAsync(vehicles, correlationId, cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
@@ -927,8 +936,11 @@ public static class ApiEndpoints
         IRdsCoreNativeOrderClient rdsClient,
         CancellationToken cancellationToken)
     {
+        if (request.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
+        }
         var correlationId = CorrelationId(context);
-        var vehicles = request.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
         var result = await rdsClient.SetDispatchableAsync(vehicles, request.Type, correlationId, cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
@@ -952,8 +964,11 @@ public static class ApiEndpoints
         IRdsCoreNativeOrderClient rdsClient,
         CancellationToken cancellationToken)
     {
+        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
+        }
         var correlationId = CorrelationId(context);
-        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
         var result = await rdsClient.ManualFinishedAsync(vehicles, correlationId, cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
@@ -965,8 +980,11 @@ public static class ApiEndpoints
         IRdsCoreNativeOrderClient rdsClient,
         CancellationToken cancellationToken)
     {
+        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
+        }
         var correlationId = CorrelationId(context);
-        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
         var result = await rdsClient.RedoFailedOrderAsync(vehicles, correlationId, cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }

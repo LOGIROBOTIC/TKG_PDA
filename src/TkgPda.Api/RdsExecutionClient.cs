@@ -251,6 +251,10 @@ public sealed class RdsExecutionWorker(
                 {
                     logger.LogWarning("RDS execution cycle was recoverably blocked with {Code}.", error.Code);
                 }
+                catch (RdsCoreNativeOrderException error)
+                {
+                    logger.LogWarning("RDS native order cycle was recoverably blocked with {Code}.", error.Code);
+                }
                 catch (RdsReadException error)
                 {
                     logger.LogWarning("RDS reconciliation read was recoverably blocked with {Code}.", error.Code);

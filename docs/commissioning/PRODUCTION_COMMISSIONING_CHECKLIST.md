@@ -4,7 +4,43 @@ Bu checklist fiziksel robot dispatch'inden önce tamamlanacak fail-closed kapıd
 
 ## Hazırlık durumu
 
-- **Yazılım / demo kabulü:** READY
+### SOFTWARE / SIMULATOR STATUS
+
+#### SIMULATOR_ACCEPTED:
+- Container Action -> Warehouse Preparation -> RDS dispatch -> completion
+- Native RDSCore order creation
+- Native reconciliation
+- RUNNING cancellation through TKG API
+- exact /terminate with disableVehicle=false
+- queue / polling
+- telemetry
+- fallback ETA
+- SwitchMap A <-> B via shared SM11
+- Operator authorization boundary
+- native/Wind execution isolation
+- restart/idempotency protections
+
+#### IMPLEMENTED_NOT_POSITIVELY_OBSERVED:
+- positive real remaining_time
+- redoFailedOrder on a genuine FAILED block
+- manualFinished on a genuine stuck/failed block
+- native group assignment
+- unknown future RDS order states
+
+#### PHYSICAL_COMMISSIONING_PENDING:
+- real TKG Slot -> RDS WorkSite/Bin mapping
+- real binTask
+- fork height
+- pickup/drop
+- recognition/calibration
+- physical load handling
+- plant Wi-Fi / roaming
+- on-site SAT
+
+> [!NOTE]
+> `EMPTY_STORAGE` ve `REMOVE_FULL` fiziksel iş alanları kararlaştırılmıştır (customer-decision gap değildir). Gerçek saha RDS/site-map karşılıkları: **COMMISSIONING MAPPING PENDING**.
+
+- **Yazılım / simulator kabulü:** SIMULATOR_ACCEPTED (CLOSED)
 - **Production fiziksel commissioning:** NOT YET READY
 - **SAT / canlı robot kabulü:** BLOCKED BY CUSTOMER + SITE + RDS COMMISSIONING DATA
 

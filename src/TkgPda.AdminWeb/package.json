@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

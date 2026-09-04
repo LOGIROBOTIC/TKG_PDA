@@ -16,6 +16,7 @@ param(
     [int]$ApiPort = 5000,
     [int]$AdminPort = 4173,
     [int]$OperatorPort = 7357,
+    [string]$HostAddress = '0.0.0.0',
     [ValidateSet('ReadOnly', 'Off')]
     [string]$RdsMode = 'ReadOnly',
     [string]$RdsBaseUrl = 'http://127.0.0.1:8080',
@@ -323,22 +324,7 @@ SET occupancy_state = EXCLUDED.occupancy_state,
 $devEnvironmentSql | & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Dev environment seeding failed with exit code $LASTEXITCODE" }
 
-# 2. Build .NET Solution in Debug mode
-Write-Host 'Building .NET solution (Debug)...' -ForegroundColor Cyan
-& dotnet build (Join-Path $projectRoot 'TKG.Pda.slnx') --configuration Debug --no-restore
-if ($LASTEXITCODE -ne 0) {
-    & dotnet build (Join-Path $projectRoot 'TKG.Pda.slnx') --configuration Debug
-    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
-}
-
-# 3. Generate JWT signing key
-$jwtRng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$jwtBytes = New-Object byte[] 48
-$jwtRng.GetBytes($jwtBytes)
-$jwtRng.Dispose()
-$jwtSigningKey = [Convert]::ToBase64String($jwtBytes)
-
-# 4. Check if API is already running; stop previous instance if any
+# 2. Check if previous stack processes are running; stop them before building
 if (Test-Path -LiteralPath $stateFile) {
     try {
         $oldState = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
@@ -358,16 +344,72 @@ if (Test-Path -LiteralPath $stateFile) {
         # ignore state read error
     }
 }
+Get-Process -Name 'TkgPda.Api' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Ensure all processes listening on API, Admin, and Operator ports are stopped
+foreach ($pPort in @($ApiPort, $AdminPort, $OperatorPort)) {
+    $existingConns = Get-NetTCPConnection -LocalPort $pPort -State Listen -ErrorAction SilentlyContinue
+    foreach ($conn in $existingConns) {
+        if ($conn.OwningProcess -gt 4) {
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# 3. Build .NET Solution in Debug mode
+Write-Host 'Building .NET solution (Debug)...' -ForegroundColor Cyan
+& dotnet build (Join-Path $projectRoot 'TKG.Pda.slnx') --configuration Debug --no-restore
+if ($LASTEXITCODE -ne 0) {
+    & dotnet build (Join-Path $projectRoot 'TKG.Pda.slnx') --configuration Debug
+    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
+}
+
+# 4. Generate JWT signing key
+$jwtRng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$jwtBytes = New-Object byte[] 48
+$jwtRng.GetBytes($jwtBytes)
+$jwtRng.Dispose()
+$jwtSigningKey = [Convert]::ToBase64String($jwtBytes)
+
+# Detect active local network IPv4 addresses for LAN access and CORS
+$detectedIps = @('127.0.0.1', 'localhost')
+try {
+    $upAdapters = (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' }).Name
+    $netIps = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.InterfaceAlias -in $upAdapters -and $_.IPAddress -notlike "169.254.*" } |
+        Select-Object -ExpandProperty IPAddress
+    if ($netIps) {
+        $detectedIps += $netIps
+    }
+} catch { }
+$detectedIps = $detectedIps | Select-Object -Unique
 
 # 5. Start API
-Write-Host "Starting ASP.NET Core API on http://127.0.0.1:$ApiPort..." -ForegroundColor Cyan
+Write-Host "Starting ASP.NET Core API on http://${HostAddress}:$ApiPort..." -ForegroundColor Cyan
 $apiStdOut = Join-Path $logsDir 'api.stdout.log'
 $apiStdErr = Join-Path $logsDir 'api.stderr.log'
 
 $env:ConnectionStrings__TkgPda = "Host=127.0.0.1;Port=$PostgresPort;Database=$Database;Username=postgres;Pooling=true;Maximum Pool Size=50"
-$env:ASPNETCORE_URLS = "http://127.0.0.1:$ApiPort"
+$env:ASPNETCORE_URLS = "http://${HostAddress}:$ApiPort"
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
-$env:Cors__AllowedOrigins__0 = "http://127.0.0.1:$OperatorPort"
+
+# Configure CORS origins for localhost and all detected LAN IPs
+$corsOrigins = @(
+    "http://127.0.0.1:$OperatorPort",
+    "http://localhost:$OperatorPort",
+    "http://127.0.0.1:$AdminPort",
+    "http://localhost:$AdminPort"
+)
+foreach ($ip in $detectedIps) {
+    $corsOrigins += "http://${ip}:$OperatorPort"
+    $corsOrigins += "http://${ip}:$AdminPort"
+}
+$corsOrigins = $corsOrigins | Select-Object -Unique
+# Clear previous Cors env vars if any
+Get-ChildItem env:Cors__AllowedOrigins__* -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item "env:$($_.Name)" }
+for ($ci = 0; $ci -lt $corsOrigins.Count; $ci++) {
+    [Environment]::SetEnvironmentVariable("Cors__AllowedOrigins__$ci", $corsOrigins[$ci], 'Process')
+}
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:Authentication__Jwt__SigningKey = $jwtSigningKey
 
@@ -416,7 +458,7 @@ if (-not $NoAdmin) {
         if ($LASTEXITCODE -ne 0) { throw "npm ci failed in AdminWeb with exit code $LASTEXITCODE" }
     }
 
-    Write-Host "Starting Admin Web on http://127.0.0.1:$AdminPort..." -ForegroundColor Cyan
+    Write-Host "Starting Admin Web on http://${HostAddress}:$AdminPort..." -ForegroundColor Cyan
     $adminStdOut = Join-Path $logsDir 'admin_web.stdout.log'
     $adminStdErr = Join-Path $logsDir 'admin_web.stderr.log'
     $env:TKG_API_TARGET = "http://127.0.0.1:$ApiPort"
@@ -430,12 +472,12 @@ if (-not $NoAdmin) {
 $operatorProcess = $null
 if (-not $NoOperator) {
     $pdaDir = Join-Path $projectRoot 'src\TkgPda.Pda'
-    Write-Host "Starting Flutter Operator Web on http://127.0.0.1:$OperatorPort..." -ForegroundColor Cyan
+    Write-Host "Starting Flutter Operator Web on http://${HostAddress}:$OperatorPort..." -ForegroundColor Cyan
     $operatorStdOut = Join-Path $logsDir 'operator_web.stdout.log'
     $operatorStdErr = Join-Path $logsDir 'operator_web.stderr.log'
 
     $operatorProcess = Start-Process -FilePath 'cmd.exe' -ArgumentList @(
-        '/c', "flutter run -d chrome --web-hostname=127.0.0.1 --web-port=$OperatorPort --dart-define=TKG_API_BASE_URL=http://127.0.0.1:$ApiPort"
+        '/c', "flutter run -d chrome --web-hostname=$HostAddress --web-port=$OperatorPort"
     ) -WorkingDirectory $pdaDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $operatorStdOut -RedirectStandardError $operatorStdErr
 }
 
@@ -476,19 +518,31 @@ Write-Host ""
 Write-Host "PostgreSQL:"
 Write-Host "127.0.0.1:$PostgresPort / $Database"
 Write-Host ""
-Write-Host "API:"
-Write-Host "http://127.0.0.1:$ApiPort"
-Write-Host ""
+Write-Host "Local URLs (This PC):" -ForegroundColor Cyan
+Write-Host "  API:      http://127.0.0.1:$ApiPort"
 if (-not $NoAdmin) {
-    Write-Host "Admin:"
-    Write-Host "http://127.0.0.1:$AdminPort"
-    Write-Host ""
+    Write-Host "  Admin:    http://127.0.0.1:$AdminPort"
 }
 if (-not $NoOperator) {
-    Write-Host "Operator:"
-    Write-Host "http://127.0.0.1:$OperatorPort"
-    Write-Host ""
+    Write-Host "  Operator: http://127.0.0.1:$OperatorPort"
 }
+
+$lanIps = $detectedIps | Where-Object { $_ -ne '127.0.0.1' -and $_ -ne 'localhost' }
+if ($lanIps) {
+    Write-Host ""
+    Write-Host "Network (LAN) URLs (Other Devices on Network):" -ForegroundColor Cyan
+    foreach ($lanIp in $lanIps) {
+        Write-Host "  [Interface IP: $lanIp]" -ForegroundColor Yellow
+        Write-Host "    API:      http://${lanIp}:$ApiPort"
+        if (-not $NoAdmin) {
+            Write-Host "    Admin:    http://${lanIp}:$AdminPort"
+        }
+        if (-not $NoOperator) {
+            Write-Host "    Operator: http://${lanIp}:$OperatorPort"
+        }
+    }
+}
+Write-Host ""
 Write-Host "RDS:"
 Write-Host $rdsStatusDisplay
 Write-Host ""

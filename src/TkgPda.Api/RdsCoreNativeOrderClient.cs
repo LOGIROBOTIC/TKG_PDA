@@ -99,7 +99,15 @@ public sealed class RdsCoreNativeOrderClient(
         OrderDetailsByExternalId,
         OrderDetailsByBlockId,
         BlockDetailsById,
-        Terminate
+        Terminate,
+        SetPriority,
+        ClearRobotAllError,
+        GotoSitePause,
+        GotoSiteResume,
+        ManualFinished,
+        RedoFailedOrder,
+        Dispatchable,
+        RobotsStatus
     }
 
     private sealed record Spec(HttpMethod Method, string Path, bool Mutation);
@@ -112,7 +120,15 @@ public sealed class RdsCoreNativeOrderClient(
         [Operation.OrderDetailsByExternalId] = new(HttpMethod.Get, "/orderDetailsByExternalId/{externalId}", false),
         [Operation.OrderDetailsByBlockId] = new(HttpMethod.Get, "/orderDetailsByBlockId/{blockId}", false),
         [Operation.BlockDetailsById] = new(HttpMethod.Get, "/blockDetailsById/{blockId}", false),
-        [Operation.Terminate] = new(HttpMethod.Post, "/terminate", true)
+        [Operation.Terminate] = new(HttpMethod.Post, "/terminate", true),
+        [Operation.SetPriority] = new(HttpMethod.Post, "/setPriority", true),
+        [Operation.ClearRobotAllError] = new(HttpMethod.Post, "/clearRobotAllError", true),
+        [Operation.GotoSitePause] = new(HttpMethod.Post, "/gotoSitePause", true),
+        [Operation.GotoSiteResume] = new(HttpMethod.Post, "/gotoSiteResume", true),
+        [Operation.ManualFinished] = new(HttpMethod.Post, "/manualFinished", true),
+        [Operation.RedoFailedOrder] = new(HttpMethod.Post, "/redoFailedOrder", true),
+        [Operation.Dispatchable] = new(HttpMethod.Post, "/dispatchable", true),
+        [Operation.RobotsStatus] = new(HttpMethod.Get, "/robotsStatus", false)
     };
 
     public static IReadOnlyList<RdsCoreNativeOrderOperationDescriptor> AllowedOperations { get; } = Registry
@@ -232,6 +248,134 @@ public sealed class RdsCoreNativeOrderClient(
             root);
     }
 
+    public async Task<RdsCoreSimpleResult> SetPriorityAsync(
+        string orderId,
+        int priority,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var id = ValidateToken(orderId, "order ID");
+        using var response = await SendAsync(
+            Operation.SetPriority,
+            new { id, priority },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> ClearRobotAllErrorAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.ClearRobotAllError,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> GotoSitePauseAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.GotoSitePause,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> GotoSiteResumeAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.GotoSiteResume,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> ManualFinishedAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.ManualFinished,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> RedoFailedOrderAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.RedoFailedOrder,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> SetDispatchableAsync(
+        IReadOnlyList<string> vehicles,
+        string type,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        var normalizedType = (type ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "dispatchable" => "dispatchable",
+            "undispatchable_unignore" => "undispatchable_unignore",
+            "undispatchable_ignore" => "undispatchable_ignore",
+            _ => throw new ArgumentException("Dispatchable type must be 'dispatchable', 'undispatchable_unignore', or 'undispatchable_ignore'.", nameof(type))
+        };
+        using var response = await SendAsync(
+            Operation.Dispatchable,
+            new { vehicles = list, type = normalizedType },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(
+            Operation.RobotsStatus,
+            null,
+            null,
+            correlationId,
+            cancellationToken);
+        var root = RequireSuccessfulRead(response);
+        return ParseRobotTelemetry(root);
+    }
+
     private async Task<IReadOnlyList<RdsCoreOrderDetails>> GetOrderArrayAsync(
         Operation operation,
         string token,
@@ -256,10 +400,11 @@ public sealed class RdsCoreNativeOrderClient(
         CancellationToken cancellationToken,
         string? queryString = null)
     {
-        if (!options.MutationEnabled)
-            throw new RdsCoreNativeOrderException("RDSCORE_EXECUTION_DISABLED", "RDSCore native-order execution is disabled or is not the selected mode.");
-
         var spec = Registry[operation];
+        if (spec.Mutation && !options.MutationEnabled)
+            throw new RdsCoreNativeOrderException("RDSCORE_EXECUTION_DISABLED", "RDSCore native-order execution is disabled or is not the selected mode.");
+        if (!spec.Mutation && (!options.Enabled || options.BaseAddress is null))
+            throw new RdsCoreNativeOrderException("RDSCORE_READ_DISABLED", "RDSCore is disabled or has no BaseAddress configured.");
         var endpoint = (pathToken is null ? spec.Path : BindPath(spec.Path, pathToken)) + queryString;
         try
         {
@@ -521,8 +666,178 @@ public sealed class RdsCoreNativeOrderClient(
         _ => throw new ArgumentOutOfRangeException(nameof(field))
     };
 
+    private static RdsCoreSimpleResult ParseSimpleResult(RdsCoreHttpResponse response)
+    {
+        var root = response.Document?.RootElement.Clone();
+        var code = root is { } value ? Number(value, "code") : null;
+        var httpAccepted = response.StatusCode is >= 200 and <= 299;
+        return new(
+            httpAccepted,
+            httpAccepted && code == 0,
+            response.StatusCode,
+            code,
+            root is { } messageRoot ? Text(messageRoot, "msg") ?? Text(messageRoot, "message") : null,
+            root);
+    }
+
+    private static IReadOnlyList<RdsCoreRobotTelemetry> ParseRobotTelemetry(JsonElement root)
+    {
+        var target = root;
+        if (target.TryGetProperty("data", out var dataProp) && dataProp.ValueKind == JsonValueKind.Object)
+            target = dataProp;
+
+        if (!target.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var list = new List<RdsCoreRobotTelemetry>();
+        foreach (var robot in report.EnumerateArray())
+        {
+            if (robot.ValueKind != JsonValueKind.Object) continue;
+            var vehicleId = Text(robot, "vehicle_id") ?? Text(robot, "uuid");
+            if (string.IsNullOrWhiteSpace(vehicleId)) continue;
+
+            var basic = Object(robot, "basic_info");
+            var model = basic is { } b ? Text(b, "model") : null;
+            var currentMap = basic is { } bm ? Text(bm, "current_map") : null;
+
+            var rbk = Object(robot, "rbk_report");
+            var currentStation = rbk is { } rcs ? Text(rcs, "current_station") : null;
+            var lastStation = rbk is { } rls ? Text(rls, "last_station") : null;
+            var batteryLevel = rbk is { } rbl && rbl.TryGetProperty("battery_level", out var bl) && bl.TryGetDouble(out var bld) ? bld : 0.0;
+            var x = rbk is { } rx && rx.TryGetProperty("x", out var xp) && xp.TryGetDouble(out var xd) ? xd : (double?)null;
+            var y = rbk is { } ry && ry.TryGetProperty("y", out var yp) && yp.TryGetDouble(out var yd) ? yd : (double?)null;
+            var angle = rbk is { } ra && ra.TryGetProperty("angle", out var ap) && ap.TryGetDouble(out var ad) ? ad : (double?)null;
+
+            var connectionStatus = Number(robot, "connection_status") ?? 0;
+            var dispatchable = Boolean(robot, "dispatchable");
+            var isLoaded = Boolean(robot, "isLoaded");
+            var isError = Boolean(robot, "is_error");
+
+            var remainingTime = robot.TryGetProperty("remaining_time", out var rt) && rt.TryGetDouble(out var rtd) ? rtd : (double?)null;
+
+            var currentOrder = Object(robot, "current_order");
+            var currentOrderId = currentOrder is { } co ? Text(co, "id") : null;
+            var currentOrderState = currentOrder is { } cos ? Text(cos, "state") : null;
+
+            var alarms = new List<string>();
+            if (robot.TryGetProperty("alarms", out var alarmsObj) && alarmsObj.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var kind in new[] { "fatals", "errors", "warnings", "notices" })
+                {
+                    if (alarmsObj.TryGetProperty(kind, out var arr) && arr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in arr.EnumerateArray())
+                        {
+                            var s = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
+                            if (!string.IsNullOrWhiteSpace(s)) alarms.Add(s);
+                        }
+                    }
+                }
+            }
+            if (alarms.Count == 0 && rbk is { } rbkAlarms && rbkAlarms.TryGetProperty("alarms", out var rbkAlarmsObj) && rbkAlarmsObj.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var kind in new[] { "fatals", "errors", "warnings", "notices" })
+                {
+                    if (rbkAlarmsObj.TryGetProperty(kind, out var arr) && arr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in arr.EnumerateArray())
+                        {
+                            var s = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
+                            if (!string.IsNullOrWhiteSpace(s)) alarms.Add(s);
+                        }
+                    }
+                }
+            }
+
+            list.Add(new(
+                vehicleId,
+                model,
+                currentMap,
+                currentStation,
+                lastStation,
+                connectionStatus,
+                dispatchable,
+                isLoaded,
+                isError,
+                batteryLevel,
+                x,
+                y,
+                angle,
+                remainingTime,
+                currentOrderId,
+                currentOrderState,
+                alarms));
+        }
+
+        return list;
+    }
+
+    private static JsonElement? Object(JsonElement value, string name) =>
+        value.ValueKind == JsonValueKind.Object && value.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Object
+            ? property
+            : null;
+
+    private static bool Boolean(JsonElement value, string name) =>
+        value.ValueKind == JsonValueKind.Object
+        && value.TryGetProperty(name, out var property)
+        && (property.ValueKind == JsonValueKind.True
+            || (property.ValueKind == JsonValueKind.String && bool.TryParse(property.GetString(), out var parsed) && parsed));
+
     private sealed record RdsCoreHttpResponse(int StatusCode, JsonDocument? Document) : IDisposable
     {
         public void Dispose() => Document?.Dispose();
+    }
+}
+
+public sealed class RdsCoreRobotTelemetryProvider(
+    IHttpClientFactory httpClientFactory,
+    RdsCoreExecutionOptions options,
+    ILogger<RdsCoreRobotTelemetryProvider> logger) : IRobotTelemetryProvider
+{
+    public async Task<IReadOnlyDictionary<string, double>> GetRobotRemainingTimesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!options.Enabled || options.BaseAddress is null)
+            return new Dictionary<string, double>();
+
+        try
+        {
+            var client = httpClientFactory.CreateClient("RdsCoreDiscovery");
+            using var response = await client.GetAsync("/robotsStatus", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                return new Dictionary<string, double>();
+
+            using var doc = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken),
+                cancellationToken: cancellationToken);
+
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Array)
+                return new Dictionary<string, double>();
+
+            var result = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var robot in report.EnumerateArray())
+            {
+                if (robot.ValueKind != JsonValueKind.Object) continue;
+                var vehicleId = robot.TryGetProperty("vehicle_id", out var vid) && vid.ValueKind == JsonValueKind.String
+                    ? vid.GetString()
+                    : robot.TryGetProperty("uuid", out var uid) && uid.ValueKind == JsonValueKind.String
+                        ? uid.GetString()
+                        : null;
+                if (string.IsNullOrWhiteSpace(vehicleId)) continue;
+
+                if (robot.TryGetProperty("remaining_time", out var rt) && rt.TryGetDouble(out var rtd) && rtd >= 0)
+                {
+                    result[vehicleId] = rtd;
+                }
+            }
+
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Robot telemetry fetch for remaining_time enrichment failed.");
+            return new Dictionary<string, double>();
+        }
     }
 }

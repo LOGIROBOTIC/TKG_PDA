@@ -214,8 +214,8 @@ Gerçek `PRODUCTION` snapshot'ı operasyonel topology, hostname/IP, map, cihaz v
 Snapshot'tan aşağıdakiler türetilmez veya otomatik yapılandırılmaz:
 
 - TKG Part↔Slot ilişkisi
-- `EMPTY_STORAGE`
-- `REMOVE_FULL` destination
+- bilinen `EMPTY_STORAGE` ve `REMOVE_FULL` alanlarının TKG Part↔Slot ilişkisi
+- exact RDS WorkSite/bin/point commissioning eşlemesi
 - Container `EMPTY/FULL` business state
 - Operation→binTask sözleşmesi
 - TKG'nin ihtiyaç duyduğu fork height değerleri

@@ -38,6 +38,21 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/transport-batches", CreateTransportBatchAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
+        endpoints.MapGet("/api/v1/machines/{machineId:guid}/container-positions", ContainerPositionsAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/machines/{machineId:guid}/container-actions", CreateContainerActionAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/machines/{machineId:guid}/container-actions/batch", CreateContainerActionBatchAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/machines/{machineId:guid}/container-actions/remove-all", RemoveAllContainersAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapGet("/api/v1/transport-requests/queue", OperatorQueueAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
         endpoints.MapGet("/api/v1/transport-requests/{requestId:guid}", GetTransportAsync)
             .RequireAuthorization();
 
@@ -54,6 +69,33 @@ public static class ApiEndpoints
             .RequireAuthorization(PolicyNames.Operator);
 
         endpoints.MapGet("/api/v1/rds/robot-alarm-summary", RobotAlarmSummaryAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapGet("/api/v1/rds/robots", ListRobotsAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/pause", PauseRobotAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/resume", ResumeRobotAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/clear-errors", ClearRobotErrorsAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/dispatchable", SetRobotDispatchableAsync)
+            .RequireAuthorization(PolicyNames.VariantManager);
+
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/priority", SetRequestPriorityAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/manual-finish", ManualFinishRequestAsync)
+            .RequireAuthorization(PolicyNames.VariantManager);
+
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/redo", RedoRequestAsync)
+            .RequireAuthorization(PolicyNames.VariantManager);
+
+        endpoints.MapGet("/api/v1/rds/orders", ListRdsOrdersAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
         return endpoints;
@@ -313,6 +355,188 @@ public static class ApiEndpoints
             ToResponse(result.Request, result.WasIdempotentReplay),
             statusCode: result.WasIdempotentReplay ? StatusCodes.Status200OK : StatusCodes.Status201Created);
     }
+
+    private static async Task<IResult> ContainerPositionsAsync(
+        Guid machineId,
+        [FromQuery] Guid variantId,
+        [FromQuery] Guid layoutId,
+        [FromQuery] Guid productGroupId,
+        [FromQuery] Guid partId,
+        HttpContext context,
+        MachineAccessService access,
+        ContainerActionService service,
+        CancellationToken cancellationToken)
+    {
+        _ = Device(context);
+        var permission = await access.EnsureAsync(context.User, machineId, MachineAccessKind.View, cancellationToken);
+        var actor = new PdaActorContext(
+            context.User.UserId(),
+            context.User.FindAll(ClaimTypes.Role).Select(static claim => claim.Value).ToHashSet(StringComparer.Ordinal),
+            context.User.IsDeviceBound());
+        var positions = await service.ListPositionsAsync(
+            new(machineId, variantId, layoutId, productGroupId, partId),
+            actor,
+            permission.CanOperate,
+            cancellationToken);
+        return Results.Ok(positions);
+    }
+
+    private static async Task<IResult> CreateContainerActionAsync(
+        Guid machineId,
+        CreateContainerActionHttpRequest request,
+        HttpContext context,
+        MachineAccessService access,
+        ContainerActionService service,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = Device(context);
+        _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.Operate, cancellationToken);
+        var action = OperatorContainerActionCode.Parse(request.Action);
+        EnsureContainerActionAllowed(context.User, action);
+        var idempotencyKey = RequiredIdempotencyKey(context);
+        var result = await service.CreateAsync(
+            new(
+                idempotencyKey,
+                context.User.UserId(),
+                machineId,
+                request.VariantId,
+                request.LayoutId,
+                request.NavigationProfileId,
+                request.ProductGroupId,
+                request.PartId,
+                request.PositionNumber,
+                action,
+                request.Priority),
+            cancellationToken);
+        context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.WasIdempotentReplay ? "true" : "false";
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            result.WasIdempotentReplay ? "CONTAINER_ACTION_REPLAYED" : "CONTAINER_ACTION_CREATED",
+            "TRANSPORT_REQUEST",
+            result.Request.Id.ToString(),
+            new { result.Request.RequestNo, result.PositionNumber, result.Action },
+            cancellationToken);
+        return Results.Json(
+            new ContainerActionHttpResponse(
+                result.PositionNumber,
+                result.Action,
+                result.Request.RequestNo,
+                result.Request.Status.ToDatabase(),
+                result.WasIdempotentReplay),
+            statusCode: result.WasIdempotentReplay ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> RemoveAllContainersAsync(
+        Guid machineId,
+        RemoveAllContainersHttpRequest request,
+        HttpContext context,
+        MachineAccessService access,
+        ContainerActionService service,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = Device(context);
+        _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.Operate, cancellationToken);
+        if (!context.User.IsInRole(RoleCodes.Admin)
+            && !context.User.IsInRole(RoleCodes.Supervisor)
+            && !context.User.IsInRole(RoleCodes.LineOperator))
+        {
+            throw new ApiException(StatusCodes.Status403Forbidden, "OPERATION_NOT_ALLOWED_FOR_ROLE", "Rolünüz tüm kasaları kaldırma işlemini başlatmaya yetkili değildir.");
+        }
+
+        var result = await service.RemoveAllAsync(
+            new(
+                RequiredIdempotencyKey(context),
+                context.User.UserId(),
+                machineId,
+                request.VariantId,
+                request.LayoutId,
+                request.NavigationProfileId,
+                request.Priority),
+            cancellationToken);
+        context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.Batch.WasIdempotentReplay ? "true" : "false";
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            result.Batch.WasIdempotentReplay ? "REMOVE_ALL_REPLAYED" : "REMOVE_ALL_CREATED",
+            "TRANSPORT_BATCH",
+            result.Batch.BatchId.ToString(),
+            new { itemCount = result.Batch.Items.Count, result.IgnoredVacantPositions },
+            cancellationToken);
+        return Results.Json(
+            new RemoveAllContainersHttpResponse(
+                result.Batch.WasIdempotentReplay,
+                result.IgnoredVacantPositions,
+                result.Batch.Items.Select(item => new RemoveAllContainerItemHttpResponse(
+                    item.RequestNo,
+                    item.TaskType.ToDatabase(),
+                    item.Status.ToDatabase())).ToArray()),
+            statusCode: result.Batch.WasIdempotentReplay ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> CreateContainerActionBatchAsync(
+        Guid machineId,
+        CreateContainerActionBatchHttpRequest request,
+        HttpContext context,
+        MachineAccessService access,
+        ContainerActionService service,
+        IApiDataStore dataStore,
+        CancellationToken cancellationToken)
+    {
+        _ = Device(context);
+        _ = await access.EnsureAsync(context.User, machineId, MachineAccessKind.Operate, cancellationToken);
+        if (request.Items is null || request.Items.Count == 0)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "BATCH_ITEMS_REQUIRED", "Grup en az bir kasa işlemi içermelidir.");
+        }
+
+        var items = request.Items.Select(item =>
+        {
+            var action = OperatorContainerActionCode.Parse(item.Action);
+            EnsureContainerActionAllowed(context.User, action);
+            return new ContainerActionBatchItem(item.ProductGroupId, item.PartId, item.PositionNumber, action);
+        }).ToArray();
+        var result = await service.CreateBatchAsync(
+            new ContainerActionBatchCommand(
+                RequiredIdempotencyKey(context),
+                context.User.UserId(),
+                machineId,
+                request.VariantId,
+                request.LayoutId,
+                request.NavigationProfileId,
+                items,
+                request.Priority),
+            cancellationToken);
+        context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.WasIdempotentReplay ? "true" : "false";
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            result.WasIdempotentReplay ? "CONTAINER_ACTION_BATCH_REPLAYED" : "CONTAINER_ACTION_BATCH_CREATED",
+            "TRANSPORT_BATCH",
+            result.BatchId.ToString(),
+            new { itemCount = result.Items.Count },
+            cancellationToken);
+        return Results.Json(
+            ToBatchResponse(result),
+            statusCode: result.WasIdempotentReplay ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+    }
+
+    private static Task<OperatorQueuePageRecord> OperatorQueueAsync(
+        [FromQuery] bool? terminal,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        [FromQuery(Name = "terminal_max_age_hours")] int? terminalMaxAgeHours,
+        OperatorTransportQueueService service,
+        CancellationToken cancellationToken) =>
+        service.ListAsync(new(terminal ?? false, offset ?? 0, limit ?? 50, terminalMaxAgeHours ?? 8), cancellationToken);
 
     private static async Task<IResult> CreateTransportBatchAsync(
         CreateTransportBatchHttpRequest request,
@@ -578,6 +802,29 @@ public static class ApiEndpoints
         }
     }
 
+    private static void EnsureContainerActionAllowed(ClaimsPrincipal principal, OperatorContainerAction action)
+    {
+        var warehouseOnly = principal.IsInRole(RoleCodes.WarehouseOperator)
+            && !principal.IsInRole(RoleCodes.Admin)
+            && !principal.IsInRole(RoleCodes.Supervisor)
+            && !principal.IsInRole(RoleCodes.LineOperator);
+        if (warehouseOnly && action != OperatorContainerAction.Empty)
+        {
+            throw new ApiException(
+                StatusCodes.Status403Forbidden,
+                "OPERATION_NOT_ALLOWED_FOR_ROLE",
+                "WAREHOUSE_OPERATOR may request an empty container but may not report a full line-side container.");
+        }
+    }
+
+    private static string RequiredIdempotencyKey(HttpContext context)
+    {
+        var key = context.Request.Headers[ApiHeaders.IdempotencyKey].ToString().Trim();
+        return string.IsNullOrWhiteSpace(key)
+            ? throw new ApiException(StatusCodes.Status400BadRequest, "IDEMPOTENCY_KEY_REQUIRED", "Transport creation requires an Idempotency-Key header.")
+            : key;
+    }
+
     private static void EnsureCancellationAllowed(ClaimsPrincipal principal, TransportRequestSnapshot request)
     {
         var warehouseOnly = principal.IsInRole(RoleCodes.WarehouseOperator)
@@ -623,6 +870,119 @@ public static class ApiEndpoints
         context.Items.TryGetValue(ApiContextKeys.Device, out var value) && value is DeviceRecord device
             ? device
             : throw new ApiException(StatusCodes.Status401Unauthorized, "DEVICE_CONTEXT_REQUIRED", "A validated device context is required.");
+
+    public sealed record RobotVehiclesApiRequest(IReadOnlyList<string>? Vehicles);
+    public sealed record SetDispatchableApiRequest(IReadOnlyList<string>? Vehicles, string Type);
+    public sealed record SetPriorityApiRequest(int Priority);
+
+    private static async Task<IResult> ListRobotsAsync(
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var robots = await rdsClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+        return Results.Ok(new { robots });
+    }
+
+    private static async Task<IResult> PauseRobotAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.GotoSitePauseAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ResumeRobotAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.GotoSiteResumeAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ClearRobotErrorsAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.ClearRobotAllErrorAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> SetRobotDispatchableAsync(
+        SetDispatchableApiRequest request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.SetDispatchableAsync(vehicles, request.Type, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> SetRequestPriorityAsync(
+        Guid requestId,
+        SetPriorityApiRequest request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var result = await rdsClient.SetPriorityAsync(requestId.ToString("D"), request.Priority, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ManualFinishRequestAsync(
+        Guid requestId,
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.ManualFinishedAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> RedoRequestAsync(
+        Guid requestId,
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.RedoFailedOrderAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ListRdsOrdersAsync(
+        int? page,
+        int? size,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var query = new RdsCoreOrderQuery(Page: Math.Max(1, page ?? 1), Size: Math.Clamp(size ?? 20, 1, 100));
+        var result = await rdsClient.GetOrdersAsync(query, correlationId, cancellationToken);
+        return Results.Ok(result);
+    }
 
     private static Guid CorrelationId(HttpContext context) =>
         context.Items.TryGetValue(ApiContextKeys.CorrelationId, out var value) && value is Guid id ? id : Guid.NewGuid();

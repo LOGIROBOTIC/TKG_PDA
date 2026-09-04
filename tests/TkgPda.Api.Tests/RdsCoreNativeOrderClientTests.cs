@@ -314,12 +314,199 @@ public sealed class RdsCoreNativeOrderClientTests
     public void Operation_registry_is_closed_and_excludes_recovery_or_arbitrary_request_surfaces()
     {
         Assert.Equal(
-            ["/setOrder", "/orderDetails/{id}", "/orders", "/orderDetailsByExternalId/{externalId}", "/orderDetailsByBlockId/{blockId}", "/blockDetailsById/{blockId}", "/terminate"],
+            [
+                "/setOrder",
+                "/orderDetails/{id}",
+                "/orders",
+                "/orderDetailsByExternalId/{externalId}",
+                "/orderDetailsByBlockId/{blockId}",
+                "/blockDetailsById/{blockId}",
+                "/terminate",
+                "/setPriority",
+                "/clearRobotAllError",
+                "/gotoSitePause",
+                "/gotoSiteResume",
+                "/manualFinished",
+                "/redoFailedOrder",
+                "/dispatchable",
+                "/robotsStatus"
+            ],
             RdsCoreNativeOrderClient.AllowedOperations.Select(item => item.Endpoint).ToArray());
-        var forbidden = new[] { "/addBlocks", "/manualFinished", "/cancelBlock", "/setPriority", "/setLabel", "/unassignOrder", "/redoFailedOrder", "/problemVehicle", "/setChargeOrder" };
+        var forbidden = new[] { "/addBlocks", "/cancelBlock", "/setLabel", "/unassignOrder", "/problemVehicle", "/setChargeOrder" };
         Assert.DoesNotContain(RdsCoreNativeOrderClient.AllowedOperations, item => forbidden.Contains(item.Endpoint, StringComparer.Ordinal));
         var publicMethods = typeof(RdsCoreNativeOrderClient).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
         Assert.DoesNotContain(publicMethods.SelectMany(method => method.GetParameters()), parameter => parameter.ParameterType == typeof(HttpMethod));
+    }
+
+    [Fact]
+    public async Task Set_priority_serializes_id_and_priority_to_post_setPriority()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var result = await client.SetPriorityAsync("task-42", 5, Guid.NewGuid());
+
+        Assert.True(result.HttpAccepted);
+        Assert.True(result.CoreAccepted);
+        Assert.Equal(0, result.Code);
+        Assert.Equal("ok", result.Message);
+        var req = handler.Single();
+        Assert.Equal(HttpMethod.Post, req.Method);
+        Assert.Equal("/setPriority", req.Path);
+        var body = JsonDocument.Parse(req.Body).RootElement;
+        Assert.Equal("task-42", body.GetProperty("id").GetString());
+        Assert.Equal(5, body.GetProperty("priority").GetInt32());
+    }
+
+    [Fact]
+    public async Task Clear_robot_all_error_serializes_vehicles_to_post_clearRobotAllError()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var result = await client.ClearRobotAllErrorAsync(["Sfl-Cbd15"], Guid.NewGuid());
+
+        Assert.True(result.CoreAccepted);
+        var req = handler.Single();
+        Assert.Equal(HttpMethod.Post, req.Method);
+        Assert.Equal("/clearRobotAllError", req.Path);
+        var body = JsonDocument.Parse(req.Body).RootElement;
+        Assert.Equal("Sfl-Cbd15", body.GetProperty("vehicles")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Goto_site_pause_and_resume_serialize_vehicles_to_correct_endpoints()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var pauseResult = await client.GotoSitePauseAsync(["Sfl-Cbd15"], Guid.NewGuid());
+        Assert.True(pauseResult.CoreAccepted);
+        Assert.Equal("/gotoSitePause", handler.Requests[0].Path);
+
+        var resumeResult = await client.GotoSiteResumeAsync(["Sfl-Cbd15"], Guid.NewGuid());
+        Assert.True(resumeResult.CoreAccepted);
+        Assert.Equal("/gotoSiteResume", handler.Requests[1].Path);
+    }
+
+    [Fact]
+    public async Task Manual_finished_and_redo_failed_order_serialize_vehicles_to_correct_endpoints()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var finishResult = await client.ManualFinishedAsync(["Sfl-Cbd15"], Guid.NewGuid());
+        Assert.True(finishResult.CoreAccepted);
+        Assert.Equal("/manualFinished", handler.Requests[0].Path);
+
+        var redoResult = await client.RedoFailedOrderAsync(["Sfl-Cbd15"], Guid.NewGuid());
+        Assert.True(redoResult.CoreAccepted);
+        Assert.Equal("/redoFailedOrder", handler.Requests[1].Path);
+    }
+
+    [Fact]
+    public async Task Set_dispatchable_validates_type_and_serializes_to_post_dispatchable()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var result = await client.SetDispatchableAsync(["Sfl-Cbd15"], "undispatchable_unignore", Guid.NewGuid());
+        Assert.True(result.CoreAccepted);
+        var req = handler.Single();
+        Assert.Equal("/dispatchable", req.Path);
+        var body = JsonDocument.Parse(req.Body).RootElement;
+        Assert.Equal("undispatchable_unignore", body.GetProperty("type").GetString());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.SetDispatchableAsync(["Sfl-Cbd15"], "invalid_type", Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Get_robots_status_parses_live_report_telemetry_for_Sfl_Cbd15()
+    {
+        var json = """
+        {
+          "code": 0,
+          "msg": "ok",
+          "report": [
+            {
+              "vehicle_id": "Sfl-Cbd15",
+              "connection_status": 1,
+              "dispatchable": true,
+              "isLoaded": false,
+              "is_error": false,
+              "remaining_time": 42.5,
+              "basic_info": {
+                "model": "HELIFORK",
+                "current_map": "26.7.2026_map_optimak"
+              },
+              "rbk_report": {
+                "current_station": "PP80",
+                "last_station": "LM12",
+                "battery_level": 0.98,
+                "x": 2.304,
+                "y": 4.691,
+                "angle": 1.5708
+              },
+              "current_order": {
+                "id": "order-123",
+                "state": "RUNNING"
+              },
+              "alarms": {
+                "fatals": [],
+                "errors": ["E102"],
+                "warnings": [],
+                "notices": []
+              }
+            }
+          ]
+        }
+        """;
+        var handler = new RecordingHandler(_ => Json(json));
+        var client = Client(handler);
+
+        var robots = await client.GetRobotsStatusAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(robots);
+        Assert.Equal("Sfl-Cbd15", robot.VehicleId);
+        Assert.Equal("HELIFORK", robot.Model);
+        Assert.Equal("26.7.2026_map_optimak", robot.CurrentMap);
+        Assert.Equal("PP80", robot.CurrentStation);
+        Assert.Equal("LM12", robot.LastStation);
+        Assert.Equal(1, robot.ConnectionStatus);
+        Assert.True(robot.Dispatchable);
+        Assert.False(robot.IsLoaded);
+        Assert.Equal(0.98, robot.BatteryLevel);
+        Assert.Equal(2.304, robot.X);
+        Assert.Equal(4.691, robot.Y);
+        Assert.Equal(1.5708, robot.Angle);
+        Assert.Equal(42.5, robot.RemainingTime);
+        Assert.Equal("order-123", robot.CurrentOrderId);
+        Assert.Equal("RUNNING", robot.CurrentOrderState);
+        Assert.Contains("E102", robot.Alarms);
+    }
+
+    [Fact]
+    public async Task Live_rdscore_telemetry_can_be_queried_if_server_is_running()
+    {
+        using var testClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        try
+        {
+            using var ping = await testClient.GetAsync("http://127.0.0.1:8088/robotsStatus");
+            if (!ping.IsSuccessStatusCode) return;
+        }
+        catch
+        {
+            return; // RDSCore not running in current environment
+        }
+
+        var options = new RdsCoreExecutionOptions(true, RdsExecutionMode.RdsCoreNativeOrder, "http://127.0.0.1:8088/", 5, true);
+        var client = new RdsCoreNativeOrderClient(new LiveFactory(options.BaseAddress), options);
+
+        var robots = await client.GetRobotsStatusAsync(Guid.NewGuid());
+        Assert.NotEmpty(robots);
+        var robot = Assert.Single(robots, r => r.VehicleId == "Sfl-Cbd15");
+        Assert.Equal("Sfl-Cbd15", robot.VehicleId);
+        Assert.True(robot.BatteryLevel > 0);
     }
 
     private static RdsCoreNormalOrder NavigationOrder() => RdsCoreNormalOrder.Create(
@@ -344,6 +531,11 @@ public sealed class RdsCoreNativeOrderClientTests
     private sealed class Factory(HttpMessageHandler handler, Uri? baseAddress) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(handler, false) { BaseAddress = baseAddress };
+    }
+
+    private sealed class LiveFactory(Uri? baseAddress) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new() { BaseAddress = baseAddress };
     }
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> route) : HttpMessageHandler

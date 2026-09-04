@@ -93,7 +93,7 @@ On iki part kodunun birden fazla geçerli product-group bağlamında kullanılma
 - Aday sıralaması deterministiktir; PostgreSQL row/advisory locking ve `FOR UPDATE SKIP LOCKED` yarışan taleplerin aynı slotu almasını engeller.
 - Client normal transport payload'unda source/destination slot göndermez. Backend çözer, reserve eder ve sonucu response projection'ında döndürür.
 
-Mevcut customer seed'de `EMPTY_STORAGE` rolünde slot yoktur; 172 lojistik slotun tamamı `OTHER` rolündedir. Dolayısıyla production `BRING_EMPTY`/`REMOVE_EMPTY`, müşteri buffer kararı ve saha commissioning olmadan yürütülemez. `REMOVE_FULL` için de kanıtlanmış full-container destination yoktur.
+Customer business/fiziksel `EMPTY_STORAGE` ve `REMOVE_FULL` hedef alanları WP-33 kararıyla bilinmektedir. Generated customer seed'de production RDS endpoint kimliği bulunmaması beklenir; açık kalan kapı gerçek robot/site haritasındaki exact TKG slot ↔ RDS WorkSite/bin/point commissioning eşlemesidir. Production `BRING_EMPTY`, `REMOVE_EMPTY` ve `REMOVE_FULL` bu eşleme doğrulanmadan dispatch edilmez.
 
 ## 4. Operator UI kabul matrisi
 
@@ -112,9 +112,9 @@ Durum yorumları:
 | ALT / RELATED | Kaynakta `Alt Parça` | Yalnız seçilen parent bağlamı; effective part değişir; unrelated sızmaz | PASS | RELATED UI desteklenir fakat baseline'da RELATED kanıtı yok |
 | Variant seçimi | 25 valid variant | 1 compatible ise internal auto-resolve, birden fazlaysa explicit seçim, 0 ise sade hata | PARTIAL | SEALER V3 fiziksel layout bekliyor |
 | Multi-part / batch | `Tüm Kasaları Kaldır` toplu niyeti | Duplicate engeli, düzenle/sil, item durumu; her item ayrı request/idempotency/RDS kimliği | PASS | Müşteri acceptance senaryosu koşulacak |
-| Boş Kasa Getir | Operasyon kanıtı | Doğru domain/UI ve backend allocator hazır | BLOCKED_BY_CUSTOMER_DATA | EMPTY_STORAGE pozisyonları/allowed containers yok |
-| Dolu Kasayı Kaldır | `Kasa Doldu`/kaldırma niyeti | OCCUPIED+FULL machine source kuralı hazır | BLOCKED_BY_CUSTOMER_DATA | Full destination stratejisi yok |
-| Boş Kasayı Kaldır | `Kasa Boş`/kaldırma niyeti | OCCUPIED+EMPTY source ve EMPTY_STORAGE destination kuralı hazır | BLOCKED_BY_CUSTOMER_DATA | EMPTY_STORAGE pozisyonları yok |
+| N. Kasa Boş | Boş konuma empty container talebi | `VACANT+UNKNOWN -> BRING_EMPTY`; tek basışta backend çözer | BLOCKED_BY_COMMISSIONING | Bilinen alanın exact RDS WorkSite/bin/point eşlemesi bekleniyor |
+| N. Kasa Doldu | Operatörün FULL iş beyanı | `OCCUPIED+EMPTY -> FULL+REMOVE_FULL` tek transaction | BLOCKED_BY_COMMISSIONING | Bilinen hedef alanın exact RDS WorkSite/bin/point eşlemesi bekleniyor |
+| REMOVE_EMPTY | Remove-All iç backend operasyonu | Normal Operator standalone aksiyonu değildir | BLOCKED_BY_COMMISSIONING | Production RDS endpoint/task contract bekleniyor |
 | Otomatik fiziksel slot | Backend-authoritative kural | Client slot göndermez; backend transaction içinde çözer ve reserve eder | PARTIAL | 48/172 lojistik slotta explicit Part↔Slot mapping yok |
 | Layout yönetimi | 21 proven layout | Admin konfigürasyonunda korunur; normal Operator akışında fiziksel layout gösterilmez | PASS | SEALER V3 ayrı müşteri gap'i |
 | Warehouse readiness | Ayrı hazırlık gerçeği | `WAITING_PREPARATION / READY / NOT_REQUIRED`, execution'dan ayrı; Warehouse/Supervisor yetkili | PASS | Hangi işlerin hazırlık istediği tahmin edilmedi; müşteri kuralı gerekir |
@@ -131,13 +131,13 @@ Sicil + kayıtlı cihaz
   -> ana parça
   -> opsiyonel ALT/RELATED
   -> compatible variant
-  -> Boş Kasa Getir / Dolu Kasayı Kaldır / Boş Kasayı Kaldır
+  -> N. Kasa Doldu / N. Kasa Boş / Tüm Kasaları Kaldır
   -> backend slot çözümü ve reservation
   -> request
   -> aynı ekranda başarı/aktif taşıma durumu
 ```
 
-Normal Operator akışında ayrı operation/layout sayfası yoktur. Part ve compatible variant çözüldüğünde üç business action aynı seçim ekranında görünür. Flutter fiziksel slot, `EMPTY_STORAGE`, WorkSite veya RDS hedefi seçmez ve göndermez; bunları backend transaction içinde çözer. Fiziksel layout verisi Admin konfigürasyonu ve backend kanıtı olarak korunur, Operator routing yüzeyi değildir.
+Normal Operator akışında ayrı operation/layout sayfası yoktur. Part ve compatible variant çözüldüğünde backend-derived mantıksal kasa eylemleri aynı seçim ekranında görünür; standalone `REMOVE_EMPTY` gösterilmez. Flutter fiziksel slot, `EMPTY_STORAGE`, WorkSite veya RDS hedefi seçmez ve göndermez; bunları backend transaction içinde çözer. Fiziksel layout verisi Admin konfigürasyonu ve backend kanıtı olarak korunur, Operator routing yüzeyi değildir.
 
 ## 6. Production readiness sınırı
 

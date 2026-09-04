@@ -16,6 +16,12 @@ class MachineListScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Makine Seçimi'),
         actions: [
+          IconButton(
+            key: const Key('open-operator-queue'),
+            tooltip: 'Görevler',
+            onPressed: controller.busy ? null : controller.enterTasks,
+            icon: const Icon(Icons.format_list_numbered),
+          ),
           if (controller.canAccessWarehousePreparation)
             IconButton(
               key: const Key('open-warehouse-preparation'),

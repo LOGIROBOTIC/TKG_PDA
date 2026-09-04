@@ -27,6 +27,44 @@ abstract interface class PdaDataSource {
     String batchIdempotencyKey,
     List<TransportBatchItemCommand> items,
   );
+  Future<List<ContainerPosition>> containerPositions({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String productGroupId,
+    required String partId,
+  });
+  Future<ContainerActionResult> createContainerAction({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required String productGroupId,
+    required String partId,
+    required int positionNumber,
+    required String action,
+    required String idempotencyKey,
+  });
+  Future<TransportBatchResult> createContainerActionBatch({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required List<ContainerActionBatchItemCommand> items,
+    required String idempotencyKey,
+  });
+  Future<RemoveAllResult> removeAllContainers({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required String idempotencyKey,
+  });
+  Future<OperatorQueuePage> operatorQueue({
+    bool terminal = false,
+    int offset = 0,
+    int limit = 50,
+  });
   Future<TransportResult> transport(String requestId);
   Future<TransportResult> cancel(String requestId);
 
@@ -36,6 +74,13 @@ abstract interface class PdaDataSource {
 
   /// Customer Monitoring — Robot Alarm Visibility.
   Future<RobotAlarmSummary> robotAlarmSummary();
+
+  /// Real RDSCore Telemetry & Control (Phase 4).
+  Future<List<RobotTelemetry>> robots();
+  Future<void> pauseRobot([List<String>? vehicles]);
+  Future<void> resumeRobot([List<String>? vehicles]);
+  Future<void> clearRobotErrors([List<String>? vehicles]);
+  Future<void> setRequestPriority(String requestId, int priority);
 }
 
 class PdaRepository implements PdaDataSource {
@@ -140,6 +185,117 @@ class PdaRepository implements PdaDataSource {
   }
 
   @override
+  Future<List<ContainerPosition>> containerPositions({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String productGroupId,
+    required String partId,
+  }) async {
+    final response = await _api.get(
+      '/api/v1/machines/$machineId/container-positions',
+      queryParameters: {
+        'variantId': variantId,
+        'layoutId': layoutId,
+        'productGroupId': productGroupId,
+        'partId': partId,
+      },
+    );
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(ContainerPosition.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<ContainerActionResult> createContainerAction({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required String productGroupId,
+    required String partId,
+    required int positionNumber,
+    required String action,
+    required String idempotencyKey,
+  }) async {
+    final response = await _api.post(
+      '/api/v1/machines/$machineId/container-actions',
+      idempotencyKey: idempotencyKey,
+      body: {
+        'variantId': variantId,
+        'layoutId': layoutId,
+        'navigationProfileId': navigationProfileId,
+        'productGroupId': productGroupId,
+        'partId': partId,
+        'positionNumber': positionNumber,
+        'action': action,
+      },
+    );
+    return ContainerActionResult.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<TransportBatchResult> createContainerActionBatch({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required List<ContainerActionBatchItemCommand> items,
+    required String idempotencyKey,
+  }) async {
+    final response = await _api.post(
+      '/api/v1/machines/$machineId/container-actions/batch',
+      idempotencyKey: idempotencyKey,
+      body: {
+        'variantId': variantId,
+        'layoutId': layoutId,
+        'navigationProfileId': navigationProfileId,
+        'items': items.map((item) => item.toJson()).toList(growable: false),
+      },
+    );
+    return TransportBatchResult.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<RemoveAllResult> removeAllContainers({
+    required String machineId,
+    required String variantId,
+    required String layoutId,
+    required String? navigationProfileId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _api.post(
+      '/api/v1/machines/$machineId/container-actions/remove-all',
+      idempotencyKey: idempotencyKey,
+      body: {
+        'variantId': variantId,
+        'layoutId': layoutId,
+        'navigationProfileId': navigationProfileId,
+      },
+    );
+    return RemoveAllResult.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<OperatorQueuePage> operatorQueue({
+    bool terminal = false,
+    int offset = 0,
+    int limit = 50,
+  }) async {
+    final response = await _api.get(
+      '/api/v1/transport-requests/queue',
+      queryParameters: {
+        'terminal': '$terminal',
+        'offset': '$offset',
+        'limit': '$limit',
+      },
+    );
+    return OperatorQueuePage.fromJson(_json(response.body));
+  }
+
+  @override
   Future<TransportBatchResult> createTransportBatch(
     String machineId,
     String batchIdempotencyKey,
@@ -190,6 +346,37 @@ class PdaRepository implements PdaDataSource {
   Future<RobotAlarmSummary> robotAlarmSummary() async {
     final response = await _api.get('/api/v1/rds/robot-alarm-summary');
     return RobotAlarmSummary.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<List<RobotTelemetry>> robots() async {
+    final response = await _api.get('/api/v1/rds/robots');
+    final map = _json(response.body);
+    final values = map['robots'] is List ? map['robots'] as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(RobotTelemetry.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> pauseRobot([List<String>? vehicles]) async {
+    await _api.post('/api/v1/rds/robots/pause', body: {'vehicles': vehicles});
+  }
+
+  @override
+  Future<void> resumeRobot([List<String>? vehicles]) async {
+    await _api.post('/api/v1/rds/robots/resume', body: {'vehicles': vehicles});
+  }
+
+  @override
+  Future<void> clearRobotErrors([List<String>? vehicles]) async {
+    await _api.post('/api/v1/rds/robots/clear-errors', body: {'vehicles': vehicles});
+  }
+
+  @override
+  Future<void> setRequestPriority(String requestId, int priority) async {
+    await _api.post('/api/v1/transport-requests/$requestId/priority', body: {'priority': priority});
   }
 
   static JsonMap _json(Object? body) =>

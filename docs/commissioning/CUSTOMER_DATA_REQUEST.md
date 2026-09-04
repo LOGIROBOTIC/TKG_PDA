@@ -1,34 +1,16 @@
 # TKG PDA — Müşteri Bilgi Talep Listesi
 
-Bu liste, mevcut müşteri kaynaklarının tamamı uzlaştırıldıktan sonra gerçekten eksik veya çelişkili kalan business/physical-area kararlarını içerir. Yazılım/demo kabulüne hazırdır; production fiziksel commissioning ve canlı robot SAT henüz hazır değildir.
+Bu liste, mevcut müşteri kaynaklarının tamamı uzlaştırıldıktan sonra gerçekten eksik veya çelişkili kalan kararları içerir. Yazılım/demo kabulüne hazırdır; production fiziksel commissioning ve canlı robot SAT henüz hazır değildir.
 
 `1284`, `285C`, `BYK`, `ORT`, `KCK` ve `ARABA` için mevcut pakette kanıtlanan kategori/ölçü tekrar istenmez. Robot pozu, fork yüksekliği, WorkSite, robot kimliği ve benzeri teknik commissioning değerleri müşteriden değil Logirobotic/RDS-IT ekiplerinden alınır.
 
+## Kapanan konu — taşıma alanlarının iş anlamı
+
+`EMPTY_STORAGE` ve `REMOVE_FULL` hedefinin müşteri iş/fiziksel alanı artık müşteri karar boşluğu değildir. Açık kalan iş, Logirobotic/RDS-IT commissioning ekibinin bu bilinen alanları gerçek robot/site haritasındaki exact RDS WorkSite/bin/point kimlikleriyle eşlemesidir. Bu belge RDS isim veya koordinatı üretmez.
+
 ## Öncelik 1 — Temel taşımayı devreye almak için zorunlu
 
-### 1. Boş kasa/palet bekleme alanları
-
-Her ilgili üretim alanı için müşteri şunları teyit etmelidir:
-
-- boş kasa/paletlerin robot tarafından alınacağı business/fiziksel alan;
-- bu alandaki pozisyon sayısı ve capacity;
-- her pozisyonda izin verilen kasa/palet tipleri;
-- alanın ortak mı, belirli bir makineye mi ait olduğu.
-
-Mevcut Excel'deki `KASA BOŞ`/boş hareket metinleri bir fiziksel `EMPTY_STORAGE` pozisyonu tanımlamaz.
-
-### 2. Dolu kasa/palet bırakma alanı
-
-`REMOVE_FULL` için:
-
-- dolu kasa/palet hangi business/fiziksel alana bırakılacak;
-- tek ortak hedef mi kullanılacak;
-- hedef makine, parça veya kasa/palet tipine göre değişecek mi;
-- ara bekleme veya depo onayı gerekecek mi
-
-teyit edilmelidir. Mevcut kaynakta dolu/boş hareket niyeti vardır, fakat nihai destination mapping yoktur.
-
-### 3. Parçası teyit edilmesi gereken 48 lojistik pozisyon
+### 1. Parçası teyit edilmesi gereken 48 lojistik pozisyon
 
 | Makine/alan | Pozisyon | Adet | Neden kaynaklardan çözülemedi |
 |---|---|---:|---|
@@ -43,7 +25,7 @@ teyit edilmelidir. Mevcut kaynakta dolu/boş hareket niyeti vardır, fakat nihai
 
 Müşteri her pozisyon için kullanılacak part kodunu/kodlarını veya pozisyonun operational olarak kullanılmadığını teyit etmelidir. Birleşik SH dosyasındaki BN400 bölgesi için ayrıca doğru makine/alan açıkça belirtilmelidir.
 
-### 4. SEALER V3 fiziksel yerleşimi
+### 2. SEALER V3 fiziksel yerleşimi
 
 SEALER V3 geçerli textual master data'dır ancak fiziksel layout kanıtı yoktur. Müşteri şunlardan birini teyit etmelidir:
 
@@ -104,7 +86,6 @@ Müşteri kaynağında 140 contextual `ALT_PART` ilişkisi vardır; ayrı `RELAT
 
 ### Müşteri teyit eder
 
-- empty/full business alanlarını ve capacity'yi;
 - 48 pozisyonun part/machine/variant bağlamını veya kullanılmayacağını;
 - SEALER V3 layout kararını;
 - 74 pozisyonun allowed container ilişkisini ve kalan type/lot master boşluklarını;
@@ -115,7 +96,7 @@ Müşteri kaynağında 140 contextual `ALT_PART` ilişkisi vardır; ayrı `RELAT
 - exact pickup/drop pose, approach ve docking orientation;
 - fork giriş yönü/yüksekliği, clearance ve güvenlik mesafesi;
 - saha etiketi/UI slot doğrulaması ve ilk runtime state;
-- TKG slot ↔ RDS WorkSite eşlemesi.
+- bilinen `EMPTY_STORAGE` ve `REMOVE_FULL` alanlarının exact TKG slot ↔ RDS WorkSite/bin/point eşlemesi.
 
 ### RDS / IT ekibi teknik kanaldan sağlar
 
@@ -128,8 +109,7 @@ Müşteri kaynağında 140 contextual `ALT_PART` ilişkisi vardır; ayrı `RELAT
 
 | Konu | Makine/Alan | Talep edilen bilgi | Müşteri cevabı | Durum / Not |
 |---|---|---|---|---|
-| Empty container alanı |  | Alan, capacity, allowed container |  |  |
-| Full container hedefi |  | Ortak veya context bazlı destination |  |  |
+| Empty/full RDS eşlemesi |  | Bilinen fiziksel alanların WorkSite/bin/point karşılığı |  | Logirobotic/RDS-IT commissioning |
 | Part↔Slot teyidi |  | Part code/code'ları veya kapsam dışı |  |  |
 | SEALER V3 | SEALER | Shared V1/V2 veya ayrı layout |  |  |
 | Container association/type |  | 74 slot ve kalan nominal master boşlukları |  |  |

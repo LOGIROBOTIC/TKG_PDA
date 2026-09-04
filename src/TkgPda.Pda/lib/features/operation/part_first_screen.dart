@@ -73,7 +73,43 @@ class _PartFirstSelectorState extends State<PartFirstSelector> {
           ),
           const SizedBox(height: 6),
           const Text('İşlem yapılacak ana parçayı seçin.'),
-          const SizedBox(height: 20),
+          if (controller.batchMode) ...[
+            const SizedBox(height: 12),
+            Container(
+              key: const Key('batch-mode-banner'),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.playlist_add_check,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Toplu Taşıma Modu Açık: Parça ve kasa butonuna bastığınızda talep sepete eklenir.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('batch-exit'),
+                    onPressed: controller.exitBatchSelection,
+                    child: const Text('Kapat'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
           const _SectionLabel('Ana Parçalar'),
           const SizedBox(height: 10),
           if (showSearch) ...[

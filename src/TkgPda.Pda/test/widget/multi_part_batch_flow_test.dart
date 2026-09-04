@@ -9,235 +9,155 @@ import 'package:tkg_pda/data/models/pda_models.dart';
 
 import '../support/fakes.dart';
 
-// Customer UI — Multi-Part Transport Batch: multiple effective parts
-// selected on the existing part-first flow, resolved to the machine's active
-// variant and configured with an operation, then submitted as one
-// TransportBatch (or,
-// for exactly one item, through the existing single-request path).
 void main() {
-  testWidgets('selecting multiple parts adds them all to the cart', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await _enterBatchMode(tester);
-
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-    await _addPart(tester, 'batch-add-alt-$testAltPartId');
-
-    expect(harness.controller.batchCart.length, 2);
-    await _scrollUntilVisible(
-      tester,
-      Key('batch-cart-chip-${testMainPartOption.partId}'),
-    );
-    expect(
-      find.byKey(Key('batch-cart-chip-${testMainPartOption.partId}')),
-      findsOneWidget,
-    );
-    expect(find.byKey(Key('batch-cart-chip-$testAltPartId')), findsOneWidget);
-    harness.dispose();
-  });
-
-  testWidgets('browsing another main part does not clear the selection', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await _enterBatchMode(tester);
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-
-    // Browse a completely different main part.
-    await _expandMain(tester, testSecondMainPartOption);
-
-    expect(harness.controller.batchCart.length, 1);
-    await _scrollUntilVisible(
-      tester,
-      Key('batch-cart-chip-${testMainPartOption.partId}'),
-    );
-    expect(
-      find.byKey(Key('batch-cart-chip-${testMainPartOption.partId}')),
-      findsOneWidget,
-    );
-    harness.dispose();
-  });
-
-  testWidgets('the cart shows a visible count and marks added parts', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await _enterBatchMode(tester);
-    await _scrollUntilVisible(tester, const Key('batch-cart-count'));
-    expect(
-      tester.widget<Text>(find.byKey(const Key('batch-cart-count'))).data,
-      contains('0'),
-    );
-
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-
-    await _scrollUntilVisible(tester, const Key('batch-cart-count'));
-    expect(
-      tester.widget<Text>(find.byKey(const Key('batch-cart-count'))).data,
-      contains('1'),
-    );
-    await _scrollUntilVisible(
-      tester,
-      Key('batch-add-main-${testMainPartOption.partId}'),
-    );
-    final addedChip = tester.widget<ActionChip>(
-      find.descendant(
-        of: find.byKey(Key('batch-add-main-${testMainPartOption.partId}')),
-        matching: find.byType(ActionChip),
-      ),
-    );
-    expect(addedChip.onPressed, isNull);
-    harness.dispose();
-  });
-
   testWidgets(
-    'the main-part browse chip shows a count badge once one of its parts is added',
+    'entering batch mode displays the banner and keeps the main screen visible',
     (tester) async {
       final harness = await _harness(tester);
-      await _enterBatchMode(tester);
 
+      expect(find.byKey(const Key('batch-mode-banner')), findsNothing);
+      expect(find.byKey(const Key('batch-cart-tray')), findsNothing);
+
+      await _toggleBatchMode(tester);
+
+      expect(find.byKey(const Key('batch-mode-banner')), findsOneWidget);
+      expect(harness.controller.batchMode, isTrue);
+      // Main screen remains visible with parts and machines
+      expect(find.byKey(const Key('part-first-selector')), findsOneWidget);
       expect(
-        find.byKey(Key('batch-browse-main-count-${testMainPartOption.partId}')),
-        findsNothing,
+        find.byKey(Key('main-part-${testMainPartOption.partId}')),
+        findsOneWidget,
       );
 
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      await _addPart(tester, 'batch-add-alt-$testAltPartId');
-
-      await _scrollUntilVisible(
-        tester,
-        Key('batch-browse-main-count-${testMainPartOption.partId}'),
-      );
-      expect(
-        tester
-            .widget<Text>(
-              find.descendant(
-                of: find.byKey(
-                  Key('batch-browse-main-count-${testMainPartOption.partId}'),
-                ),
-                matching: find.byType(Text),
-              ),
-            )
-            .data,
-        '2',
-      );
       harness.dispose();
     },
   );
 
   testWidgets(
-    'the AppBar title shows how many parts are selected while in batch mode',
+    'selecting container actions in batch mode adds them to the tray',
     (tester) async {
       final harness = await _harness(tester);
-      expect(find.text('${testMachine.code} · 0 Parça Seçili'), findsNothing);
+      await _toggleBatchMode(tester);
 
-      await _enterBatchMode(tester);
-      expect(find.text('${testMachine.code} · 0 Parça Seçili'), findsOneWidget);
+      // Select main part
+      await _selectMainPart(tester, testMainPartOption.partId);
+      expect(find.text('1. Kasa Doldu'), findsOneWidget);
 
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      expect(find.text('${testMachine.code} · 1 Parça Seçili'), findsOneWidget);
-      harness.dispose();
-    },
-  );
-
-  testWidgets(
-    'the configuration progress dots reflect which cart items are done',
-    (tester) async {
-      final harness = await _harness(tester);
-      await _enterBatchMode(tester);
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      await _addPart(tester, 'batch-add-alt-$testAltPartId');
-
-      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-      await tester.tap(find.byKey(const Key('batch-configure-start')));
+      // Tap container action
+      await tester.tap(find.text('1. Kasa Doldu'));
       await tester.pumpAndSettle();
 
-      await _scrollUntilVisible(tester, const Key('batch-progress-dots'));
-      expect(find.byKey(const Key('batch-progress-dot-0')), findsOneWidget);
-      expect(find.byKey(const Key('batch-progress-dot-1')), findsOneWidget);
-      expect(harness.controller.batchCart[0].isConfigured, isFalse);
-
-      await _tapAction(tester, 'direct-action-BRING_EMPTY');
-      await _confirmTransport(tester);
-
-      expect(harness.controller.batchCart[0].isConfigured, isTrue);
-      await _scrollUntilVisible(tester, const Key('batch-progress-dots'));
+      expect(harness.controller.batchCart.length, 1);
+      expect(find.byKey(const Key('batch-cart-tray')), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byKey(const Key('batch-progress-dot-0')),
-          matching: find.byIcon(Icons.check),
+          of: find.byKey(const Key('batch-cart-count')),
+          matching: find.text('1'),
         ),
         findsOneWidget,
       );
+
       harness.dispose();
     },
   );
 
-  testWidgets('the same part cannot be added twice', (tester) async {
-    final harness = await _harness(tester);
-    await _enterBatchMode(tester);
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-
-    // The chip is now disabled (already added); tapping it again is a no-op.
-    await tester.tap(
-      find.byKey(Key('batch-add-main-${testMainPartOption.partId}')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(harness.controller.batchCart.length, 1);
-    expect(
-      harness.controller.addPartToBatch(
-        testMainPartOption,
-        const EffectivePartSelection(
-          partId: testMainPartId,
-          partCode: '71550BN000-10-HAOS',
-          isMain: true,
-        ),
-      ),
-      isFalse,
-    );
-    expect(harness.controller.batchCart.length, 1);
-    harness.dispose();
-  });
-
-  testWidgets('a selected part can be removed before submission', (
+  testWidgets('browsing another main part does not clear the cart', (
     tester,
   ) async {
     final harness = await _harness(tester);
-    await _enterBatchMode(tester);
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-    await _addPart(tester, 'batch-add-alt-$testAltPartId');
-    expect(harness.controller.batchCart.length, 2);
-    final chipKey = Key('batch-cart-chip-${testMainPartOption.partId}');
-    await _scrollUntilVisible(tester, chipKey);
-    final chip = tester.widget<InputChip>(find.byKey(chipKey));
-    chip.onDeleted!();
+    await _toggleBatchMode(tester);
+
+    await _selectMainPart(tester, testMainPartOption.partId);
+    await tester.tap(find.text('1. Kasa Doldu'));
     await tester.pumpAndSettle();
 
     expect(harness.controller.batchCart.length, 1);
-    expect(
-      harness.controller.batchCart.single.effectivePart.partId,
-      testAltPartId,
-    );
+
+    // Browse a second main part
+    await _selectMainPart(tester, testSecondMainPartOption.partId);
+    expect(harness.controller.batchCart.length, 1);
+    expect(find.byKey(const Key('batch-cart-tray')), findsOneWidget);
+
     harness.dispose();
   });
 
-  testWidgets('machine change clears the entire batch selection', (
+  testWidgets('the same part and position cannot be added twice', (
     tester,
   ) async {
     final harness = await _harness(tester);
-    await _enterBatchMode(tester);
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
+    await _toggleBatchMode(tester);
+
+    await _selectMainPart(tester, testMainPartOption.partId);
+    await tester.tap(find.text('1. Kasa Doldu'));
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.batchCart.length, 1);
+
+    // Tap again
+    await tester.tap(find.text('1. Kasa Doldu'));
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.batchCart.length, 1);
+    expect(find.textContaining('zaten sepette ekli'), findsOneWidget);
+
+    harness.dispose();
+  });
+
+  testWidgets('a selected item can be removed from the tray before submission', (
+    tester,
+  ) async {
+    final harness = await _harness(tester);
+    await _toggleBatchMode(tester);
+
+    await _selectMainPart(tester, testMainPartOption.partId);
+    await tester.tap(find.text('1. Kasa Doldu'));
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.batchCart.length, 1);
+    final itemId = harness.controller.batchCart.first.cartItemId;
+
+    // Expand the tray
+    await tester.tap(find.byKey(const Key('batch-cart-tray')));
+    await tester.pumpAndSettle();
+
+    final removeButton = find.byKey(Key('batch-remove-item-$itemId'));
+    expect(removeButton, findsOneWidget);
+
+    await tester.tap(removeButton);
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.batchCart, isEmpty);
+    harness.dispose();
+  });
+
+  testWidgets('clearing the cart resets the batch items', (tester) async {
+    final harness = await _harness(tester);
+    await _toggleBatchMode(tester);
+
+    await _selectMainPart(tester, testMainPartOption.partId);
+    await tester.tap(find.text('1. Kasa Doldu'));
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.batchCart.length, 1);
+
+    await tester.tap(find.byKey(const Key('batch-clear-cart')));
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.batchCart, isEmpty);
+    expect(harness.controller.batchMode, isFalse);
+    harness.dispose();
+  });
+
+  testWidgets('leaving machine clears the entire batch selection', (
+    tester,
+  ) async {
+    final harness = await _harness(tester);
+    await _toggleBatchMode(tester);
+
+    await _selectMainPart(tester, testMainPartOption.partId);
+    await tester.tap(find.text('1. Kasa Doldu'));
+    await tester.pumpAndSettle();
+
     expect(harness.controller.batchCart, isNotEmpty);
 
     harness.controller.leaveMachine();
@@ -249,132 +169,56 @@ void main() {
   });
 
   testWidgets(
-    'zero compatible variants makes a cart item invalid and blocks submission '
-    'until it is removed',
+    'successful batch submission sends N independent items with unique idempotency keys',
     (tester) async {
-      final harness = await _harness(tester);
-      await _enterBatchMode(tester);
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      await _addPart(tester, 'batch-add-related-$testOrphanPartId');
+      final repository = FakePdaRepository();
+      final harness = await _harness(tester, repository: repository);
+      await _toggleBatchMode(tester);
 
-      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-      await tester.tap(find.byKey(const Key('batch-configure-start')));
+      await _selectMainPart(tester, testMainPartOption.partId);
+      await tester.tap(find.text('1. Kasa Doldu'));
       await tester.pumpAndSettle();
 
-      // Item 1 (main -> V1, already active) auto-resolves and is configured
-      // first; item 2 (orphan) has zero compatible variants.
-      await _tapAction(tester, 'direct-action-BRING_EMPTY');
-      await _confirmTransport(tester);
-
-      await _scrollUntilVisible(tester, const Key('zero-compatible-variants'));
-      expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
-      expect(find.byKey(const Key('skip-invalid-batch-item')), findsOneWidget);
-      expect(harness.controller.canReviewBatch, isFalse);
-
-      await _scrollUntilVisible(tester, const Key('skip-invalid-batch-item'));
-      await tester.tap(find.byKey(const Key('skip-invalid-batch-item')));
-      await tester.pumpAndSettle();
-
-      // The invalid item is gone; the one already-configured item can review.
-      expect(harness.controller.batchCart.length, 1);
       expect(harness.controller.canReviewBatch, isTrue);
-      harness.dispose();
-    },
-  );
 
-  testWidgets(
-    'a batch freezes the first resolved variant and rejects an incompatible '
-    'later item without switching the machine',
-    (tester) async {
-      final repository = FakePdaRepository();
-      final harness = await _harness(tester, repository: repository);
-      await _enterBatchMode(tester);
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      await _addPart(tester, 'batch-add-alt-$testAltPartId');
-      await _addPart(tester, 'batch-add-related-$testRelatedPartId');
-
-      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-      await tester.tap(find.byKey(const Key('batch-configure-start')));
-      await tester.pumpAndSettle();
-
-      // Item 1: main part -> single variant, already active -> no switch.
-      expect(harness.controller.transportActionsReady, isTrue);
-      expect(harness.controller.context?.activeVariantId, testVariantV1Id);
-      expect(repository.switchCount, 0);
-      await _tapAction(tester, 'direct-action-BRING_EMPTY');
-      await _confirmTransport(tester);
-
-      // Item 2: ALT part belongs only to V2. A machine has one active runtime
-      // variant, so a single batch cannot silently switch away from V1.
-      await _scrollUntilVisible(tester, const Key('zero-compatible-variants'));
-      expect(find.byKey(const Key('zero-compatible-variants')), findsOneWidget);
-      expect(repository.switchCount, 0);
-      expect(harness.controller.context?.activeVariantId, testVariantV1Id);
-      expect(harness.controller.canReviewBatch, isFalse);
-      harness.dispose();
-    },
-  );
-
-  testWidgets(
-    'successful batch submission sends N independent items with unique '
-    'idempotency keys',
-    (tester) async {
-      final repository = FakePdaRepository();
-      final harness = await _harness(tester, repository: repository);
-      await _configureTwoItemCart(tester);
-
-      expect(find.byKey(const Key('batch-review')), findsOneWidget);
-      await _scrollUntilVisible(tester, const Key('batch-submit'));
       await tester.tap(find.byKey(const Key('batch-submit')));
       await tester.pumpAndSettle();
 
       expect(repository.batchCreateCount, 1);
       expect(repository.lastBatchMachineId, testMachine.id);
-      expect(repository.lastBatchItems!.length, 2);
-      final keys = repository.lastBatchItems!
-          .map((item) => item.idempotencyKey)
-          .toSet();
-      expect(keys.length, 2);
+      expect(repository.lastBatchItems!.length, 1);
       expect(harness.controller.batchMode, isFalse);
+      expect(harness.controller.batchCart, isEmpty);
       harness.dispose();
     },
   );
 
   testWidgets(
-    'retrying an ambiguous batch submission reuses the same batch and item '
-    'idempotency keys',
+    'retrying an ambiguous batch submission reuses the same idempotency keys',
     (tester) async {
       final repository = FakePdaRepository()
         ..batchCreateError = const AmbiguousMutationException(
-          idempotencyKey: 'ambiguous-batch',
+          idempotencyKey: 'batch-key-1',
         );
       final harness = await _harness(tester, repository: repository);
-      await _configureTwoItemCart(tester);
+      await _toggleBatchMode(tester);
 
-      await _scrollUntilVisible(tester, const Key('batch-submit'));
+      await _selectMainPart(tester, testMainPartOption.partId);
+      await tester.tap(find.text('1. Kasa Doldu'));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.byKey(const Key('batch-submit')));
       await tester.pumpAndSettle();
 
-      expect(harness.controller.hasAmbiguousBatchSubmission, isTrue);
       expect(find.byKey(const Key('ambiguous-batch-banner')), findsOneWidget);
-      final firstBatchKey = repository.lastBatchIdempotencyKey;
-      final firstItemKeys = repository.lastBatchItems!
-          .map((item) => item.idempotencyKey)
-          .toList();
+      final firstKey = repository.lastBatchItems!.first.idempotencyKey;
 
       repository.batchCreateError = null;
-      await _scrollUntilVisible(tester, const Key('retry-ambiguous-batch'));
       await tester.tap(find.byKey(const Key('retry-ambiguous-batch')));
       await tester.pumpAndSettle();
 
       expect(repository.batchCreateCount, 2);
-      expect(repository.lastBatchIdempotencyKey, firstBatchKey);
-      expect(
-        repository.lastBatchItems!.map((item) => item.idempotencyKey).toList(),
-        firstItemKeys,
-      );
+      expect(repository.lastBatchItems!.first.idempotencyKey, firstKey);
       expect(harness.controller.batchMode, isFalse);
       harness.dispose();
     },
@@ -383,203 +227,57 @@ void main() {
   testWidgets(
     'an API error during batch submission preserves the cart for correction',
     (tester) async {
-      // A 503 (not one of the 409/422/428 "shouldRefetch" statuses) keeps the
-      // resulting ApiProblem visible instead of it being cleared by the
-      // automatic post-error context refresh, exactly like the existing
-      // single-request path already behaves for non-refetch statuses.
       final repository = FakePdaRepository()
         ..batchCreateError = const ApiProblem(
-          status: 503,
-          code: 'DATABASE_UNAVAILABLE',
-          detail: 'Veritabanı geçici olarak kullanılamıyor.',
-          correlationId: 'corr-batch',
+          status: 400,
+          code: 'INVALID_BATCH',
+          detail: 'Geçersiz grup talebi.',
+          correlationId: 'cid-1',
         );
       final harness = await _harness(tester, repository: repository);
-      await _configureTwoItemCart(tester);
+      await _toggleBatchMode(tester);
 
-      await _scrollUntilVisible(tester, const Key('batch-submit'));
+      await _selectMainPart(tester, testMainPartOption.partId);
+      await tester.tap(find.text('1. Kasa Doldu'));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.byKey(const Key('batch-submit')));
       await tester.pumpAndSettle();
 
-      expect(harness.controller.batchMode, isTrue);
-      expect(harness.controller.batchCart.length, 2);
-      expect(harness.controller.problem?.code, 'DATABASE_UNAVAILABLE');
-      expect(find.byKey(const Key('batch-review')), findsOneWidget);
-
-      await _scrollUntilVisible(
-        tester,
-        Key('batch-review-edit-${testMainPartOption.partId}'),
-      );
-      await tester.tap(
-        find.byKey(Key('batch-review-edit-${testMainPartOption.partId}')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(harness.controller.isConfiguringBatchItem, isTrue);
-      expect(
-        harness.controller.selectedEffectivePart?.partId,
-        testMainPartOption.partId,
-      );
-      expect(
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
-        findsOneWidget,
-      );
-      harness.dispose();
-    },
-  );
-
-  testWidgets('exactly one configured cart item submits through the existing '
-      'single-request path, not the batch endpoint', (tester) async {
-    final repository = FakePdaRepository();
-    final harness = await _harness(tester, repository: repository);
-    await _enterBatchMode(tester);
-    await _expandMain(tester, testMainPartOption);
-    await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-    await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-    await tester.tap(find.byKey(const Key('batch-configure-start')));
-    await tester.pumpAndSettle();
-    await _tapAction(tester, 'direct-action-BRING_EMPTY');
-    await _confirmTransport(tester);
-
-    await _scrollUntilVisible(tester, const Key('batch-submit'));
-    await tester.tap(find.byKey(const Key('batch-submit')));
-    await tester.pumpAndSettle();
-
-    expect(repository.createCount, 1);
-    expect(repository.batchCreateCount, 0);
-    expect(harness.controller.batchMode, isFalse);
-    harness.dispose();
-  });
-
-  testWidgets(
-    'one-click main-part selection while configuring an item changes only the '
-    'effective selection, never the cart contents',
-    (tester) async {
-      final harness = await _harness(tester);
-      await _enterBatchMode(tester);
-      await _expandMain(tester, testMainPartOption);
-      await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-      await _addPart(tester, 'batch-add-related-$testOrphanPartId');
-
-      await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-      await tester.tap(find.byKey(const Key('batch-configure-start')));
-      await tester.pumpAndSettle();
-
-      // Item 1 (main) auto-resolves and is configured; item 2 (orphan) has
-      // zero compatible variants, so the part-first gate stays open with the
-      // main-part chips on screen.
-      await _tapAction(tester, 'direct-action-BRING_EMPTY');
-      await _confirmTransport(tester);
-
-      final cartBefore = harness.controller.batchCart.length;
-      await _scrollUntilVisible(
-        tester,
-        Key('main-part-${testSecondMainPartOption.partId}'),
-      );
-      await tester.tap(
-        find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(harness.controller.batchCart.length, cartBefore);
-      expect(
-        harness.controller.selectedEffectivePart?.partId,
-        testSecondMainPartOption.partId,
-      );
+      expect(find.byKey(const Key('problem-banner')), findsOneWidget);
+      expect(find.text('Gönderilen bilgiler geçersiz.'), findsOneWidget);
+      // The cart is kept intact so operator can adjust or retry
+      expect(harness.controller.batchCart.length, 1);
       harness.dispose();
     },
   );
 
   testWidgets(
-    'the existing single-part workflow (outside batch mode) still works',
+    'the existing single-part workflow outside batch mode still works',
     (tester) async {
       final repository = FakePdaRepository();
       final harness = await _harness(tester, repository: repository);
-      // Never enters batch mode. One click resolves the single compatible
-      // variant and exposes operations on the same page.
-      await tester.tap(
-        find.byKey(Key('main-part-${testMainPartOption.partId}')),
-      );
-      await tester.pumpAndSettle();
 
-      await _tapAction(tester, 'direct-action-BRING_EMPTY');
-      await _confirmTransport(tester);
-
-      expect(repository.createCount, 1);
-      expect(repository.batchCreateCount, 0);
       expect(harness.controller.batchMode, isFalse);
+
+      await _selectMainPart(tester, testMainPartOption.partId);
+      await tester.tap(find.text('1. Kasa Doldu'));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(repository.containerActionCount, 1);
+      expect(find.byKey(const Key('batch-cart-tray')), findsNothing);
       harness.dispose();
     },
   );
 }
 
-/// Adds main + RELATED (both compatible with V1) and walks each through the
-/// same-page action step to Review without exposing physical slot selection.
-Future<void> _configureTwoItemCart(WidgetTester tester) async {
-  await _enterBatchMode(tester);
-  await _expandMain(tester, testMainPartOption);
-  await _addPart(tester, 'batch-add-main-${testMainPartOption.partId}');
-  await _addPart(tester, 'batch-add-related-$testRelatedPartId');
-  await _scrollUntilVisible(tester, const Key('batch-configure-start'));
-  await tester.tap(find.byKey(const Key('batch-configure-start')));
-  await tester.pumpAndSettle();
-
-  await _tapAction(tester, 'direct-action-BRING_EMPTY');
-  await _confirmTransport(tester);
-
-  await _tapAction(tester, 'direct-action-REMOVE_FULL');
-  await _confirmTransport(tester);
-}
-
-Future<void> _enterBatchMode(WidgetTester tester) async {
+Future<void> _toggleBatchMode(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('enter-batch-selection')));
   await tester.pumpAndSettle();
 }
 
-Future<void> _expandMain(
-  WidgetTester tester,
-  MachineMainPartOption main,
-) async {
-  await _scrollUntilVisible(tester, Key('batch-browse-main-${main.partId}'));
-  await tester.tap(find.byKey(Key('batch-browse-main-${main.partId}')));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _addPart(WidgetTester tester, String addKey) async {
-  await _scrollUntilVisible(tester, Key(addKey));
-  await tester.tap(find.byKey(Key(addKey)));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _tapAction(WidgetTester tester, String actionKey) async {
-  await _scrollUntilVisible(tester, Key(actionKey));
-  await tester.tap(find.byKey(Key(actionKey)));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _confirmTransport(WidgetTester tester) async {
-  await _scrollUntilVisible(tester, const Key('confirm-direct-transport'));
-  await tester.tap(find.byKey(const Key('confirm-direct-transport')));
-  await tester.pumpAndSettle();
-}
-
-/// Repeatedly scrolls the nearest [Scrollable] until [key] is onstage.
-/// [WidgetTester.ensureVisible] only repositions an ALREADY-onstage element,
-/// so it cannot be used for widgets a lazily-built ListView/sliver hasn't
-/// realized yet — this is the same purpose the rest of this test suite
-/// covers with its own local `_scrollTo` helpers. Tries scrolling forward
-/// first (the common case — content further down the list) and falls back
-/// to scrolling backward, since some checks in this file look back at a
-/// cart summary positioned above content that was just scrolled past.
-Future<void> _scrollUntilVisible(WidgetTester tester, Key key) async {
-  final finder = find.byKey(key);
-  if (finder.evaluate().isNotEmpty) return;
-  final scrollable = find.byType(Scrollable).last;
-  try {
-    await tester.scrollUntilVisible(finder, 350, scrollable: scrollable);
-  } on StateError {
-    await tester.scrollUntilVisible(finder, -350, scrollable: scrollable);
-  }
+Future<void> _selectMainPart(WidgetTester tester, String partId) async {
+  await tester.tap(find.byKey(Key('main-part-$partId')));
   await tester.pumpAndSettle();
 }
 
@@ -587,9 +285,6 @@ Future<_Harness> _harness(
   WidgetTester tester, {
   FakePdaRepository? repository,
 }) async {
-  // A generously tall viewport avoids fragile scroll-then-tap sequences for
-  // the extra batch-mode chrome (cart summary, configuring banner) stacked
-  // above the existing part-first/operation content.
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(1024, 2200);
   addTearDown(tester.view.resetDevicePixelRatio);

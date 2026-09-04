@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
 using TkgPda.Application;
@@ -5,7 +6,7 @@ using TkgPda.Domain;
 
 namespace TkgPda.Infrastructure.Postgres;
 
-public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiDataStore
+public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiDataStore, IOperatorTransportQueueStore
 {
     private const string AuthUserSelect =
         """
@@ -782,6 +783,155 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<OperatorQueuePageRecord> ListAsync(
+        OperatorQueueQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var terminalPredicate = query.Terminal
+            ? "r.status IN ('COMPLETED','FAILED','CANCELLED') AND r.created_at >= @terminal_since"
+            : "r.status IN ('CREATED','VALIDATING','QUEUED','SENT_TO_RDS','RUNNING')";
+        var ordering = query.Terminal
+            ? "r.created_at DESC, r.request_no DESC"
+            : "CASE r.status WHEN 'RUNNING' THEN 0 WHEN 'SENT_TO_RDS' THEN 1 WHEN 'QUEUED' THEN 2 ELSE 3 END, r.created_at, r.request_no";
+        await using var command = dataSource.CreateCommand(
+            $"""
+             WITH part_positions AS (
+                 SELECT lsp.part_id,
+                        ls.layout_id,
+                        ls.id AS slot_id,
+                        row_number() OVER (
+                            PARTITION BY lsp.part_id, ls.layout_id
+                            ORDER BY ls.display_order, ls.code, ls.id)::integer AS logical_position
+                 FROM master.layout_slot_parts lsp
+                 JOIN master.layout_slots ls ON ls.id = lsp.layout_slot_id
+                 WHERE ls.is_enabled
+                   AND ls.slot_role NOT IN ('MACHINE', 'EMPTY_STORAGE')
+             ), selected AS (
+                 SELECT r.id AS request_id,
+                        r.request_no,
+                        m.code AS machine_code,
+                        m.display_name AS machine_name,
+                        p.part_code,
+                        p.description,
+                        pp.logical_position,
+                        tt.code AS operation,
+                        r.created_at,
+                        r.status,
+                        r.readiness_state,
+                        rt.rds_status,
+                        rt.agv_id,
+                        rt.started_at,
+                        rt.last_status_json,
+                        row_number() OVER (ORDER BY {ordering})::integer AS queue_position
+                 FROM ops.transport_requests r
+                 JOIN master.machines m ON m.id = r.machine_id
+                 JOIN master.task_types tt ON tt.id = r.task_type_id
+                 LEFT JOIN master.parts p ON p.id = r.part_id
+                 LEFT JOIN integration.rds_tasks rt ON rt.transport_request_id = r.id
+                 LEFT JOIN part_positions pp
+                   ON pp.part_id = r.part_id
+                  AND pp.layout_id = r.layout_id
+                  AND pp.slot_id = CASE WHEN tt.code = 'BRING_EMPTY' THEN r.destination_slot_id ELSE r.source_slot_id END
+                 WHERE {terminalPredicate}
+             )
+             SELECT request_id, request_no, machine_code, machine_name, part_code, description,
+                    logical_position, operation, created_at, status, rds_status,
+                    agv_id, started_at, last_status_json, queue_position, readiness_state
+             FROM selected
+             ORDER BY queue_position
+             OFFSET @offset LIMIT @take
+             """);
+        command.Parameters.AddWithValue("offset", query.Offset);
+        command.Parameters.AddWithValue("take", query.Limit + 1);
+        command.Parameters.AddWithValue("terminal_since", DateTimeOffset.UtcNow.AddHours(-Math.Clamp(query.TerminalMaxAgeHours, 1, 168)));
+        var rows = new List<OperatorQueueItemRecord>();
+        var eta = new TransportEtaService();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var requestId = reader.GetGuid(0);
+            var machineCode = reader.GetString(2);
+            var machineName = reader.GetString(3);
+            var partCode = NullableString(reader, 4);
+            var description = NullableString(reader, 5);
+            var logicalPos = NullableInt32(reader, 6);
+            var operation = reader.GetString(7);
+            var createdAt = reader.GetFieldValue<DateTimeOffset>(8);
+            var status = WorkflowCode.ParseTransportStatus(reader.GetString(9));
+            var rdsStatus = NullableInt32(reader, 10);
+            var agvId = NullableString(reader, 11);
+            var startedAt = NullableDateTimeOffset(reader, 12);
+            var lastStatusJson = NullableJsonElement(reader, 13);
+            var queuePosition = reader.GetInt32(14);
+            var readinessState = reader.IsDBNull(15)
+                ? TransportReadinessState.NotRequired
+                : WorkflowCode.ParseReadinessState(reader.GetString(15));
+
+            var state = QueueState(status, rdsStatus, agvId, readinessState);
+            var etaProjection = eta.Project(
+                status,
+                rdsStatus,
+                agvId,
+                startedAt,
+                queuePosition,
+                lastStatusJson,
+                readinessState: readinessState);
+
+            var machine = $"{machineCode} · {machineName}";
+            var part = string.IsNullOrWhiteSpace(description)
+                ? partCode ?? "Parça bilgisi yok"
+                : $"{partCode} · {description}";
+
+            rows.Add(new OperatorQueueItemRecord(
+                queuePosition,
+                machine,
+                part,
+                logicalPos,
+                BusinessAction(operation, readinessState),
+                createdAt,
+                state,
+                etaProjection.Seconds,
+                etaProjection.State,
+                requestId,
+                agvId));
+        }
+
+        var hasMore = rows.Count > query.Limit;
+        if (hasMore)
+        {
+            rows.RemoveAt(rows.Count - 1);
+        }
+
+        return new OperatorQueuePageRecord(query.Terminal, query.Offset, query.Limit, hasMore, rows);
+    }
+
+    private static string BusinessAction(string operation, TransportReadinessState readinessState) => (operation, readinessState) switch
+    {
+        ("BRING_EMPTY", TransportReadinessState.WaitingPreparation) => "Boş kasa (Depo hazırlığı bekleniyor)",
+        ("BRING_EMPTY", _) => "Boş kasa getiriliyor",
+        ("REMOVE_FULL", _) => "Dolu kasa kaldırılıyor",
+        ("REMOVE_EMPTY", _) => "Boş kasa kaldırılıyor",
+        _ => "Taşıma işlemi"
+    };
+
+    private static string QueueState(TransportRequestStatus status, int? rdsStatus, string? agvId, TransportReadinessState readinessState)
+    {
+        if (status == TransportRequestStatus.Completed || rdsStatus == 1003) return "COMPLETED";
+        if (status == TransportRequestStatus.Failed || rdsStatus is 1004 or 1005 or 1006) return "ERROR";
+        if (status == TransportRequestStatus.Cancelled) return "CANCELLED";
+        if (readinessState == TransportReadinessState.WaitingPreparation) return "WAITING_PREPARATION";
+        return status switch
+        {
+            TransportRequestStatus.Created or TransportRequestStatus.Validating => "REQUESTED",
+            TransportRequestStatus.Queued => "QUEUED",
+            TransportRequestStatus.SentToRds when !string.IsNullOrWhiteSpace(agvId) => "ROBOT_ASSIGNED",
+            TransportRequestStatus.SentToRds => "QUEUED",
+            TransportRequestStatus.Running => "IN_PROGRESS",
+            TransportRequestStatus.Cancelled => "CANCELLED",
+            _ => "REQUESTED"
+        };
+    }
+
     public async Task<bool> IsReadyAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -822,6 +972,22 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
 
     private static void AddNullableText(NpgsqlCommand command, string name, string? value) =>
         command.Parameters.Add(name, NpgsqlDbType.Text).Value = value is null ? DBNull.Value : value;
+
+    private static JsonElement? NullableJsonElement(NpgsqlDataReader reader, int ordinal)
+    {
+        if (reader.IsDBNull(ordinal)) return null;
+        var text = reader.GetString(ordinal);
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static void AddNullableJson(NpgsqlCommand command, string name, string? value) =>
         command.Parameters.Add(name, NpgsqlDbType.Jsonb).Value = value is null ? DBNull.Value : value;

@@ -10,6 +10,7 @@ Bu dizin, tamamlanmış Phase 01–09 baseline'ının mimari kararlarını, veri
 - [commissioning/CUSTOMER_ACCEPTANCE_AUDIT.md](commissioning/CUSTOMER_ACCEPTANCE_AUDIT.md) — kaynak/doğruluk ve Operator kabul matrisi
 - [commissioning/CUSTOMER_SOURCE_RECONCILIATION.md](commissioning/CUSTOMER_SOURCE_RECONCILIATION.md) — tüm customer kaynakları için A/B/C gap uzlaştırması ve kanıt matrisi
 - [commissioning/CUSTOMER_DATA_REQUEST.md](commissioning/CUSTOMER_DATA_REQUEST.md) — müşteri, saha ve RDS için açık bilgi talep listesi
+- [WP_33_OPERATOR_UX_V2_SHARED_QUEUE.md](WP_33_OPERATOR_UX_V2_SHARED_QUEUE.md) — mantıksal kasa eylemleri, atomik Remove-All ve global Operator kuyruğu
 - [commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md](commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md) — physical robot öncesi fail-closed devreye alma kapıları
 - [commissioning/RDS_COMMISSIONING_DISCOVERY.md](commissioning/RDS_COMMISSIONING_DISCOVERY.md) — ayrı RDSCore yüzeyi, kapalı read allowlist'i ve commissioning karşılaştırması
 - [commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md](commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md) — deterministik snapshot alanları ve redaction sözleşmesi

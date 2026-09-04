@@ -83,7 +83,7 @@ Birleşik SH dosyasında sol bölge yalnız `HÜCRE` olarak etiketlenmiştir; SH
 
 ### EMPTY_STORAGE ve REMOVE_FULL
 
-AGV/PLC workbook'undaki `KASA BOŞ`, `KASA DOLU`, `1. KASA BOŞ` benzeri ifadeler durum/proses metnidir. Çalışma Planı'ndaki dolu/boş hareket adetleri de fiziksel pickup/drop alanı değildir. Paket; `EMPTY_STORAGE` konumu/capacity'si veya `REMOVE_FULL` nihai hedefini tanımlamaz. “Ortak alım noktası” ifadesi bulunsa bile bunun empty buffer ya da full final destination ile aynı fiziksel yer olduğunu kanıtlayan konum tanımı yoktur.
+Kaynak uzlaştırması sırasında Excel metinleri tek başına exact robot endpoint'i üretmek için yeterli değildi. WP-33 iş kuralı onayıyla `EMPTY_STORAGE` ve `REMOVE_FULL` hedefinin müşteri iş/fiziksel alanı kapanmıştır ve artık customer-decision gap değildir. Açık kalan konu, bu bilinen alanların gerçek robot/site haritasındaki exact RDS WorkSite/bin/point kimlikleriyle commissioning sırasında eşlenmesidir; bu değerler Excel'den veya isim benzerliğinden türetilmez.
 
 ### Container ve footprint kalanları
 
@@ -106,8 +106,7 @@ AGV/PLC workbook'undaki `KASA BOŞ`, `KASA DOLU`, `1. KASA BOŞ` benzeri ifadele
 |---|---|
 | 48 slotun part/variant/machine teyidi veya açıkça kullanılmayacağı kararı | CUSTOMER |
 | SEALER V3 shared/separate layout kararı | CUSTOMER |
-| Empty-container business area/capacity/allowed container tanımı | CUSTOMER |
-| Full-container business destination stratejisi | CUSTOMER |
+| Bilinen empty/full alanların exact RDS WorkSite/bin/point eşlemesi | LOGIROBOTIC SITE / RDS IT |
 | 74 slot container association, `1285`, eksik nominal type bilgileri ve 23 lot | CUSTOMER |
 | Exact pose, approach, clearance, orientation, fork/docking ölçümü ve saha etiketi doğrulaması | LOGIROBOTIC SITE |
 | Production WorkSite, navigation/profile, task label, robot ve credentials | RDS / IT |

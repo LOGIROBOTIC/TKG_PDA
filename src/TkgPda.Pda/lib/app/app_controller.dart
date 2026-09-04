@@ -16,6 +16,7 @@ enum AppStage {
   login,
   machines,
   operation,
+  tasks,
   warehousePreparation,
 }
 
@@ -56,7 +57,7 @@ class BatchCartItem {
   final String cartItemId;
   final MachineMainPartOption mainPart;
   final EffectivePartSelection effectivePart;
-  TransportCommand? command;
+  ContainerActionBatchItemCommand? command;
 
   /// Display-only snapshot captured at confirm time. The physical slot stays
   /// backend-resolved, so it is shown as automatic until a request exists.
@@ -65,6 +66,7 @@ class BatchCartItem {
   String? slotDisplayName;
   String? actionCode;
   String? variantCode;
+  String? variantId;
 
   bool get isConfigured => command != null;
 }
@@ -102,7 +104,10 @@ class AppController extends ChangeNotifier {
   String? _notice;
   String? _submittingOperation;
   Timer? _pollTimer;
+  Timer? _queuePollTimer;
   TransportCommand? _ambiguousCommand;
+  ContainerPosition? _ambiguousContainerPosition;
+  String? _ambiguousContainerAction;
 
   // WP-03B: part-first selection state (machine-level, independent of the
   // currently active variant until a compatible variant is resolved).
@@ -138,6 +143,27 @@ class AppController extends ChangeNotifier {
   // be shown to the operator as "no active alarm".
   RobotAlarmSummary? _robotAlarmSummary;
   String? _robotAlarmError;
+  List<RobotTelemetry> _robots = const [];
+
+  // WP-33: backend-derived logical positions. Physical slot identities never
+  // enter Flutter state.
+  List<ContainerPosition> _containerPositions = const [];
+  bool _containerPositionsLoading = false;
+  String? _containerPositionsError;
+  final Map<String, String> _containerActionKeys = {};
+  final Set<String> _submittingContainerActions = {};
+  String? _removeAllKey;
+  bool _removeAllSubmitting = false;
+  bool _removeAllAmbiguous = false;
+
+  // WP-33: fleet-wide, business-only Operator queue.
+  OperatorQueuePage? _operatorQueue;
+  bool _operatorQueueLoading = false;
+  String? _operatorQueueError;
+  bool _operatorQueueTerminal = false;
+
+  String? _containerBatchKey;
+  bool _containerBatchAmbiguous = false;
 
   AppStage get stage => _stage;
   String? get deviceCode => _deviceCode;
@@ -151,7 +177,10 @@ class AppController extends ChangeNotifier {
   ApiProblem? get problem => _problem;
   String? get notice => _notice;
   String? get submittingOperation => _submittingOperation;
-  bool get hasAmbiguousSubmission => _submission.hasAmbiguousRequest;
+  bool get hasAmbiguousSubmission =>
+      _submission.hasAmbiguousRequest ||
+      _ambiguousContainerPosition != null ||
+      _removeAllAmbiguous;
   bool get mutationEnabled =>
       !_offline &&
       !_busy &&
@@ -161,6 +190,17 @@ class AppController extends ChangeNotifier {
   bool get resumeValidationPending => _resumeValidationPending;
   RobotAlarmSummary? get robotAlarmSummary => _robotAlarmSummary;
   String? get robotAlarmError => _robotAlarmError;
+  List<RobotTelemetry> get robots => _robots;
+  List<ContainerPosition> get containerPositions => _containerPositions;
+  bool get containerPositionsLoading => _containerPositionsLoading;
+  String? get containerPositionsError => _containerPositionsError;
+  bool get removeAllSubmitting => _removeAllSubmitting;
+  bool isSubmittingContainerAction(int positionNumber, String action) =>
+      _submittingContainerActions.contains('$positionNumber:$action');
+  OperatorQueuePage? get operatorQueue => _operatorQueue;
+  bool get operatorQueueLoading => _operatorQueueLoading;
+  String? get operatorQueueError => _operatorQueueError;
+  bool get operatorQueueTerminal => _operatorQueueTerminal;
 
   List<MachineMainPartOption> get partOptions => _partOptions;
   bool get partOptionsLoading => _partOptionsLoading;
@@ -185,11 +225,12 @@ class AppController extends ChangeNotifier {
   int get currentBatchItemPosition => _batchConfiguringIndex + 1;
   bool get canReviewBatch =>
       _batchCart.isNotEmpty && _batchCart.every((item) => item.isConfigured);
-  bool get hasAmbiguousBatchSubmission => _batchSubmission.hasAmbiguousRequest;
+  bool get hasAmbiguousBatchSubmission => _containerBatchAmbiguous;
   String? get batchTargetVariantId => _firstOrNull(
     _batchCart
         .where((item) => item.isConfigured)
-        .map((item) => item.command!.variantId),
+        .map((item) => item.variantId)
+        .whereType<String>(),
   );
   String? get batchTargetVariantCode => _firstOrNull(
     _batchCart
@@ -364,6 +405,11 @@ class AppController extends ChangeNotifier {
             ? 'Belirsiz isteğin kabul edildiği doğrulanamadı. Yeni işlem öncesi durumu kontrol edin.'
             : 'Aktif talep sunucudan doğrulandı.';
       }
+      if (_selectedEffectivePart != null &&
+          _resolvedCompatibleVariant != null &&
+          next.activeVariantId == _resolvedCompatibleVariant!.variantId) {
+        await _loadContainerPositions(_partResolutionGeneration);
+      }
       _schedulePolling();
     } on ConnectivityException {
       _offline = true;
@@ -465,6 +511,7 @@ class AppController extends ChangeNotifier {
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     _resolvedCompatibleVariant = null;
+    _resetContainerPositions();
     notifyListeners();
     await _loadCompatibleVariants(generation);
   }
@@ -485,6 +532,7 @@ class AppController extends ChangeNotifier {
     _compatibleVariants = null;
     _compatibleVariantsError = null;
     _resolvedCompatibleVariant = null;
+    _resetContainerPositions();
     _partResolutionGeneration++;
     notifyListeners();
   }
@@ -497,6 +545,14 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleBatchMode() {
+    if (_batchMode) {
+      exitBatchSelection();
+    } else {
+      enterBatchSelection();
+    }
+  }
+
   /// Leaves batch mode and discards the cart. Only ever called after a
   /// successful submission or an explicit operator cancel — never on a
   /// recoverable failure (ambiguous/API error), so a failed submit keeps the
@@ -506,6 +562,8 @@ class AppController extends ChangeNotifier {
     _batchCart.clear();
     _batchConfiguringIndex = -1;
     _batchSubmission.clear();
+    _containerBatchKey = null;
+    _containerBatchAmbiguous = false;
     resetPartSelection();
     notifyListeners();
   }
@@ -563,15 +621,15 @@ class AppController extends ChangeNotifier {
   /// cart item and advances to the next unconfigured item (or to Review,
   /// once every item has a command).
   Future<void> confirmBatchItemCommand(
-    TransportCommand command, {
-    required String operation,
-  }) async {
+    ContainerActionBatchItemCommand command,
+  ) async {
     if (!isConfiguringBatchItem) return;
     final item = _batchCart[_batchConfiguringIndex];
     item.command = command;
-    item.slotDisplayName = 'Otomatik seçilecek';
-    item.actionCode = operation;
+    item.slotDisplayName = '${command.positionNumber}. Kasa';
+    item.actionCode = command.action;
     item.variantCode = _context?.activeVariantCode;
+    item.variantId = _context?.activeVariantId;
     _batchConfiguringIndex = -1;
     resetPartSelection();
     await _advanceBatchConfiguration();
@@ -611,6 +669,7 @@ class AppController extends ChangeNotifier {
     item.slotDisplayName = null;
     item.actionCode = null;
     item.variantCode = null;
+    item.variantId = null;
     _batchConfiguringIndex = index;
     await _loadBatchItemForConfiguration(item);
   }
@@ -620,40 +679,42 @@ class AppController extends ChangeNotifier {
   /// with one batch idempotency key and one independent key per item.
   Future<void> submitBatch() async {
     if (!canReviewBatch || _busy) return;
-    if (_batchCart.length == 1) {
-      final result = await submitTransport(_batchCart.single.command!);
-      if (result != null) {
-        exitBatchSelection();
-      }
+    final machine = _selectedMachine;
+    final current = _context;
+    if (machine == null || current == null || !_session.isAuthenticated) {
       return;
     }
-    final machine = _selectedMachine;
-    if (machine == null || !_session.isAuthenticated) return;
+    final variantId = current.activeVariantId;
+    final layoutId = current.activeLayoutId;
+    if (variantId == null ||
+        layoutId == null ||
+        _batchCart.any((item) => item.variantId != variantId)) {
+      _notice = 'Grup, makinenin tek etkin varyantıyla uyumlu değil.';
+      notifyListeners();
+      return;
+    }
     _setBusy(true);
     _clearFeedback();
     try {
-      final commandsByCartItemId = {
-        for (final item in _batchCart) item.cartItemId: item.command!,
-      };
-      final result = await _batchSubmission.submit(commandsByCartItemId, (
-        batchKey,
-        itemKeys,
-      ) {
-        final items = [
-          for (final item in _batchCart)
-            TransportBatchItemCommand(
-              command: item.command!,
-              idempotencyKey: itemKeys[item.cartItemId]!,
-            ),
-        ];
-        return _repository.createTransportBatch(machine.id, batchKey, items);
-      });
+      final key = _containerBatchKey ??=
+          'container-batch:${_cartIdFactory.v4()}';
+      final result = await _repository.createContainerActionBatch(
+        machineId: machine.id,
+        variantId: variantId,
+        layoutId: layoutId,
+        navigationProfileId: current.activeNavigationProfileId,
+        items: _batchCart.map((item) => item.command!).toList(growable: false),
+        idempotencyKey: key,
+      );
       _notice = result.idempotentReplay
           ? 'Grup talebi doğrulandı.'
           : 'Grup talebi oluşturuldu: ${result.items.length} işlem.';
+      _containerBatchKey = null;
+      _containerBatchAmbiguous = false;
       exitBatchSelection();
       await refreshContext();
     } on AmbiguousMutationException {
+      _containerBatchAmbiguous = true;
       _offline = true;
       _notice =
           'Grup gönderiminin sonucu belirsiz. Aynı seçim aynı anahtarla yeniden denenebilir.';
@@ -668,7 +729,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> retryAmbiguousBatch() async {
-    if (!_batchSubmission.hasAmbiguousRequest) return;
+    if (!_containerBatchAmbiguous || _containerBatchKey == null) return;
     _offline = false;
     await submitBatch();
   }
@@ -821,6 +882,7 @@ class AppController extends ChangeNotifier {
     final current = _context;
     if (current != null && current.activeVariantId == variant.variantId) {
       _markVariantResolved(variant);
+      await _loadContainerPositions(generation);
       notifyListeners();
       return;
     }
@@ -840,12 +902,417 @@ class AppController extends ChangeNotifier {
     if (generation == _partResolutionGeneration &&
         _context?.activeVariantId == variant.variantId) {
       _markVariantResolved(variant);
+      await _loadContainerPositions(generation);
     }
     notifyListeners();
   }
 
   void _markVariantResolved(CompatibleVariant variant) {
     _resolvedCompatibleVariant = variant;
+  }
+
+  Future<void> _loadContainerPositions(int generation) async {
+    final current = _context;
+    final part = _selectedEffectivePart;
+    final variant = _resolvedCompatibleVariant;
+    final layoutId = current?.activeLayoutId;
+    if (current == null ||
+        part == null ||
+        variant == null ||
+        layoutId == null) {
+      _resetContainerPositions();
+      return;
+    }
+    _containerPositionsLoading = true;
+    _containerPositionsError = null;
+    notifyListeners();
+    try {
+      final positions = await _repository.containerPositions(
+        machineId: current.machine.id,
+        variantId: variant.variantId,
+        layoutId: layoutId,
+        productGroupId: variant.productGroupId,
+        partId: part.partId,
+      );
+      if (generation == _partResolutionGeneration &&
+          _selectedEffectivePart?.partId == part.partId &&
+          _resolvedCompatibleVariant?.variantId == variant.variantId) {
+        _containerPositions = positions;
+      }
+    } on ConnectivityException {
+      if (generation == _partResolutionGeneration) {
+        _containerPositionsError = 'Bağlantı yok — kasa konumları yüklenemedi.';
+      }
+    } on ApiProblem catch (problem) {
+      if (generation == _partResolutionGeneration) {
+        _containerPositionsError = problem.operatorMessage;
+      }
+    } finally {
+      if (generation == _partResolutionGeneration) {
+        _containerPositionsLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void _resetContainerPositions() {
+    _containerPositions = const [];
+    _containerPositionsLoading = false;
+    _containerPositionsError = null;
+    _submittingContainerActions.clear();
+  }
+
+  Future<void> retryContainerPositions() =>
+      _loadContainerPositions(_partResolutionGeneration);
+
+  Future<void> submitContainerAction(
+    ContainerPosition position,
+    String action,
+  ) async {
+    final current = _context;
+    final part = _selectedEffectivePart;
+    final variant = _resolvedCompatibleVariant;
+    final variantId = current?.activeVariantId;
+    final layoutId = current?.activeLayoutId;
+    if (current == null ||
+        part == null ||
+        variant == null ||
+        variantId == null ||
+        layoutId == null ||
+        variant.variantId != variantId) {
+      _notice = 'İşlem bağlamı değişti. Bilgileri yenileyin.';
+      notifyListeners();
+      return;
+    }
+
+    final availability = action == 'FULL'
+        ? position.fullAction
+        : position.emptyAction;
+    if (!availability.enabled) {
+      _notice = availability.disabledMessage ?? 'Bu işlem şu anda hazır değil.';
+      notifyListeners();
+      return;
+    }
+
+    final command = ContainerActionBatchItemCommand(
+      productGroupId: variant.productGroupId,
+      partId: part.partId,
+      positionNumber: position.positionNumber,
+      action: action,
+    );
+    if (isConfiguringBatchItem) {
+      await confirmBatchItemCommand(command);
+      return;
+    }
+
+    if (_batchMode) {
+      final existingIndex = _batchCart.indexWhere(
+        (item) =>
+            item.effectivePart.partId == part.partId &&
+            item.command?.positionNumber == position.positionNumber,
+      );
+      if (existingIndex != -1) {
+        _notice = '${part.partCode} · ${position.label} zaten sepette ekli.';
+        notifyListeners();
+        return;
+      }
+
+      if (_batchCart.isNotEmpty &&
+          _batchCart.any((item) => item.variantId != variantId)) {
+        _notice =
+            'Tüm toplu talepler aynı varyanta (${_batchCart.first.variantCode}) ait olmalıdır.';
+        notifyListeners();
+        return;
+      }
+
+      final cartItem = BatchCartItem(
+        cartItemId: _cartIdFactory.v4(),
+        mainPart: _selectedMainPart!,
+        effectivePart: part,
+      )
+        ..command = command
+        ..slotDisplayName = '${position.positionNumber}. Kasa'
+        ..actionCode = action
+        ..variantCode = current.activeVariantCode
+        ..variantId = variantId;
+
+      _batchCart.add(cartItem);
+      _notice =
+          '${part.partCode} · ${position.label} (${action == 'FULL' ? 'Dolu' : 'Boş'}) sepete eklendi.';
+      notifyListeners();
+      return;
+    }
+
+    final submissionId = '${position.positionNumber}:$action';
+    if (_submittingContainerActions.contains(submissionId) ||
+        !mutationEnabled) {
+      return;
+    }
+    final material =
+        '$variantId|$layoutId|${variant.productGroupId}|${part.partId}|$submissionId';
+    final key = _containerActionKeys.putIfAbsent(
+      material,
+      () => 'container-action:${_cartIdFactory.v4()}',
+    );
+    _submittingContainerActions.add(submissionId);
+    _submittingOperation = action;
+    _clearFeedback();
+    notifyListeners();
+    try {
+      final result = await _repository.createContainerAction(
+        machineId: current.machine.id,
+        variantId: variantId,
+        layoutId: layoutId,
+        navigationProfileId: current.activeNavigationProfileId,
+        productGroupId: variant.productGroupId,
+        partId: part.partId,
+        positionNumber: position.positionNumber,
+        action: action,
+        idempotencyKey: key,
+      );
+      _containerActionKeys.remove(material);
+      _ambiguousContainerPosition = null;
+      _ambiguousContainerAction = null;
+      _notice = result.idempotentReplay
+          ? 'Mevcut kasa talebi doğrulandı.'
+          : '${position.label} talebi oluşturuldu.';
+      await refreshContext();
+    } on AmbiguousMutationException {
+      _ambiguousContainerPosition = position;
+      _ambiguousContainerAction = action;
+      _offline = true;
+      _notice =
+          'Gönderim sonucu belirsiz. Aynı kasa işlemi aynı anahtarla yeniden denenecek.';
+    } on ApiProblem catch (problem) {
+      _containerActionKeys.remove(material);
+      if (problem.shouldRefetch) await refreshContext();
+      _problem = problem;
+    } finally {
+      _submittingContainerActions.remove(submissionId);
+      _submittingOperation = null;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeAllContainers() async {
+    final current = _context;
+    final variantId = current?.activeVariantId;
+    final layoutId = current?.activeLayoutId;
+    if (current == null ||
+        variantId == null ||
+        layoutId == null ||
+        _removeAllSubmitting ||
+        !mutationEnabled) {
+      return;
+    }
+    final key = _removeAllKey ??= 'remove-all:${_cartIdFactory.v4()}';
+    _removeAllSubmitting = true;
+    _clearFeedback();
+    notifyListeners();
+    try {
+      final result = await _repository.removeAllContainers(
+        machineId: current.machine.id,
+        variantId: variantId,
+        layoutId: layoutId,
+        navigationProfileId: current.activeNavigationProfileId,
+        idempotencyKey: key,
+      );
+      _removeAllKey = null;
+      _removeAllAmbiguous = false;
+      _notice = result.idempotentReplay
+          ? 'Kaldırma grubu doğrulandı.'
+          : '${result.itemCount} kasa için kaldırma talebi oluşturuldu.';
+      await refreshContext();
+    } on AmbiguousMutationException {
+      _removeAllAmbiguous = true;
+      _offline = true;
+      _notice =
+          'Tüm kasaları kaldırma sonucunun ulaştığı doğrulanamadı. Aynı istek yeniden denenebilir.';
+    } on ApiProblem catch (problem) {
+      _removeAllKey = null;
+      _removeAllAmbiguous = false;
+      if (problem.shouldRefetch) await refreshContext();
+      _problem = problem;
+    } finally {
+      _removeAllSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> enterTasks() async {
+    if (!_session.isAuthenticated) return;
+    _stage = AppStage.tasks;
+    _operatorQueueTerminal = false;
+    _clearFeedback();
+    notifyListeners();
+    await loadOperatorQueue();
+  }
+
+  void leaveTasks() {
+    _stopQueuePolling();
+    _stage = AppStage.machines;
+    _operatorQueue = null;
+    _operatorQueueError = null;
+    notifyListeners();
+  }
+
+  Future<void> setOperatorQueueTerminal(bool value) async {
+    if (_operatorQueueTerminal == value) return;
+    _operatorQueueTerminal = value;
+    await loadOperatorQueue();
+  }
+
+  Future<void> loadOperatorQueue({int offset = 0, bool silent = false}) async {
+    if (!_session.isAuthenticated) return;
+    unawaited(refreshRobots());
+    if (!silent || _operatorQueue == null) {
+      _operatorQueueLoading = true;
+      _operatorQueueError = null;
+      notifyListeners();
+    }
+    try {
+      _operatorQueue = await _repository.operatorQueue(
+        terminal: _operatorQueueTerminal,
+        offset: offset,
+      );
+      _offline = false;
+    } on ConnectivityException {
+      _offline = true;
+      if (!silent) {
+        _operatorQueueError = 'Bağlantı yok — görevler yüklenemedi.';
+      }
+    } on ApiProblem catch (problem) {
+      if (!silent) {
+        _operatorQueueError = problem.operatorMessage;
+      }
+    } finally {
+      _operatorQueueLoading = false;
+      notifyListeners();
+      _scheduleQueuePolling();
+    }
+  }
+
+  void _scheduleQueuePolling() {
+    _stopQueuePolling();
+    if (!_enablePolling ||
+        !_foreground ||
+        _offline ||
+        _stage != AppStage.tasks) {
+      return;
+    }
+    _queuePollTimer = Timer(const Duration(seconds: 5), () {
+      if (_stage == AppStage.tasks) {
+        unawaited(
+          loadOperatorQueue(
+            offset: _operatorQueue?.offset ?? 0,
+            silent: true,
+          ),
+        );
+      }
+    });
+  }
+
+  void _stopQueuePolling() {
+    _queuePollTimer?.cancel();
+    _queuePollTimer = null;
+  }
+
+  Future<void> cancelQueueItem(String requestId) async {
+    if (!mutationEnabled || _busy) {
+      return;
+    }
+    _setBusy(true);
+    _clearFeedback();
+    try {
+      final result = await _repository.cancel(requestId);
+      _notice = result.status == 'CANCELLED'
+          ? 'Görev iptal edildi.'
+          : 'İptal durumu sunucudan güncellendi.';
+      await loadOperatorQueue(
+        offset: _operatorQueue?.offset ?? 0,
+        silent: true,
+      );
+    } on AmbiguousMutationException {
+      _offline = true;
+      _notice =
+          'İptal sonucunun fiziksel olarak tamamlandığı doğrulanamadı. Durumu yenileyin.';
+    } on ApiProblem catch (problem) {
+      _problem = problem;
+      if (problem.shouldRefetch) {
+        await loadOperatorQueue(
+          offset: _operatorQueue?.offset ?? 0,
+          silent: true,
+        );
+      }
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> refreshRobots() async {
+    if (!_session.isAuthenticated) return;
+    try {
+      _robots = await _repository.robots();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking telemetry
+    }
+  }
+
+  Future<void> pauseRobot([List<String>? vehicles]) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.pauseRobot(vehicles);
+      _notice = 'Robot navigasyonu duraklatıldı.';
+      await refreshRobots();
+    } catch (_) {
+      _notice = 'Robot duraklatılamadı.';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> resumeRobot([List<String>? vehicles]) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.resumeRobot(vehicles);
+      _notice = 'Robot navigasyonu devam ettirildi.';
+      await refreshRobots();
+    } catch (_) {
+      _notice = 'Robot devam ettirilemedi.';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> clearRobotErrors([List<String>? vehicles]) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.clearRobotErrors(vehicles);
+      _notice = 'Robot hataları temizlendi.';
+      await refreshRobots();
+    } catch (_) {
+      _notice = 'Robot hataları temizlenemedi.';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> setRequestPriority(String requestId, int priority) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.setRequestPriority(requestId, priority);
+      _notice = 'Görev önceliği güncellendi.';
+      await loadOperatorQueue(offset: _operatorQueue?.offset ?? 0, silent: true);
+    } catch (_) {
+      _notice = 'Öncelik güncellenemedi.';
+    } finally {
+      _setBusy(false);
+    }
   }
 
   void _resetPartFirstState() {
@@ -863,6 +1330,9 @@ class AppController extends ChangeNotifier {
     _batchCart.clear();
     _batchConfiguringIndex = -1;
     _batchSubmission.clear();
+    _containerBatchKey = null;
+    _containerBatchAmbiguous = false;
+    _resetContainerPositions();
   }
 
   /// Customer UX — Automatic Machine Slot Resolution: builds a command with
@@ -969,6 +1439,19 @@ class AppController extends ChangeNotifier {
   }
 
   Future<TransportResult?> retryAmbiguousTransport() async {
+    if (_removeAllAmbiguous && _removeAllKey != null) {
+      _offline = false;
+      await removeAllContainers();
+      return null;
+    }
+    if (_ambiguousContainerPosition case final position?) {
+      final action = _ambiguousContainerAction;
+      if (action != null) {
+        _offline = false;
+        await submitContainerAction(position, action);
+      }
+      return null;
+    }
     final command = _ambiguousCommand;
     if (command == null || !_submission.hasAmbiguousRequest) {
       return null;
@@ -1071,6 +1554,7 @@ class AppController extends ChangeNotifier {
 
   void _clearOperationalState() {
     _stopPolling();
+    _stopQueuePolling();
     _machines = const [];
     _selectedMachine = null;
     _context = null;
@@ -1083,6 +1567,19 @@ class AppController extends ChangeNotifier {
     _warehouseMarkingReady.clear();
     _robotAlarmSummary = null;
     _robotAlarmError = null;
+    _ambiguousContainerPosition = null;
+    _ambiguousContainerAction = null;
+    _resetContainerPositions();
+    _containerActionKeys.clear();
+    _removeAllKey = null;
+    _removeAllSubmitting = false;
+    _removeAllAmbiguous = false;
+    _operatorQueue = null;
+    _operatorQueueError = null;
+    _operatorQueueLoading = false;
+    _operatorQueueTerminal = false;
+    _containerBatchKey = null;
+    _containerBatchAmbiguous = false;
   }
 
   void _clearFeedback() {
@@ -1098,6 +1595,7 @@ class AppController extends ChangeNotifier {
   @override
   void dispose() {
     _stopPolling();
+    _stopQueuePolling();
     super.dispose();
   }
 }

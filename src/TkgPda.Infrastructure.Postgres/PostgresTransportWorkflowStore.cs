@@ -7,7 +7,7 @@ using TkgPda.Domain;
 
 namespace TkgPda.Infrastructure.Postgres;
 
-public sealed class PostgresTransportWorkflowStore : ITransportWorkflowStore, IAsyncDisposable
+public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowStore, IContainerActionStore, IAsyncDisposable
 {
     private const string ActiveStatusesSql = "'CREATED','VALIDATING','QUEUED','SENT_TO_RDS','RUNNING'";
     private readonly NpgsqlDataSource _dataSource;

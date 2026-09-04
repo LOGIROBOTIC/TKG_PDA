@@ -91,12 +91,18 @@ public interface IRdsExecutionStore
     Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default);
+    Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default);
 }
 
 public sealed record RdsValidateTransportRequest(
     string TaskRecordId,
     string TaskLabel,
     IReadOnlyDictionary<string, object?> InputParams);
+
+public interface IRobotTelemetryProvider
+{
+    Task<IReadOnlyDictionary<string, double>> GetRobotRemainingTimesAsync(CancellationToken cancellationToken = default);
+}
 
 public sealed record RdsValidationResult(
     bool Validated,
@@ -269,7 +275,8 @@ public sealed class RdsExecutionCoordinator(
     IRdsWorkSiteReconciler workSiteReconciler,
     TransportWorkflowService workflow,
     RdsExecutionSettings settings,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IRobotTelemetryProvider? robotTelemetry = null)
 {
     public async Task<IReadOnlyList<RdsDispatchAttemptResult>> DispatchQueuedAsync(int limit, CancellationToken cancellationToken = default)
     {
@@ -415,6 +422,22 @@ public sealed class RdsExecutionCoordinator(
             }
 
             await RefreshRelevantWorkSitesAsync(requestId, Guid.NewGuid(), cancellationToken);
+        }
+
+        if (robotTelemetry is not null && tasks.Count > 0)
+        {
+            try
+            {
+                var remainingTimes = await robotTelemetry.GetRobotRemainingTimesAsync(cancellationToken);
+                if (remainingTimes.Count > 0)
+                {
+                    await store.EnrichRemainingTimesAsync(remainingTimes, cancellationToken);
+                }
+            }
+            catch
+            {
+                // Best-effort enrichment; ETA falls back to elapsed-time estimate.
+            }
         }
     }
 

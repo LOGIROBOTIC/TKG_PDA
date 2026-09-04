@@ -60,6 +60,52 @@ public sealed record TransportBatchHttpResponse(
     bool IdempotentReplay,
     IReadOnlyList<TransportHttpResponse> Items);
 
+public sealed record CreateContainerActionHttpRequest(
+    Guid VariantId,
+    Guid LayoutId,
+    Guid? NavigationProfileId,
+    Guid ProductGroupId,
+    Guid PartId,
+    int PositionNumber,
+    string Action,
+    int Priority = 100);
+
+public sealed record RemoveAllContainersHttpRequest(
+    Guid VariantId,
+    Guid LayoutId,
+    Guid? NavigationProfileId,
+    int Priority = 100);
+
+public sealed record CreateContainerActionBatchItemHttpRequest(
+    Guid ProductGroupId,
+    Guid PartId,
+    int PositionNumber,
+    string Action);
+
+public sealed record CreateContainerActionBatchHttpRequest(
+    Guid VariantId,
+    Guid LayoutId,
+    Guid? NavigationProfileId,
+    IReadOnlyList<CreateContainerActionBatchItemHttpRequest> Items,
+    int Priority = 100);
+
+public sealed record ContainerActionHttpResponse(
+    int PositionNumber,
+    string Action,
+    long RequestNo,
+    string Status,
+    bool IdempotentReplay);
+
+public sealed record RemoveAllContainerItemHttpResponse(
+    long RequestNo,
+    string Action,
+    string Status);
+
+public sealed record RemoveAllContainersHttpResponse(
+    bool IdempotentReplay,
+    IReadOnlyList<int> IgnoredVacantPositions,
+    IReadOnlyList<RemoveAllContainerItemHttpResponse> Items);
+
 public sealed record VariantSwitchHttpRequest(
     Guid VariantId,
     Guid LayoutId,

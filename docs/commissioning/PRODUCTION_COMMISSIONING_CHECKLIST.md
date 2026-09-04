@@ -22,9 +22,8 @@ Bu checklist tamamlanmadan simulator sonuçları fiziksel robot kabulü olarak y
 
 ## 2. Lojistik business kuralları
 
-- [ ] Her machine/alan için `EMPTY_STORAGE` fiziksel pozisyonları ve capacity tanımlandı.
-- [ ] Her EMPTY_STORAGE pozisyonunun izin verdiği container tipleri onaylandı.
-- [ ] `REMOVE_FULL` destination stratejisi machine/variant/part/container bağlamıyla onaylandı.
+- [x] `EMPTY_STORAGE` ve `REMOVE_FULL` hedefinin müşteri iş/fiziksel alanı kararlaştırıldı.
+- [ ] Bilinen empty/full alanların exact RDS WorkSite/bin/point karşılıkları gerçek saha haritasında eşlendi.
 - [ ] Warehouse preparation kuralı `WAITING_PREPARATION` veya `NOT_REQUIRED` olarak açıkça konfigüre edildi.
 - [ ] Warehouse/Supervisor yetkileri gerçek kullanıcılarla acceptance testinden geçti.
 - [ ] Batch içindeki her item'ın bağımsız TransportRequest olduğu operasyon ekibiyle doğrulandı.
@@ -71,7 +70,7 @@ Bu checklist tamamlanmadan simulator sonuçları fiziksel robot kabulü olarak y
 - [ ] Ana parça, ALT ve varsa RELATED akışı müşteri tarafından kabul edildi.
 - [ ] Tek/multi compatible variant davranışı ve machine değişiminde stale-state temizliği doğrulandı.
 - [ ] Her operation normal `machine -> part -> operation` akışından oluşturuldu; Operator fiziksel slot seçmedi.
-- [ ] Part + compatible variant sonrası üç operation aynı ekranda göründü; ayrı "İşleme Devam Et" veya layout sayfası gerekmedi.
+- [ ] Part + compatible variant sonrası `N. Kasa Doldu`, `N. Kasa Boş` ve `Tüm Kasaları Kaldır` aynı ekranda doğrulandı; standalone `REMOVE_EMPTY`, ayrı "İşleme Devam Et" veya layout sayfası görünmedi.
 - [ ] Normal Operator UI'da fiziksel layout/slot seçimi olmadığı ve backend'in machine-side slot ile `EMPTY_STORAGE` allocation'ını yaptığı kabul edildi.
 - [ ] Warehouse readiness ile execution status'un ayrı kaldığı kabul edildi.
 - [ ] Operator alarm metni sade/actionable; kaynak `GET /api/agv-report/core`; reset/ack/clear/history yok.

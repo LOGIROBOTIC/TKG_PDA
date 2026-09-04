@@ -59,7 +59,11 @@ public sealed record RdsCoreRobotSnapshot(
     double? Angle,
     IReadOnlyList<string> ParkPoints,
     string? CurrentParkTarget,
-    IReadOnlyList<RdsCoreAlarmSnapshot> Alarms);
+    IReadOnlyList<RdsCoreAlarmSnapshot> Alarms,
+    double? RemainingTime = null,
+    string? CurrentOrderId = null,
+    bool? IsLoaded = null,
+    bool? ProcBusiness = null);
 
 public sealed record RdsCoreBinTaskSnapshot(
     string Key,

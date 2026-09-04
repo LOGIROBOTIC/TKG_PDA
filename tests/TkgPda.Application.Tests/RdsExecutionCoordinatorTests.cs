@@ -325,6 +325,7 @@ public sealed class RdsExecutionCoordinatorTests
         public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default) => Task.FromResult<RdsMappedWorkSite?>(new(slotId, Guid.NewGuid(), "WS", 1, 0, 0, DateTimeOffset.UtcNow));
         public Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RdsTaskTemplateSummary>>([]);
+        public Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeExecutionClient : IRdsExecutionClient

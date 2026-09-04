@@ -399,6 +399,30 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         return rows;
     }
 
+    public async Task EnrichRemainingTimesAsync(
+        IReadOnlyDictionary<string, double> agvRemainingTimes,
+        CancellationToken cancellationToken = default)
+    {
+        if (agvRemainingTimes.Count == 0) return;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        foreach (var (agvId, remainingTime) in agvRemainingTimes)
+        {
+            await using var command = new NpgsqlCommand(
+                """
+                UPDATE integration.rds_tasks
+                SET last_status_json = COALESCE(last_status_json, '{}'::jsonb)
+                        || jsonb_build_object('remaining_time', @remaining_time),
+                    updated_at = now()
+                WHERE agv_id = @agv_id
+                  AND rds_status NOT IN (1001, 1003, 1004, 1005, 1006)
+                """,
+                connection);
+            command.Parameters.AddWithValue("agv_id", agvId);
+            command.Parameters.AddWithValue("remaining_time", remainingTime);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
     private async Task<RdsTaskProjection?> FindTaskAsync(string predicate, object value, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);

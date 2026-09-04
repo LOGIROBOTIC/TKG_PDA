@@ -72,16 +72,15 @@ class _RobotStatusBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final robot in robots)
-          _RobotCard(controller: controller, robot: robot),
+          _RobotCard(robot: robot),
       ],
     );
   }
 }
 
 class _RobotCard extends StatelessWidget {
-  const _RobotCard({required this.controller, required this.robot});
+  const _RobotCard({required this.robot});
 
-  final AppController controller;
   final RobotTelemetry robot;
 
   @override
@@ -108,10 +107,24 @@ class _RobotCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              robot.vehicleId,
+              robot.model ?? 'Robot',
               style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: robot.isConnected
+                    ? theme.colorScheme.primaryContainer
+                    : theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                robot.isConnected ? 'Çevrimiçi' : 'Çevrimdışı',
+                style: theme.textTheme.labelSmall,
+              ),
+            ),
+            const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
@@ -127,40 +140,16 @@ class _RobotCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (robot.currentStation case final station?) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  station,
-                  style: theme.textTheme.labelSmall,
-                ),
-              ),
-            ],
             const Spacer(),
             if (robot.alarms.isNotEmpty)
-              IconButton(
-                key: Key('clear-robot-errors-${robot.vehicleId}'),
-                icon: const Icon(Icons.build, size: 18, color: Colors.orange),
-                tooltip: 'Hataları Temizle',
-                onPressed: () => controller.clearRobotErrors([robot.vehicleId]),
+              Tooltip(
+                message: 'Robot arızası mevcut',
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  size: 20,
+                  color: theme.colorScheme.error,
+                ),
               ),
-            IconButton(
-              key: Key('pause-resume-robot-${robot.vehicleId}'),
-              icon: Icon(
-                robot.dispatchable ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                size: 20,
-                color: theme.colorScheme.primary,
-              ),
-              tooltip: robot.dispatchable ? 'Robotu Duraklat' : 'Robotu Devam Ettir',
-              onPressed: () => robot.dispatchable
-                  ? controller.pauseRobot([robot.vehicleId])
-                  : controller.resumeRobot([robot.vehicleId]),
-            ),
           ],
         ),
       ),
@@ -265,9 +254,6 @@ class _QueueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final robotInfo = item.agvId != null && item.agvId!.isNotEmpty
-        ? ' · Robot: ${item.agvId}'
-        : '';
     final canCancel = !controller.operatorQueueTerminal &&
         item.requestId != null &&
         _isCancelable(item.state);
@@ -283,7 +269,7 @@ class _QueueCard extends StatelessWidget {
           children: [
             Text(item.part),
             Text(
-              '${item.logicalContainerNumber == null ? 'Kasa' : '${item.logicalContainerNumber}. Kasa'} · ${item.businessAction}$robotInfo',
+              '${item.logicalContainerNumber == null ? 'Kasa' : '${item.logicalContainerNumber}. Kasa'} · ${item.businessAction}',
             ),
             Text(_requestTime(item.requestedAt)),
             Text(

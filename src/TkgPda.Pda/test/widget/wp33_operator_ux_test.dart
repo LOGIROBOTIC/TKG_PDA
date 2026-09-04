@@ -165,7 +165,9 @@ void main() {
     await tester.tap(find.byKey(const Key('open-operator-queue')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Robot: sim_02'), findsOneWidget);
+    // Raw agvId must NOT be shown to operator
+    expect(find.textContaining('Robot: sim_02'), findsNothing);
+    expect(find.textContaining('sim_02'), findsNothing);
     expect(find.text('Yaklaşık 2 dakika'), findsOneWidget);
 
     final cancelButton = find.byKey(const Key('cancel-queue-req-12345'));
@@ -232,7 +234,7 @@ void main() {
     harness.dispose();
   });
 
-  testWidgets('robot status bar displays live telemetry in operator queue screen', (tester) async {
+  testWidgets('robot status bar shows business info without maintenance controls', (tester) async {
     final repository = FakePdaRepository()
       ..robotsValue = [
         const RobotTelemetry(
@@ -257,21 +259,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('robot-status-bar')), findsOneWidget);
-    expect(find.text('Sfl-Cbd15'), findsOneWidget);
+    // Shows model name instead of raw vehicleId
+    expect(find.text('HELIFORK'), findsOneWidget);
+    expect(find.text('Sfl-Cbd15'), findsNothing);
+    // Shows battery
     expect(find.text('98%'), findsOneWidget);
-    expect(find.text('PP80'), findsOneWidget);
-
-    final clearBtn = find.byKey(const Key('clear-robot-errors-Sfl-Cbd15'));
-    expect(clearBtn, findsOneWidget);
-    await tester.tap(clearBtn);
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(repository.clearRobotErrorsCount, 1);
-
-    final pauseBtn = find.byKey(const Key('pause-resume-robot-Sfl-Cbd15'));
-    expect(pauseBtn, findsOneWidget);
-    await tester.tap(pauseBtn);
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(repository.pauseRobotCount, 1);
+    // Shows online/offline status
+    expect(find.text('Çevrimiçi'), findsOneWidget);
+    // Does NOT show raw currentStation
+    expect(find.text('PP80'), findsNothing);
+    // Alarm icon is visible but no clear-errors button
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    expect(find.byKey(const Key('clear-robot-errors-Sfl-Cbd15')), findsNothing);
+    // No pause/resume button
+    expect(find.byKey(const Key('pause-resume-robot-Sfl-Cbd15')), findsNothing);
 
     harness.dispose();
   });

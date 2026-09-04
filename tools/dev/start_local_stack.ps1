@@ -251,7 +251,8 @@ Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cy
 $seedFiles = @(
     (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql'),
     (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql'),
-    (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql')
+    (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql'),
+    (Join-Path $projectRoot 'db\seeds\generated\002d_simulation_rds_trial_mappings.sql')
 )
 foreach ($sf in $seedFiles) {
     & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f $sf | Out-Null

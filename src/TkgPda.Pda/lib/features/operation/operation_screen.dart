@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
 import '../../shared/widgets/feedback_banners.dart';
-import 'multi_part_batch_screen.dart';
 import 'container_position_panel.dart';
 import 'part_first_screen.dart';
 

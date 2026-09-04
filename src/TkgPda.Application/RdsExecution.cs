@@ -276,11 +276,18 @@ public sealed class RdsExecutionCoordinator(
     TransportWorkflowService workflow,
     RdsExecutionSettings settings,
     TimeProvider timeProvider,
-    IRobotTelemetryProvider? robotTelemetry = null)
+    IRobotTelemetryProvider? robotTelemetry = null,
+    IRdsCoreNativeOrderClient? nativeOrderClient = null)
 {
+    private bool IsNativeMode => nativeOrderClient is not null
+        && nativeOrderClient.Mode == RdsExecutionMode.RdsCoreNativeOrder
+        && nativeOrderClient.MutationEnabled;
+
+    public bool IsDispatchEnabled => (settings.DispatchEnabled && executionClient.DispatchEnabled) || IsNativeMode;
+
     public async Task<IReadOnlyList<RdsDispatchAttemptResult>> DispatchQueuedAsync(int limit, CancellationToken cancellationToken = default)
     {
-        if (!settings.DispatchEnabled || !executionClient.DispatchEnabled)
+        if (!IsDispatchEnabled)
         {
             return [];
         }
@@ -308,6 +315,11 @@ public sealed class RdsExecutionCoordinator(
                 await store.WriteExecutionAuditAsync(id, "RDS_DISPATCH_DEFERRED", error.Code, error.Message, correlationId, cancellationToken);
                 results.Add(new(id, id.ToString(), false, false, error.Code, "RDS read evidence is unavailable; the request remains queued."));
             }
+            catch (RdsCoreNativeOrderException error)
+            {
+                await store.WriteExecutionAuditAsync(id, "RDS_DISPATCH_DEFERRED", error.Code, error.Message, correlationId, cancellationToken);
+                results.Add(new(id, id.ToString(), false, false, error.Code, "RDSCore is temporarily unavailable; the request remains queued."));
+            }
         }
 
         return results;
@@ -326,6 +338,16 @@ public sealed class RdsExecutionCoordinator(
         if (context.Request.Status != TransportRequestStatus.Queued)
         {
             return new(requestId, requestId.ToString(), false, false, "REQUEST_NOT_QUEUED", "The request is no longer queued.");
+        }
+
+        if (context.Request.ReadinessState == TransportReadinessState.WaitingPreparation)
+        {
+            return new(requestId, requestId.ToString(), false, false, "READINESS_WAITING_PREPARATION", "The request is waiting for warehouse preparation.");
+        }
+
+        if (IsNativeMode)
+        {
+            return await DispatchNativeOrderAsync(requestId, context, correlationId, cancellationToken);
         }
 
         var taskLabel = context.RdsTaskLabel?.Trim();
@@ -387,19 +409,41 @@ public sealed class RdsExecutionCoordinator(
             var correlationId = Guid.NewGuid();
             try
             {
-                var query = await readClient.QueryWindTasksAsync(new(1, 100, TaskRecordId: projection.TaskRecordId), correlationId, cancellationToken);
-                var exact = query.Data.Tasks.Where(task => string.Equals(task.TaskRecordId, projection.TaskRecordId, StringComparison.Ordinal)).ToArray();
-                if (exact.Length == 1)
+                if (IsNativeMode)
                 {
-                    await ApplyTaskStatusAsync(projection, exact[0], query.ReadAt, "RECONCILIATION", cancellationToken);
-                    if (IsTerminalRdsStatus(exact[0].Status))
+                    var details = await nativeOrderClient!.GetOrderDetailsAsync(projection.TaskRecordId, correlationId, cancellationToken);
+                    var status = MapNativeStateToStatus(details.State.Known);
+                    var vehicle = ExtractVehicle(details.Raw, projection.AgvId);
+                    var task = new RdsWindTaskSnapshot(
+                        projection.TaskRecordId,
+                        projection.TaskLabel ?? "",
+                        status,
+                        vehicle,
+                        projection.TaskRecordId,
+                        details.Raw,
+                        details.State.Raw);
+                    await ApplyTaskStatusAsync(projection, task, timeProvider.GetUtcNow(), "NATIVE_RECONCILIATION", cancellationToken);
+                    if (IsTerminalRdsStatus(status))
                     {
                         await RefreshRelevantWorkSitesAsync(projection.TransportRequestId, correlationId, cancellationToken);
                     }
                 }
-                else if (exact.Length > 1 || query.Data.TotalCount > 1)
+                else
                 {
-                    throw new RdsExecutionException("RDS_DUPLICATE_TASK_IDENTITY", "RDS returned duplicate task instances for one taskRecordId.");
+                    var query = await readClient.QueryWindTasksAsync(new(1, 100, TaskRecordId: projection.TaskRecordId), correlationId, cancellationToken);
+                    var exact = query.Data.Tasks.Where(task => string.Equals(task.TaskRecordId, projection.TaskRecordId, StringComparison.Ordinal)).ToArray();
+                    if (exact.Length == 1)
+                    {
+                        await ApplyTaskStatusAsync(projection, exact[0], query.ReadAt, "RECONCILIATION", cancellationToken);
+                        if (IsTerminalRdsStatus(exact[0].Status))
+                        {
+                            await RefreshRelevantWorkSitesAsync(projection.TransportRequestId, correlationId, cancellationToken);
+                        }
+                    }
+                    else if (exact.Length > 1 || query.Data.TotalCount > 1)
+                    {
+                        throw new RdsExecutionException("RDS_DUPLICATE_TASK_IDENTITY", "RDS returned duplicate task instances for one taskRecordId.");
+                    }
                 }
             }
             catch (RdsExecutionException error)
@@ -409,6 +453,10 @@ public sealed class RdsExecutionCoordinator(
             catch (RdsReadException error)
             {
                 await store.WriteExecutionAuditAsync(projection.TransportRequestId, "RDS_RECONCILIATION_DEFERRED", error.Code, error.Message, correlationId, cancellationToken);
+            }
+            catch (RdsCoreNativeOrderException error)
+            {
+                await store.WriteExecutionAuditAsync(projection.TransportRequestId, "RDS_RECONCILIATION_BLOCKED", error.Code, error.Message, correlationId, cancellationToken);
             }
         }
 
@@ -464,6 +512,48 @@ public sealed class RdsExecutionCoordinator(
 
         var task = await store.FindTaskByRequestAsync(requestId, cancellationToken)
             ?? throw new RdsExecutionException("RDS_TASK_NOT_FOUND", "The dispatched request has no persisted RDS task identity.");
+
+        if (IsNativeMode)
+        {
+            var nativeStopResult = await nativeOrderClient!.TerminateAsync(task.TaskRecordId, correlationId, cancellationToken);
+            await store.MarkCancellationRequestedAsync(
+                requestId,
+                nativeStopResult.RawResponse ?? JsonSerializer.SerializeToElement(new { code = nativeStopResult.Code, message = nativeStopResult.Message }),
+                timeProvider.GetUtcNow(),
+                cancellationToken);
+
+            var details = await nativeOrderClient.GetOrderDetailsAsync(task.TaskRecordId, correlationId, cancellationToken);
+            if (details.State.Known != RdsCoreKnownOrderState.Stopped)
+            {
+                for (var attempt = 0; attempt < 5 && details.State.Known != RdsCoreKnownOrderState.Stopped; attempt++)
+                {
+                    await Task.Delay(150, cancellationToken);
+                    details = await nativeOrderClient.GetOrderDetailsAsync(task.TaskRecordId, correlationId, cancellationToken);
+                }
+            }
+
+            if (details.State.Known == RdsCoreKnownOrderState.Stopped)
+            {
+                var vehicle = ExtractVehicle(details.Raw, task.AgvId);
+                var taskSnapshot = new RdsWindTaskSnapshot(
+                    task.TaskRecordId,
+                    task.TaskLabel ?? "",
+                    1001,
+                    vehicle,
+                    task.TaskRecordId,
+                    details.Raw,
+                    "STOPPED");
+                await store.RecordTaskStatusAsync(requestId, taskSnapshot, timeProvider.GetUtcNow(), cancellationToken);
+                var cancelled = await workflow.RecordExecutionOutcomeAsync(
+                    requestId,
+                    new(TransportRequestStatus.Cancelled, EvidenceType: "RDSCORE_TERMINATE"),
+                    cancellationToken);
+                return new(cancelled, false, false);
+            }
+
+            return new(request, true, !nativeStopResult.CoreAccepted);
+        }
+
         RdsStopTaskResult? stopResult = null;
         try
         {
@@ -494,6 +584,135 @@ public sealed class RdsExecutionCoordinator(
 
         return new(request, true, stopResult is null);
     }
+
+    private async Task<RdsDispatchAttemptResult> DispatchNativeOrderAsync(
+        Guid requestId,
+        RdsDispatchContext context,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        var taskLabel = string.IsNullOrWhiteSpace(context.RdsTaskLabel) ? "TKG_TRANSPORT" : context.RdsTaskLabel.Trim();
+        var taskRecordId = requestId.ToString("D");
+
+        var pickupLocation = GetLocation(context.TemplateConfig, "pickupLocation")
+            ?? context.Source.SiteId;
+        var dropoffLocation = GetLocation(context.TemplateConfig, "dropoffLocation")
+            ?? context.Destination.SiteId;
+        var vehicle = GetLocation(context.TemplateConfig, "vehicle");
+
+        if (string.IsNullOrWhiteSpace(pickupLocation) || string.IsNullOrWhiteSpace(dropoffLocation))
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "RDS_DISPATCH_ENDPOINT_UNRESOLVED", "Native order dispatch requires resolved pickup and dropoff locations from the task template or layout slot mapping.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "RDS_DISPATCH_ENDPOINT_UNRESOLVED", "Native order dispatch requires resolved pickup and dropoff locations from the task template or layout slot mapping.");
+        }
+
+        var pickupBlock = new RdsCoreNavigationBlock(RdsCoreNormalOrder.PickupBlockId(requestId), pickupLocation);
+        var dropoffBlock = new RdsCoreNavigationBlock(RdsCoreNormalOrder.DropoffBlockId(requestId), dropoffLocation);
+        var order = RdsCoreNormalOrder.Create(
+            requestId,
+            pickupBlock,
+            dropoffBlock,
+            vehicle: vehicle,
+            priority: context.TemplatePriority);
+
+        var requestPayload = JsonSerializer.SerializeToElement(order);
+        await store.EnsureTaskRecordAsync(requestId, taskRecordId, taskLabel, requestPayload, cancellationToken);
+        await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_ATTEMPTED", "RDS_SET_ORDER", "Native order dispatch was attempted with the immutable TKG request identity.", correlationId, cancellationToken);
+
+        RdsCoreSetOrderResult? setResult = null;
+        try
+        {
+            setResult = await nativeOrderClient!.SetOrderAsync(order, correlationId, cancellationToken);
+            await store.RecordDispatchResponseAsync(
+                requestId,
+                setResult.RawResponse ?? JsonSerializer.SerializeToElement(new { code = setResult.Code, message = setResult.Message }),
+                timeProvider.GetUtcNow(),
+                cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException)
+        {
+            // A lost HTTP response or timeout is ambiguous. Query by taskRecordId before deciding whether to retry.
+        }
+
+        if (setResult is not null && !setResult.CoreAccepted && !setResult.DuplicateOrderId)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", setResult.Code?.ToString() ?? "REJECTED", setResult.Message ?? "SetOrder was rejected.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "RDS_SET_ORDER_REJECTED", setResult.Message ?? "SetOrder was rejected.");
+        }
+
+        RdsCoreOrderDetails? details = null;
+        try
+        {
+            details = await nativeOrderClient!.GetOrderDetailsAsync(taskRecordId, correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException)
+        {
+            // Order details query failed or order not yet observed. Request remains queued for reconciliation.
+        }
+
+        if (details is null)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_UNCONFIRMED", "RDS_TASK_NOT_YET_OBSERVED", "The native order response was not confirmed; the request remains queued.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, setResult?.DuplicateOrderId ?? false, "RDS_TASK_NOT_YET_OBSERVED", "SetOrder was not confirmed; reconciliation will retry the same identity.");
+        }
+
+        var status = MapNativeStateToStatus(details.State.Known);
+        var observedVehicle = ExtractVehicle(details.Raw, vehicle);
+        var taskSnapshot = new RdsWindTaskSnapshot(
+            taskRecordId,
+            taskLabel,
+            status,
+            observedVehicle,
+            taskRecordId,
+            details.Raw,
+            details.State.Raw);
+
+        await store.RecordTaskStatusAsync(requestId, taskSnapshot, timeProvider.GetUtcNow(), cancellationToken);
+        await workflow.RecordExecutionTransitionAsync(requestId, TransportRequestStatus.SentToRds, cancellationToken);
+        if (details.State.Known == RdsCoreKnownOrderState.Running)
+        {
+            await workflow.RecordExecutionTransitionAsync(requestId, TransportRequestStatus.Running, cancellationToken);
+        }
+        await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_CONFIRMED", "RDS_NATIVE_ORDER_OBSERVED", "RDS native order existence was proven by taskRecordId.", correlationId, cancellationToken);
+        return new(requestId, taskRecordId, true, setResult?.DuplicateOrderId ?? true, "RDS_TASK_OBSERVED", "RDS native order existence was proven by taskRecordId.");
+    }
+
+    private static string? GetLocation(JsonElement config, string propertyName)
+    {
+        if (config.ValueKind == JsonValueKind.Object && config.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.String)
+        {
+            var s = prop.GetString();
+            return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        }
+        return null;
+    }
+
+    private static string? ExtractVehicle(JsonElement raw, string? fallback)
+    {
+        if (raw.ValueKind == JsonValueKind.Object)
+        {
+            if (raw.TryGetProperty("candidateName", out var cProp) && cProp.ValueKind == JsonValueKind.String)
+            {
+                var s = cProp.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s.Trim();
+            }
+            if (raw.TryGetProperty("vehicle", out var vProp) && vProp.ValueKind == JsonValueKind.String)
+            {
+                var s = vProp.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s.Trim();
+            }
+        }
+        return fallback;
+    }
+
+    private static int? MapNativeStateToStatus(RdsCoreKnownOrderState state) => state switch
+    {
+        RdsCoreKnownOrderState.Running => 1000,
+        RdsCoreKnownOrderState.Finished => 1003,
+        RdsCoreKnownOrderState.Stopped => 1001,
+        RdsCoreKnownOrderState.Failed or RdsCoreKnownOrderState.Error => 1004,
+        _ => null
+    };
 
     public async Task<RdsCallbackResult> ProcessCallbackAsync(RdsCallbackEvent callback, CancellationToken cancellationToken = default)
     {

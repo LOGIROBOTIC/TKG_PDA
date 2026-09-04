@@ -228,7 +228,7 @@ public sealed class RdsExecutionWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!options.Enabled || !options.DispatchEnabled)
+        if (!coordinator.IsDispatchEnabled && (!options.Enabled || !options.DispatchEnabled))
         {
             return;
         }
@@ -250,6 +250,10 @@ public sealed class RdsExecutionWorker(
                 catch (RdsExecutionException error)
                 {
                     logger.LogWarning("RDS execution cycle was recoverably blocked with {Code}.", error.Code);
+                }
+                catch (RdsCoreNativeOrderException error)
+                {
+                    logger.LogWarning("RDS native order cycle was recoverably blocked with {Code}.", error.Code);
                 }
                 catch (RdsReadException error)
                 {

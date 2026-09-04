@@ -802,9 +802,7 @@ public sealed class RdsCoreRobotTelemetryProvider(
 
         try
         {
-            var client = httpClientFactory.CreateClient("RdsCoreReadOnly");
-            client.BaseAddress = options.BaseAddress;
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            var client = httpClientFactory.CreateClient("RdsCoreDiscovery");
             using var response = await client.GetAsync("/robotsStatus", cancellationToken);
             if (!response.IsSuccessStatusCode)
                 return new Dictionary<string, double>();

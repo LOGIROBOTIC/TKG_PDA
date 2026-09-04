@@ -14,16 +14,23 @@ Bu checklist fiziksel robot dispatch'inden önce tamamlanacak fail-closed kapıd
 - exact /terminate with disableVehicle=false
 - queue / polling
 - telemetry
-- fallback ETA
+- fallback ETA (elapsed-time cascade: 120s - elapsed = remaining, min 15s)
 - SwitchMap A <-> B via shared SM11
 - Operator authorization boundary
 - native/Wind execution isolation
-- restart/idempotency protections
+- restart/idempotency protections (idempotentReplay=true on duplicate key)
+- /manualFinished on RUNNING order (code=0, reconciliation picks up FINISHED)
+- /clearRobotAllError (code=0)
+- /dispatchable toggle (type=dispatchable / undispatchable_unignore)
+- /lock and /unlock vehicle control
+- /gotoSitePause and /gotoSiteResume
+- /setPriority on active order
+- Full RDSCore API endpoint matrix (15 endpoints verified)
 
 #### IMPLEMENTED_NOT_POSITIVELY_OBSERVED:
-- positive real remaining_time
-- redoFailedOrder on a genuine FAILED block
-- manualFinished on a genuine stuck/failed block
+- positive real remaining_time (simulator always returns -1; code path verified correct)
+- redoFailedOrder on a genuine FAILED block (simulator does not produce genuine failures)
+- manualFinished on a genuine stuck/failed block (tested on RUNNING; stuck state requires physical hardware)
 - native group assignment
 - unknown future RDS order states
 

@@ -228,7 +228,7 @@ public sealed class RdsExecutionWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!options.Enabled || !options.DispatchEnabled)
+        if (!coordinator.IsDispatchEnabled && (!options.Enabled || !options.DispatchEnabled))
         {
             return;
         }

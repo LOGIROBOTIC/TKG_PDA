@@ -27,6 +27,7 @@ public sealed class ContainerActionResolutionPolicyTests
 
         Assert.Equal(TransportTaskType.RemoveFull, result.Operation);
         Assert.True(result.MarkFullBeforeCreate);
+        Assert.False(result.RequiresPreparation);
     }
 
     [Fact]
@@ -39,6 +40,7 @@ public sealed class ContainerActionResolutionPolicyTests
 
         Assert.Equal(TransportTaskType.RemoveFull, result.Operation);
         Assert.False(result.MarkFullBeforeCreate);
+        Assert.False(result.RequiresPreparation);
     }
 
     [Theory]
@@ -62,6 +64,7 @@ public sealed class ContainerActionResolutionPolicyTests
 
         Assert.Equal(TransportTaskType.BringEmpty, result.Operation);
         Assert.False(result.MarkFullBeforeCreate);
+        Assert.True(result.RequiresPreparation);
     }
 
     [Theory]

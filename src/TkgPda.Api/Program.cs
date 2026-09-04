@@ -109,6 +109,7 @@ builder.Services.AddHttpClient("RdsCoreNativeOrder", client =>
     AllowAutoRedirect = false
 });
 builder.Services.AddSingleton<IRdsCoreNativeOrderClient, RdsCoreNativeOrderClient>();
+builder.Services.AddSingleton<IRobotTelemetryProvider, RdsCoreRobotTelemetryProvider>();
 builder.Services.AddHttpClient("RdsMutation", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(rdsOptions.TimeoutSeconds);

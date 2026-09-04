@@ -21,7 +21,7 @@ void main() {
     expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
 
     await tester.tap(find.text('1. Kasa Doldu'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(harness.repository.containerActionCount, 1);
     expect(harness.repository.lastCommand?.operation, 'REMOVE_FULL');
@@ -131,6 +131,148 @@ void main() {
     expect(find.textContaining('WorkSite'), findsNothing);
     expect(find.textContaining('AGV'), findsNothing);
     expect(find.textContaining('RDS'), findsNothing);
+    harness.dispose();
+  });
+
+  testWidgets('active operator queue item can be cancelled with confirmation', (
+    tester,
+  ) async {
+    const testRequestId = 'req-12345';
+    final repository = FakePdaRepository()
+      ..operatorQueueValue = OperatorQueuePage(
+        terminal: false,
+        offset: 0,
+        limit: 50,
+        hasMore: false,
+        items: [
+          OperatorQueueItem(
+            queuePosition: 1,
+            machine: 'SH-01-A · Hücre',
+            part: '71550BN000-10-HAOS',
+            logicalContainerNumber: 2,
+            businessAction: 'Dolu kasa kaldırılıyor',
+            requestedAt: DateTime.utc(2026, 9, 3, 9, 30),
+            state: 'IN_PROGRESS',
+            etaSeconds: 90,
+            etaState: 'AVAILABLE',
+            requestId: testRequestId,
+            agvId: 'sim_02',
+          ),
+        ],
+      );
+    final harness = await _loggedInHarness(tester, repository);
+
+    await tester.tap(find.byKey(const Key('open-operator-queue')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Robot: sim_02'), findsOneWidget);
+    expect(find.text('Yaklaşık 2 dakika'), findsOneWidget);
+
+    final cancelButton = find.byKey(const Key('cancel-queue-req-12345'));
+    expect(cancelButton, findsOneWidget);
+
+    await tester.tap(cancelButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Taşıma İptali'), findsOneWidget);
+    expect(find.byKey(const Key('confirm-cancel-queue')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('confirm-cancel-queue')));
+    await tester.pumpAndSettle();
+
+    expect(repository.cancelCount, 1);
+    harness.dispose();
+  });
+
+  testWidgets(
+      'waiting preparation queue item displays Hazırlık Bekleniyor badge and can be cancelled',
+      (tester) async {
+    const testRequestId = 'req-prep-123';
+    final repository = FakePdaRepository()
+      ..operatorQueueValue = OperatorQueuePage(
+        terminal: false,
+        offset: 0,
+        limit: 20,
+        hasMore: false,
+        items: [
+          OperatorQueueItem(
+            queuePosition: 1,
+            machine: 'SH-01-A · Hücre',
+            part: '67115BN050-10-HAOS',
+            logicalContainerNumber: 1,
+            businessAction: 'Boş kasa (Depo hazırlığı bekleniyor)',
+            requestedAt: DateTime.utc(2026, 9, 3, 9, 30),
+            state: 'WAITING_PREPARATION',
+            etaSeconds: null,
+            etaState: 'UNAVAILABLE',
+            requestId: testRequestId,
+          ),
+        ],
+      );
+    final harness = await _loggedInHarness(tester, repository);
+
+    await tester.tap(find.byKey(const Key('open-operator-queue')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hazırlık Bekleniyor'), findsOneWidget);
+    expect(find.textContaining('Boş kasa (Depo hazırlığı bekleniyor)'), findsOneWidget);
+    expect(find.text('Süre bilgisi yok'), findsOneWidget);
+
+    final cancelButton = find.byKey(const Key('cancel-queue-req-prep-123'));
+    expect(cancelButton, findsOneWidget);
+
+    await tester.tap(cancelButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Taşıma İptali'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-cancel-queue')));
+    await tester.pumpAndSettle();
+
+    expect(repository.cancelCount, 1);
+    harness.dispose();
+  });
+
+  testWidgets('robot status bar displays live telemetry in operator queue screen', (tester) async {
+    final repository = FakePdaRepository()
+      ..robotsValue = [
+        const RobotTelemetry(
+          vehicleId: 'Sfl-Cbd15',
+          model: 'HELIFORK',
+          currentMap: '26.7.2026_map_optimak',
+          currentStation: 'PP80',
+          lastStation: 'LM12',
+          connectionStatus: 1,
+          dispatchable: true,
+          isLoaded: false,
+          isError: false,
+          batteryLevel: 0.98,
+          x: 2.304,
+          y: 4.691,
+          alarms: ['E101'],
+        ),
+      ];
+    final harness = await _loggedInHarness(tester, repository);
+
+    await tester.tap(find.byKey(const Key('open-operator-queue')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('robot-status-bar')), findsOneWidget);
+    expect(find.text('Sfl-Cbd15'), findsOneWidget);
+    expect(find.text('98%'), findsOneWidget);
+    expect(find.text('PP80'), findsOneWidget);
+
+    final clearBtn = find.byKey(const Key('clear-robot-errors-Sfl-Cbd15'));
+    expect(clearBtn, findsOneWidget);
+    await tester.tap(clearBtn);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(repository.clearRobotErrorsCount, 1);
+
+    final pauseBtn = find.byKey(const Key('pause-resume-robot-Sfl-Cbd15'));
+    expect(pauseBtn, findsOneWidget);
+    await tester.tap(pauseBtn);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(repository.pauseRobotCount, 1);
+
     harness.dispose();
   });
 }

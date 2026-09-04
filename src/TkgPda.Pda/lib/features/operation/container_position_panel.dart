@@ -48,7 +48,7 @@ class ContainerPositionPanel extends StatelessWidget {
     return Material(
       key: const Key('container-position-panel'),
       elevation: 10,
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: SafeArea(
         top: false,
         child: Padding(
@@ -232,24 +232,82 @@ class _BusinessActionButton extends StatelessWidget {
   }
 }
 
-class _StateBadge extends StatelessWidget {
+class _StateBadge extends StatefulWidget {
   const _StateBadge({required this.position});
 
   final ContainerPosition position;
 
   @override
+  State<_StateBadge> createState() => _StateBadgeState();
+}
+
+class _StateBadgeState extends State<_StateBadge>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_StateBadge old) {
+    super.didUpdateWidget(old);
+    if (old.position.transportState != widget.position.transportState) {
+      _syncAnimation();
+    }
+  }
+
+  void _syncAnimation() {
+    final state = widget.position.transportState;
+    final shouldAnimate =
+        state == 'REQUESTED' || state == 'IN_PROGRESS' || state == 'QUEUED';
+    if (!shouldAnimate) {
+      _controller?.dispose();
+      _controller = null;
+      return;
+    }
+    _controller ??= AnimationController(vsync: this);
+    _controller!
+      ..duration = state == 'REQUESTED'
+          ? const Duration(milliseconds: 1200)
+          : const Duration(milliseconds: 2400)
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final suffix = position.queuePosition == null
+    final suffix = widget.position.queuePosition == null
         ? ''
-        : ' · #${position.queuePosition}';
+        : ' · #${widget.position.queuePosition}';
+    final disableAnimations = MediaQuery.of(context).disableAnimations;
+    final chip = Chip(
+      visualDensity: VisualDensity.compact,
+      label: Text(
+        '${_stateLabel(widget.position.transportState)}$suffix',
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
+    if (_controller == null || disableAnimations) {
+      return Semantics(
+        label: 'Taşıma durumu ${widget.position.transportState}$suffix',
+        child: chip,
+      );
+    }
     return Semantics(
-      label: 'Taşıma durumu ${position.transportState}$suffix',
-      child: Chip(
-        visualDensity: VisualDensity.compact,
-        label: Text(
-          '${_stateLabel(position.transportState)}$suffix',
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+      label: 'Taşıma durumu ${widget.position.transportState}$suffix',
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.45, end: 1.0).animate(
+          CurvedAnimation(parent: _controller!, curve: Curves.easeInOut),
         ),
+        child: chip,
       ),
     );
   }
@@ -257,6 +315,7 @@ class _StateBadge extends StatelessWidget {
 
 String _stateLabel(String state) => switch (state) {
   'READY' => 'Hazır',
+  'WAITING_PREPARATION' => 'Hazırlık Bekleniyor',
   'REQUESTED' => 'İstendi',
   'QUEUED' => 'Sırada',
   'ROBOT_ASSIGNED' => 'Robot atandı',

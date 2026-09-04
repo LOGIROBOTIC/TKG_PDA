@@ -50,6 +50,12 @@ public sealed class ContainerActionsApiTests(ApiTestFixture fixture) : IClassFix
             WHERE r.source_slot_id = @slot_id
             """,
             ("slot_id", mapped.SlotId)));
+        Assert.Equal("NOT_REQUIRED", await fixture.ScalarAsync<string>(
+            """
+            SELECT readiness_state FROM ops.transport_requests
+            WHERE source_slot_id = @slot_id
+            """,
+            ("slot_id", mapped.SlotId)));
     }
 
     [Fact]
@@ -166,6 +172,11 @@ public sealed class ContainerActionsApiTests(ApiTestFixture fixture) : IClassFix
             SELECT tt.code FROM ops.transport_requests r
             JOIN master.task_types tt ON tt.id = r.task_type_id
             WHERE r.idempotency_key = 'wp33-empty-vacant'
+            """));
+        Assert.Equal("WAITING_PREPARATION", await fixture.ScalarAsync<string>(
+            """
+            SELECT readiness_state FROM ops.transport_requests
+            WHERE idempotency_key = 'wp33-empty-vacant'
             """));
     }
 
@@ -305,9 +316,7 @@ public sealed class ContainerActionsApiTests(ApiTestFixture fixture) : IClassFix
             "SH-01-P1--SH-01-P2",
             document.RootElement.GetProperty("items")[0].GetProperty("machine").GetString(),
             StringComparison.Ordinal);
-        Assert.DoesNotContain("requestId", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("agv", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("rds", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("rdsStatus", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sourceSlot", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("destinationSlot", json, StringComparison.OrdinalIgnoreCase);
 

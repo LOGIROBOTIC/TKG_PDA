@@ -19,6 +19,7 @@ public sealed partial class PostgresTransportWorkflowStore
         await EnsurePositionProjectionContextAsync(connection, query, cancellationToken);
         var rows = await ReadPartPositionsAsync(connection, transaction: null, query, cancellationToken);
         var result = new List<ContainerPositionRecord>(rows.Count);
+        var eta = new TransportEtaService();
         foreach (var row in rows)
         {
             var transportState = row.ActiveRequest is null ? "READY" : ProjectExecutionState(row.ActiveRequest);
@@ -34,6 +35,15 @@ public sealed partial class PostgresTransportWorkflowStore
                 actor,
                 canOperate,
                 transportState);
+            var etaProjection = row.ActiveRequest is null
+                ? eta.Unavailable()
+                : eta.Project(
+                    row.ActiveRequest.Status,
+                    row.ActiveRequest.RdsStatus,
+                    row.ActiveRequest.AgvId,
+                    row.ActiveRequest.StartedAt,
+                    row.QueuePosition,
+                    readinessState: row.ActiveRequest.ReadinessState);
             result.Add(new ContainerPositionRecord(
                 row.PositionNumber,
                 $"{row.PositionNumber}. Kasa",
@@ -41,8 +51,8 @@ public sealed partial class PostgresTransportWorkflowStore
                 empty,
                 transportState,
                 row.QueuePosition,
-                null,
-                "UNAVAILABLE"));
+                etaProjection.Seconds,
+                etaProjection.State));
         }
 
         return result;
@@ -72,13 +82,13 @@ public sealed partial class PostgresTransportWorkflowStore
             var replayRows = await ReadPartPositionsAsync(connection, transaction, query, cancellationToken);
             var replayPosition = replayRows.SingleOrDefault(item => item.PositionNumber == command.PositionNumber)
                 ?? throw new WorkflowRuleException("CONTAINER_POSITION_NOT_FOUND", "Seçilen kasa konumu artık mevcut değildir.");
-            var replayRequest = BuildTransportRequest(command, expectedOperation, replayPosition.SlotId);
+            var replayRequest = BuildTransportRequest(command, expectedOperation, replayPosition.SlotId, expectedOperation == TransportTaskType.BringEmpty);
             EnsureEquivalentPayload(existing, replayRequest);
             await transaction.CommitAsync(cancellationToken);
             return new ContainerActionResult(command.PositionNumber, command.Action.ToApi(), existing, WasIdempotentReplay: true);
         }
 
-        var contextRequest = BuildTransportRequest(command, expectedOperation, machineSlotId: null);
+        var contextRequest = BuildTransportRequest(command, expectedOperation, machineSlotId: null, expectedOperation == TransportTaskType.BringEmpty);
         await LockAndValidateRuntimeContextAsync(connection, transaction, contextRequest, cancellationToken);
         var positions = await ReadPartPositionsAsync(connection, transaction, query, cancellationToken);
         var position = positions.SingleOrDefault(item => item.PositionNumber == command.PositionNumber)
@@ -119,7 +129,7 @@ public sealed partial class PostgresTransportWorkflowStore
                 cancellationToken);
         }
 
-        var request = BuildTransportRequest(command, resolution.Operation, slot.Id);
+        var request = BuildTransportRequest(command, resolution.Operation, slot.Id, resolution.RequiresPreparation);
         var created = await CreateAndQueueWithinTransactionAsync(connection, transaction, request, batchId: null, cancellationToken);
         if (resolution.MarkFullBeforeCreate)
         {
@@ -434,7 +444,8 @@ public sealed partial class PostgresTransportWorkflowStore
                     resolution.Operation,
                     resolution.Operation == TransportTaskType.BringEmpty ? null : entry.SlotId,
                     resolution.Operation == TransportTaskType.BringEmpty ? entry.SlotId : null,
-                    command.Priority),
+                    command.Priority,
+                    RequiresPreparation: resolution.RequiresPreparation),
                 resolution.MarkFullBeforeCreate,
                 entry.Item.PositionNumber));
         }
@@ -502,7 +513,8 @@ public sealed partial class PostgresTransportWorkflowStore
     private static CreateTransportRequest BuildTransportRequest(
         ContainerActionCommand command,
         TransportTaskType operation,
-        Guid? machineSlotId) => new(
+        Guid? machineSlotId,
+        bool requiresPreparation = false) => new(
             command.IdempotencyKey,
             RequestOrigin.Api,
             command.ActorUserId,
@@ -516,7 +528,8 @@ public sealed partial class PostgresTransportWorkflowStore
             operation,
             operation == TransportTaskType.BringEmpty ? null : machineSlotId,
             operation == TransportTaskType.BringEmpty ? machineSlotId : null,
-            command.Priority);
+            command.Priority,
+            requiresPreparation);
 
     private static async Task<IReadOnlyList<PositionRow>> ReadPartPositionsAsync(
         NpgsqlConnection connection,
@@ -554,6 +567,7 @@ public sealed partial class PostgresTransportWorkflowStore
                         rt.rds_status,
                         rt.agv_id,
                         rt.started_at,
+                        r.readiness_state,
                         row_number() OVER (
                             PARTITION BY p.id
                             ORDER BY r.created_at DESC NULLS LAST, r.request_no DESC NULLS LAST) AS request_rank
@@ -575,11 +589,11 @@ public sealed partial class PostgresTransportWorkflowStore
              )
              SELECT a.id, a.position_number, a.occupancy_state, a.load_state,
                     a.request_id, a.status, a.failure_code, a.rds_status,
-                    a.agv_id, a.started_at, qr.queue_position
+                    a.agv_id, a.started_at, qr.queue_position, a.readiness_state
              FROM active a
              LEFT JOIN queue_rank qr ON qr.id = a.request_id
              WHERE a.request_rank = 1
-             ORDER BY a.position_number
+             ORDER BY a.position_number;
              """,
             connection,
             transaction);
@@ -599,7 +613,8 @@ public sealed partial class PostgresTransportWorkflowStore
                     reader.IsDBNull(6) ? null : reader.GetString(6),
                     reader.IsDBNull(7) ? null : reader.GetInt32(7),
                     reader.IsDBNull(8) ? null : reader.GetString(8),
-                    reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9));
+                    reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9),
+                    reader.IsDBNull(11) ? TransportReadinessState.NotRequired : WorkflowCode.ParseReadinessState(reader.GetString(11)));
             result.Add(new(
                 reader.GetGuid(0),
                 reader.GetInt32(1),
@@ -799,6 +814,11 @@ public sealed partial class PostgresTransportWorkflowStore
             return "COMPLETED";
         }
 
+        if (request.ReadinessState == TransportReadinessState.WaitingPreparation)
+        {
+            return "WAITING_PREPARATION";
+        }
+
         return request.Status switch
         {
             TransportRequestStatus.Created or TransportRequestStatus.Validating => "REQUESTED",
@@ -875,7 +895,8 @@ public sealed partial class PostgresTransportWorkflowStore
         string? FailureCode,
         int? RdsStatus,
         string? AgvId,
-        DateTimeOffset? StartedAt);
+        DateTimeOffset? StartedAt,
+        TransportReadinessState ReadinessState = TransportReadinessState.NotRequired);
 
     private sealed record PositionRow(
         Guid SlotId,

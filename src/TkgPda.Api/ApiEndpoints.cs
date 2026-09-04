@@ -71,6 +71,33 @@ public static class ApiEndpoints
         endpoints.MapGet("/api/v1/rds/robot-alarm-summary", RobotAlarmSummaryAsync)
             .RequireAuthorization(PolicyNames.Operator);
 
+        endpoints.MapGet("/api/v1/rds/robots", ListRobotsAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/pause", PauseRobotAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/resume", ResumeRobotAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/clear-errors", ClearRobotErrorsAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/rds/robots/dispatchable", SetRobotDispatchableAsync)
+            .RequireAuthorization(PolicyNames.VariantManager);
+
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/priority", SetRequestPriorityAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/manual-finish", ManualFinishRequestAsync)
+            .RequireAuthorization(PolicyNames.VariantManager);
+
+        endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/redo", RedoRequestAsync)
+            .RequireAuthorization(PolicyNames.VariantManager);
+
+        endpoints.MapGet("/api/v1/rds/orders", ListRdsOrdersAsync)
+            .RequireAuthorization(PolicyNames.Operator);
+
         return endpoints;
     }
 
@@ -506,9 +533,10 @@ public static class ApiEndpoints
         [FromQuery] bool? terminal,
         [FromQuery] int? offset,
         [FromQuery] int? limit,
+        [FromQuery(Name = "terminal_max_age_hours")] int? terminalMaxAgeHours,
         OperatorTransportQueueService service,
         CancellationToken cancellationToken) =>
-        service.ListAsync(new(terminal ?? false, offset ?? 0, limit ?? 50), cancellationToken);
+        service.ListAsync(new(terminal ?? false, offset ?? 0, limit ?? 50, terminalMaxAgeHours ?? 8), cancellationToken);
 
     private static async Task<IResult> CreateTransportBatchAsync(
         CreateTransportBatchHttpRequest request,
@@ -842,6 +870,119 @@ public static class ApiEndpoints
         context.Items.TryGetValue(ApiContextKeys.Device, out var value) && value is DeviceRecord device
             ? device
             : throw new ApiException(StatusCodes.Status401Unauthorized, "DEVICE_CONTEXT_REQUIRED", "A validated device context is required.");
+
+    public sealed record RobotVehiclesApiRequest(IReadOnlyList<string>? Vehicles);
+    public sealed record SetDispatchableApiRequest(IReadOnlyList<string>? Vehicles, string Type);
+    public sealed record SetPriorityApiRequest(int Priority);
+
+    private static async Task<IResult> ListRobotsAsync(
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var robots = await rdsClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+        return Results.Ok(new { robots });
+    }
+
+    private static async Task<IResult> PauseRobotAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.GotoSitePauseAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ResumeRobotAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.GotoSiteResumeAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ClearRobotErrorsAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.ClearRobotAllErrorAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> SetRobotDispatchableAsync(
+        SetDispatchableApiRequest request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.SetDispatchableAsync(vehicles, request.Type, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> SetRequestPriorityAsync(
+        Guid requestId,
+        SetPriorityApiRequest request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var result = await rdsClient.SetPriorityAsync(requestId.ToString("D"), request.Priority, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ManualFinishRequestAsync(
+        Guid requestId,
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.ManualFinishedAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> RedoRequestAsync(
+        Guid requestId,
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var vehicles = request?.Vehicles is { Count: > 0 } ? request.Vehicles : ["Sfl-Cbd15"];
+        var result = await rdsClient.RedoFailedOrderAsync(vehicles, correlationId, cancellationToken);
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    private static async Task<IResult> ListRdsOrdersAsync(
+        int? page,
+        int? size,
+        HttpContext context,
+        IRdsCoreNativeOrderClient rdsClient,
+        CancellationToken cancellationToken)
+    {
+        var correlationId = CorrelationId(context);
+        var query = new RdsCoreOrderQuery(Page: Math.Max(1, page ?? 1), Size: Math.Clamp(size ?? 20, 1, 100));
+        var result = await rdsClient.GetOrdersAsync(query, correlationId, cancellationToken);
+        return Results.Ok(result);
+    }
 
     private static Guid CorrelationId(HttpContext context) =>
         context.Items.TryGetValue(ApiContextKeys.CorrelationId, out var value) && value is Guid id ? id : Guid.NewGuid();

@@ -104,6 +104,7 @@ class AppController extends ChangeNotifier {
   String? _notice;
   String? _submittingOperation;
   Timer? _pollTimer;
+  Timer? _queuePollTimer;
   TransportCommand? _ambiguousCommand;
   ContainerPosition? _ambiguousContainerPosition;
   String? _ambiguousContainerAction;
@@ -142,6 +143,7 @@ class AppController extends ChangeNotifier {
   // be shown to the operator as "no active alarm".
   RobotAlarmSummary? _robotAlarmSummary;
   String? _robotAlarmError;
+  List<RobotTelemetry> _robots = const [];
 
   // WP-33: backend-derived logical positions. Physical slot identities never
   // enter Flutter state.
@@ -188,6 +190,7 @@ class AppController extends ChangeNotifier {
   bool get resumeValidationPending => _resumeValidationPending;
   RobotAlarmSummary? get robotAlarmSummary => _robotAlarmSummary;
   String? get robotAlarmError => _robotAlarmError;
+  List<RobotTelemetry> get robots => _robots;
   List<ContainerPosition> get containerPositions => _containerPositions;
   bool get containerPositionsLoading => _containerPositionsLoading;
   String? get containerPositionsError => _containerPositionsError;
@@ -540,6 +543,14 @@ class AppController extends ChangeNotifier {
     if (_batchMode) return;
     _batchMode = true;
     notifyListeners();
+  }
+
+  void toggleBatchMode() {
+    if (_batchMode) {
+      exitBatchSelection();
+    } else {
+      enterBatchSelection();
+    }
   }
 
   /// Leaves batch mode and discards the cart. Only ever called after a
@@ -994,6 +1005,44 @@ class AppController extends ChangeNotifier {
       return;
     }
 
+    if (_batchMode) {
+      final existingIndex = _batchCart.indexWhere(
+        (item) =>
+            item.effectivePart.partId == part.partId &&
+            item.command?.positionNumber == position.positionNumber,
+      );
+      if (existingIndex != -1) {
+        _notice = '${part.partCode} · ${position.label} zaten sepette ekli.';
+        notifyListeners();
+        return;
+      }
+
+      if (_batchCart.isNotEmpty &&
+          _batchCart.any((item) => item.variantId != variantId)) {
+        _notice =
+            'Tüm toplu talepler aynı varyanta (${_batchCart.first.variantCode}) ait olmalıdır.';
+        notifyListeners();
+        return;
+      }
+
+      final cartItem = BatchCartItem(
+        cartItemId: _cartIdFactory.v4(),
+        mainPart: _selectedMainPart!,
+        effectivePart: part,
+      )
+        ..command = command
+        ..slotDisplayName = '${position.positionNumber}. Kasa'
+        ..actionCode = action
+        ..variantCode = current.activeVariantCode
+        ..variantId = variantId;
+
+      _batchCart.add(cartItem);
+      _notice =
+          '${part.partCode} · ${position.label} (${action == 'FULL' ? 'Dolu' : 'Boş'}) sepete eklendi.';
+      notifyListeners();
+      return;
+    }
+
     final submissionId = '${position.positionNumber}:$action';
     if (_submittingContainerActions.contains(submissionId) ||
         !mutationEnabled) {
@@ -1100,6 +1149,7 @@ class AppController extends ChangeNotifier {
   }
 
   void leaveTasks() {
+    _stopQueuePolling();
     _stage = AppStage.machines;
     _operatorQueue = null;
     _operatorQueueError = null;
@@ -1112,11 +1162,14 @@ class AppController extends ChangeNotifier {
     await loadOperatorQueue();
   }
 
-  Future<void> loadOperatorQueue({int offset = 0}) async {
+  Future<void> loadOperatorQueue({int offset = 0, bool silent = false}) async {
     if (!_session.isAuthenticated) return;
-    _operatorQueueLoading = true;
-    _operatorQueueError = null;
-    notifyListeners();
+    unawaited(refreshRobots());
+    if (!silent || _operatorQueue == null) {
+      _operatorQueueLoading = true;
+      _operatorQueueError = null;
+      notifyListeners();
+    }
     try {
       _operatorQueue = await _repository.operatorQueue(
         terminal: _operatorQueueTerminal,
@@ -1125,12 +1178,140 @@ class AppController extends ChangeNotifier {
       _offline = false;
     } on ConnectivityException {
       _offline = true;
-      _operatorQueueError = 'Bağlantı yok — görevler yüklenemedi.';
+      if (!silent) {
+        _operatorQueueError = 'Bağlantı yok — görevler yüklenemedi.';
+      }
     } on ApiProblem catch (problem) {
-      _operatorQueueError = problem.operatorMessage;
+      if (!silent) {
+        _operatorQueueError = problem.operatorMessage;
+      }
     } finally {
       _operatorQueueLoading = false;
       notifyListeners();
+      _scheduleQueuePolling();
+    }
+  }
+
+  void _scheduleQueuePolling() {
+    _stopQueuePolling();
+    if (!_enablePolling ||
+        !_foreground ||
+        _offline ||
+        _stage != AppStage.tasks) {
+      return;
+    }
+    _queuePollTimer = Timer(const Duration(seconds: 5), () {
+      if (_stage == AppStage.tasks) {
+        unawaited(
+          loadOperatorQueue(
+            offset: _operatorQueue?.offset ?? 0,
+            silent: true,
+          ),
+        );
+      }
+    });
+  }
+
+  void _stopQueuePolling() {
+    _queuePollTimer?.cancel();
+    _queuePollTimer = null;
+  }
+
+  Future<void> cancelQueueItem(String requestId) async {
+    if (!mutationEnabled || _busy) {
+      return;
+    }
+    _setBusy(true);
+    _clearFeedback();
+    try {
+      final result = await _repository.cancel(requestId);
+      _notice = result.status == 'CANCELLED'
+          ? 'Görev iptal edildi.'
+          : 'İptal durumu sunucudan güncellendi.';
+      await loadOperatorQueue(
+        offset: _operatorQueue?.offset ?? 0,
+        silent: true,
+      );
+    } on AmbiguousMutationException {
+      _offline = true;
+      _notice =
+          'İptal sonucunun fiziksel olarak tamamlandığı doğrulanamadı. Durumu yenileyin.';
+    } on ApiProblem catch (problem) {
+      _problem = problem;
+      if (problem.shouldRefetch) {
+        await loadOperatorQueue(
+          offset: _operatorQueue?.offset ?? 0,
+          silent: true,
+        );
+      }
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> refreshRobots() async {
+    if (!_session.isAuthenticated) return;
+    try {
+      _robots = await _repository.robots();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking telemetry
+    }
+  }
+
+  Future<void> pauseRobot([List<String>? vehicles]) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.pauseRobot(vehicles);
+      _notice = 'Robot navigasyonu duraklatıldı.';
+      await refreshRobots();
+    } catch (_) {
+      _notice = 'Robot duraklatılamadı.';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> resumeRobot([List<String>? vehicles]) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.resumeRobot(vehicles);
+      _notice = 'Robot navigasyonu devam ettirildi.';
+      await refreshRobots();
+    } catch (_) {
+      _notice = 'Robot devam ettirilemedi.';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> clearRobotErrors([List<String>? vehicles]) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.clearRobotErrors(vehicles);
+      _notice = 'Robot hataları temizlendi.';
+      await refreshRobots();
+    } catch (_) {
+      _notice = 'Robot hataları temizlenemedi.';
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  Future<void> setRequestPriority(String requestId, int priority) async {
+    if (!mutationEnabled) return;
+    _setBusy(true);
+    try {
+      await _repository.setRequestPriority(requestId, priority);
+      _notice = 'Görev önceliği güncellendi.';
+      await loadOperatorQueue(offset: _operatorQueue?.offset ?? 0, silent: true);
+    } catch (_) {
+      _notice = 'Öncelik güncellenemedi.';
+    } finally {
+      _setBusy(false);
     }
   }
 
@@ -1373,6 +1554,7 @@ class AppController extends ChangeNotifier {
 
   void _clearOperationalState() {
     _stopPolling();
+    _stopQueuePolling();
     _machines = const [];
     _selectedMachine = null;
     _context = null;
@@ -1413,6 +1595,7 @@ class AppController extends ChangeNotifier {
   @override
   void dispose() {
     _stopPolling();
+    _stopQueuePolling();
     super.dispose();
   }
 }

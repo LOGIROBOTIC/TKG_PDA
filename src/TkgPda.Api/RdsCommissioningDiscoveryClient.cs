@@ -303,6 +303,11 @@ public sealed class RdsCoreDiscoveryClient(
                 .Concat(ParseAlarmBuckets(telemetry, "ROBOT"))
                 .Concat(ParseAlarmBuckets(Object(telemetry, "alarms"), "ROBOT"))
                 .OrderBy(item => item.Scope, StringComparer.Ordinal).ThenBy(item => item.Severity, StringComparer.Ordinal).ThenBy(item => item.Code, StringComparer.Ordinal).ToArray();
+            var currentOrder = Object(robot, "current_order");
+            var currentOrderId = Text(currentOrder, "id") ?? Text(currentOrder, "externalId");
+            var remainingTime = Double(robot, "remaining_time");
+            var isLoaded = Boolean(robot, "isLoaded");
+            var procBusiness = Boolean(robot, "procBusiness");
             rows.Add(new(
                 id,
                 uuid,
@@ -322,7 +327,11 @@ public sealed class RdsCoreDiscoveryClient(
                 Double(telemetry, "angle"),
                 [],
                 null,
-                alarms));
+                alarms,
+                remainingTime,
+                currentOrderId,
+                isLoaded,
+                procBusiness));
         }
         return rows;
     }

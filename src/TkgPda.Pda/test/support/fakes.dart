@@ -721,6 +721,42 @@ class FakePdaRepository implements PdaDataSource {
     if (robotAlarmSummaryError case final error?) throw error;
     return robotAlarmSummaryValue;
   }
+
+  List<RobotTelemetry> robotsValue = const [];
+  int robotsCount = 0;
+  Object? robotsError;
+
+  @override
+  Future<List<RobotTelemetry>> robots() async {
+    robotsCount++;
+    if (robotsError case final error?) throw error;
+    return robotsValue;
+  }
+
+  int pauseRobotCount = 0;
+  int resumeRobotCount = 0;
+  int clearRobotErrorsCount = 0;
+  int setRequestPriorityCount = 0;
+
+  @override
+  Future<void> pauseRobot([List<String>? vehicles]) async {
+    pauseRobotCount++;
+  }
+
+  @override
+  Future<void> resumeRobot([List<String>? vehicles]) async {
+    resumeRobotCount++;
+  }
+
+  @override
+  Future<void> clearRobotErrors([List<String>? vehicles]) async {
+    clearRobotErrorsCount++;
+  }
+
+  @override
+  Future<void> setRequestPriority(String requestId, int priority) async {
+    setRequestPriorityCount++;
+  }
 }
 
 const _machineJson = {

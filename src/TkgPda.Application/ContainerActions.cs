@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TkgPda.Domain;
 
 namespace TkgPda.Application;
@@ -25,7 +26,7 @@ public static class OperatorContainerActionCode
     };
 }
 
-public sealed record ContainerActionResolution(TransportTaskType Operation, bool MarkFullBeforeCreate);
+public sealed record ContainerActionResolution(TransportTaskType Operation, bool MarkFullBeforeCreate, bool RequiresPreparation = false);
 
 /// <summary>
 /// WP-33 customer business-event policy. It consumes only TKG runtime state;
@@ -39,11 +40,11 @@ public static class ContainerActionResolutionPolicy
         LoadState load) => action switch
     {
         OperatorContainerAction.Full when occupancy == OccupancyState.Occupied && load == LoadState.Empty =>
-            new(TransportTaskType.RemoveFull, MarkFullBeforeCreate: true),
+            new(TransportTaskType.RemoveFull, MarkFullBeforeCreate: true, RequiresPreparation: false),
         OperatorContainerAction.Full when occupancy == OccupancyState.Occupied && load == LoadState.Full =>
-            new(TransportTaskType.RemoveFull, MarkFullBeforeCreate: false),
+            new(TransportTaskType.RemoveFull, MarkFullBeforeCreate: false, RequiresPreparation: false),
         OperatorContainerAction.Empty when occupancy == OccupancyState.Vacant && load == LoadState.Unknown =>
-            new(TransportTaskType.BringEmpty, MarkFullBeforeCreate: false),
+            new(TransportTaskType.BringEmpty, MarkFullBeforeCreate: false, RequiresPreparation: true),
         OperatorContainerAction.Empty when occupancy == OccupancyState.Occupied =>
             throw new WorkflowRuleException("CONTAINER_POSITION_OCCUPIED", "Bu konumda zaten bir kasa bulunuyor."),
         _ when occupancy == OccupancyState.Unknown || load == LoadState.Unknown =>
@@ -272,7 +273,7 @@ public sealed class ContainerActionService(IContainerActionStore store)
     }
 }
 
-public sealed record OperatorQueueQuery(bool Terminal, int Offset = 0, int Limit = 50);
+public sealed record OperatorQueueQuery(bool Terminal, int Offset = 0, int Limit = 50, int TerminalMaxAgeHours = 8);
 
 public sealed record OperatorQueueItemRecord(
     int QueuePosition,
@@ -283,7 +284,9 @@ public sealed record OperatorQueueItemRecord(
     DateTimeOffset RequestedAt,
     string State,
     int? EtaSeconds,
-    string EtaState);
+    string EtaState,
+    Guid? RequestId = null,
+    string? AgvId = null);
 
 public sealed record OperatorQueuePageRecord(
     bool Terminal,
@@ -306,6 +309,11 @@ public sealed class OperatorTransportQueueService(IOperatorTransportQueueStore s
             throw new WorkflowRuleException("QUEUE_PAGE_INVALID", "Queue offset must be non-negative and limit must be between 1 and 100.");
         }
 
+        if (query.TerminalMaxAgeHours is < 1 or > 168)
+        {
+            throw new WorkflowRuleException("QUEUE_PAGE_INVALID", "Terminal max age must be between 1 and 168 hours.");
+        }
+
         return store.ListAsync(query, cancellationToken);
     }
 }
@@ -313,13 +321,86 @@ public sealed class OperatorTransportQueueService(IOperatorTransportQueueStore s
 public sealed record TransportEtaProjection(int? Seconds, string State);
 
 /// <summary>
-/// Separate conservative ETA projection. WP-33 has no verified persisted
-/// request-correlated RDS remaining_time contract, so absence stays explicit.
+/// Deterministic and conservative ETA projection. Consumes real RDSCore remaining_time
+/// telemetry when available; falls back to active runtime progress and queue position.
 /// </summary>
 public sealed class TransportEtaService
 {
+    public const int AverageCycleTimeSeconds = 120;
+
     public TransportEtaProjection Unavailable() => new(null, "UNAVAILABLE");
 
     public TransportEtaProjection FromReliableRemainingTime(int? seconds) =>
         seconds is >= 0 ? new(seconds, "AVAILABLE") : Unavailable();
+
+    public TransportEtaProjection Project(
+        TransportRequestStatus status,
+        int? rdsStatus,
+        string? agvId,
+        DateTimeOffset? startedAt,
+        int? queuePosition,
+        JsonElement? lastStatusJson = null,
+        DateTimeOffset? now = null,
+        TransportReadinessState? readinessState = null)
+    {
+        if (status is TransportRequestStatus.Completed or TransportRequestStatus.Failed or TransportRequestStatus.Cancelled
+            || rdsStatus is 1001 or 1003 or 1004 or 1005 or 1006
+            || readinessState == TransportReadinessState.WaitingPreparation)
+        {
+            return Unavailable();
+        }
+
+        if (lastStatusJson.HasValue && lastStatusJson.Value.ValueKind == JsonValueKind.Object)
+        {
+            if (TryExtractRemainingTime(lastStatusJson.Value, out var explicitSeconds) && explicitSeconds >= 0)
+            {
+                return new(explicitSeconds, "AVAILABLE");
+            }
+        }
+
+        var currentUtc = now ?? DateTimeOffset.UtcNow;
+
+        if (status == TransportRequestStatus.Running || (status == TransportRequestStatus.SentToRds && !string.IsNullOrWhiteSpace(agvId)))
+        {
+            if (startedAt.HasValue)
+            {
+                var elapsed = Math.Max(0, (int)(currentUtc - startedAt.Value).TotalSeconds);
+                var remaining = Math.Max(15, AverageCycleTimeSeconds - elapsed);
+                return new(remaining, "AVAILABLE");
+            }
+
+            return new(AverageCycleTimeSeconds, "AVAILABLE");
+        }
+
+        if (status is TransportRequestStatus.Queued or TransportRequestStatus.Created or TransportRequestStatus.Validating or TransportRequestStatus.SentToRds)
+        {
+            var pos = queuePosition.GetValueOrDefault(1);
+            var estimated = Math.Max(AverageCycleTimeSeconds, pos * AverageCycleTimeSeconds);
+            return new(estimated, "AVAILABLE");
+        }
+
+        return Unavailable();
+    }
+
+    private static bool TryExtractRemainingTime(JsonElement element, out int seconds)
+    {
+        seconds = 0;
+        if (element.TryGetProperty("remaining_time", out var prop) && prop.ValueKind == JsonValueKind.Number)
+        {
+            if (prop.TryGetDouble(out var d) && d >= 0)
+            {
+                seconds = (int)Math.Round(d);
+                return true;
+            }
+        }
+        if (element.TryGetProperty("remainingTime", out prop) && prop.ValueKind == JsonValueKind.Number)
+        {
+            if (prop.TryGetDouble(out var d) && d >= 0)
+            {
+                seconds = (int)Math.Round(d);
+                return true;
+            }
+        }
+        return false;
+    }
 }

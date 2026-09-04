@@ -240,7 +240,7 @@ void main() {
         find.byKey(const Key('direct-action-BRING_EMPTY')),
       );
       await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const Key('confirm-direct-transport')), findsNothing);
       expect(find.text('Sistem tarafından seçilecek'), findsNothing);
 
@@ -285,7 +285,7 @@ void main() {
           await tester.tap(
             find.byKey(Key('direct-action-${operationCase.operation}')),
           );
-          await tester.pumpAndSettle();
+          await tester.pump(const Duration(milliseconds: 500));
           expect(
             find.byKey(const Key('confirm-direct-transport')),
             findsNothing,
@@ -371,7 +371,7 @@ void main() {
         idempotentReplay: false,
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(repository.createCount, 1);
     harness.dispose();
   });
@@ -409,7 +409,7 @@ void main() {
     final firstKey = repository.lastIdempotencyKey;
     repository.createError = null;
     await tester.tap(find.byKey(const Key('retry-ambiguous')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(repository.createCount, 2);
     expect(repository.lastIdempotencyKey, firstKey);
@@ -720,7 +720,7 @@ Future<void> _submitBringEmpty(WidgetTester tester) async {
 Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isNotEmpty) {
     await tester.ensureVisible(finder);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     return;
   }
   await tester.scrollUntilVisible(
@@ -731,7 +731,7 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
       matching: find.byType(Scrollable),
     ),
   );
-  await tester.pumpAndSettle();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 ActiveTransportRequest _failureRequest() => ActiveTransportRequest(

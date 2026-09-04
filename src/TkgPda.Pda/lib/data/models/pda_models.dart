@@ -357,6 +357,8 @@ class OperatorQueueItem {
     required this.state,
     required this.etaSeconds,
     required this.etaState,
+    this.requestId,
+    this.agvId,
   });
 
   final int queuePosition;
@@ -368,6 +370,8 @@ class OperatorQueueItem {
   final String state;
   final int? etaSeconds;
   final String etaState;
+  final String? requestId;
+  final String? agvId;
 
   factory OperatorQueueItem.fromJson(JsonMap json) => OperatorQueueItem(
     queuePosition: _integer(json['queuePosition']),
@@ -380,6 +384,8 @@ class OperatorQueueItem {
     state: json['state'] as String? ?? 'REQUESTED',
     etaSeconds: _nullableInteger(json['etaSeconds']),
     etaState: json['etaState'] as String? ?? 'UNAVAILABLE',
+    requestId: json['requestId'] as String?,
+    agvId: json['agvId'] as String?,
   );
 }
 
@@ -1031,6 +1037,68 @@ class TransportBatchResult {
     items: _maps(
       json['items'],
     ).map(TransportResult.fromJson).toList(growable: false),
+  );
+}
+
+class RobotTelemetry {
+  const RobotTelemetry({
+    required this.vehicleId,
+    this.model,
+    this.currentMap,
+    this.currentStation,
+    this.lastStation,
+    required this.connectionStatus,
+    required this.dispatchable,
+    required this.isLoaded,
+    required this.isError,
+    required this.batteryLevel,
+    this.x,
+    this.y,
+    this.angle,
+    this.remainingTime,
+    this.currentOrderId,
+    this.currentOrderState,
+    this.alarms = const [],
+  });
+
+  final String vehicleId;
+  final String? model;
+  final String? currentMap;
+  final String? currentStation;
+  final String? lastStation;
+  final int connectionStatus;
+  final bool dispatchable;
+  final bool isLoaded;
+  final bool isError;
+  final double batteryLevel;
+  final double? x;
+  final double? y;
+  final double? angle;
+  final double? remainingTime;
+  final String? currentOrderId;
+  final String? currentOrderState;
+  final List<String> alarms;
+
+  bool get isConnected => connectionStatus == 1;
+
+  factory RobotTelemetry.fromJson(JsonMap json) => RobotTelemetry(
+    vehicleId: json['vehicleId'] as String? ?? json['vehicle_id'] as String? ?? '',
+    model: json['model'] as String?,
+    currentMap: json['currentMap'] as String? ?? json['current_map'] as String?,
+    currentStation: json['currentStation'] as String? ?? json['current_station'] as String?,
+    lastStation: json['lastStation'] as String? ?? json['last_station'] as String?,
+    connectionStatus: _integer(json['connectionStatus'] ?? json['connection_status']),
+    dispatchable: json['dispatchable'] as bool? ?? false,
+    isLoaded: json['isLoaded'] as bool? ?? false,
+    isError: json['isError'] as bool? ?? json['is_error'] as bool? ?? false,
+    batteryLevel: _decimal(json['batteryLevel'] ?? json['battery_level']) ?? 0.0,
+    x: _decimal(json['x']),
+    y: _decimal(json['y']),
+    angle: _decimal(json['angle']),
+    remainingTime: _decimal(json['remainingTime'] ?? json['remaining_time']),
+    currentOrderId: json['currentOrderId'] as String? ?? json['current_order_id'] as String?,
+    currentOrderState: json['currentOrderState'] as String? ?? json['current_order_state'] as String?,
+    alarms: _strings(json['alarms']),
   );
 }
 

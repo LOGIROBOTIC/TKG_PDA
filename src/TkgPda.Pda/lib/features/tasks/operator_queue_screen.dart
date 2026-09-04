@@ -48,12 +48,124 @@ class OperatorQueueScreen extends StatelessWidget {
                           controller.setOperatorQueueTerminal(values.single),
               ),
             ),
+            _RobotStatusBar(controller: controller),
             Expanded(child: _QueueBody(controller: controller)),
           ],
         ),
       ),
     ),
   );
+}
+
+class _RobotStatusBar extends StatelessWidget {
+  const _RobotStatusBar({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final robots = controller.robots;
+    if (robots.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      key: const Key('robot-status-bar'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final robot in robots)
+          _RobotCard(controller: controller, robot: robot),
+      ],
+    );
+  }
+}
+
+class _RobotCard extends StatelessWidget {
+  const _RobotCard({required this.controller, required this.robot});
+
+  final AppController controller;
+  final RobotTelemetry robot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final batteryPct = (robot.batteryLevel * 100).toInt();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              Icons.precision_manufacturing,
+              color: robot.isConnected ? Colors.green.shade700 : Colors.grey,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              robot.vehicleId,
+              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.battery_std, size: 14),
+                  const SizedBox(width: 2),
+                  Text('$batteryPct%', style: theme.textTheme.labelSmall),
+                ],
+              ),
+            ),
+            if (robot.currentStation case final station?) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  station,
+                  style: theme.textTheme.labelSmall,
+                ),
+              ),
+            ],
+            const Spacer(),
+            if (robot.alarms.isNotEmpty)
+              IconButton(
+                key: Key('clear-robot-errors-${robot.vehicleId}'),
+                icon: const Icon(Icons.build, size: 18, color: Colors.orange),
+                tooltip: 'Hataları Temizle',
+                onPressed: () => controller.clearRobotErrors([robot.vehicleId]),
+              ),
+            IconButton(
+              key: Key('pause-resume-robot-${robot.vehicleId}'),
+              icon: Icon(
+                robot.dispatchable ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              tooltip: robot.dispatchable ? 'Robotu Duraklat' : 'Robotu Devam Ettir',
+              onPressed: () => robot.dispatchable
+                  ? controller.pauseRobot([robot.vehicleId])
+                  : controller.resumeRobot([robot.vehicleId]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _QueueBody extends StatelessWidget {
@@ -96,7 +208,10 @@ class _QueueBody extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               itemCount: items.length,
               separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) => _QueueCard(item: items[index]),
+              itemBuilder: (context, index) => _QueueCard(
+                controller: controller,
+                item: items[index],
+              ),
             ),
           ),
         ),
@@ -140,32 +255,107 @@ class _QueueBody extends StatelessWidget {
 }
 
 class _QueueCard extends StatelessWidget {
-  const _QueueCard({required this.item});
+  const _QueueCard({
+    required this.controller,
+    required this.item,
+  });
 
+  final AppController controller;
   final OperatorQueueItem item;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      leading: CircleAvatar(child: Text('${item.queuePosition}')),
-      title: Text(
-        item.machine,
-        style: const TextStyle(fontWeight: FontWeight.w900),
+  Widget build(BuildContext context) {
+    final robotInfo = item.agvId != null && item.agvId!.isNotEmpty
+        ? ' · Robot: ${item.agvId}'
+        : '';
+    final canCancel = !controller.operatorQueueTerminal &&
+        item.requestId != null &&
+        _isCancelable(item.state);
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(child: Text('${item.queuePosition}')),
+        title: Text(
+          item.machine,
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.part),
+            Text(
+              '${item.logicalContainerNumber == null ? 'Kasa' : '${item.logicalContainerNumber}. Kasa'} · ${item.businessAction}$robotInfo',
+            ),
+            Text(_requestTime(item.requestedAt)),
+            Text(
+              _etaText(item),
+              style: TextStyle(
+                color: item.etaState == 'AVAILABLE'
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+                fontWeight: item.etaState == 'AVAILABLE'
+                    ? FontWeight.w600
+                    : null,
+              ),
+            ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Chip(label: Text(_stateText(item.state))),
+            if (canCancel) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                key: Key('cancel-queue-${item.requestId}'),
+                icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                tooltip: 'Görevi İptal Et',
+                onPressed: controller.mutationEnabled && !controller.busy
+                    ? () => _confirmCancel(context)
+                    : null,
+              ),
+            ],
+          ],
+        ),
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(item.part),
-          Text(
-            '${item.logicalContainerNumber == null ? 'Kasa' : '${item.logicalContainerNumber}. Kasa'} · ${item.businessAction}',
+    );
+  }
+
+  bool _isCancelable(String state) => switch (state) {
+    'WAITING_PREPARATION' || 'REQUESTED' || 'QUEUED' || 'ROBOT_ASSIGNED' || 'IN_PROGRESS' => true,
+    _ => false,
+  };
+
+  Future<void> _confirmCancel(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Taşıma İptali'),
+        content: Text(
+          '${item.machine} hücresine ait ${item.part} taşıma talebini iptal etmek istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('dismiss-cancel-queue'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Vazgeç'),
           ),
-          Text(_requestTime(item.requestedAt)),
-          Text(_etaText(item)),
+          ElevatedButton(
+            key: const Key('confirm-cancel-queue'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('İptal Et'),
+          ),
         ],
       ),
-      trailing: Chip(label: Text(_stateText(item.state))),
-    ),
-  );
+    );
+
+    if (confirmed == true && item.requestId != null) {
+      await controller.cancelQueueItem(item.requestId!);
+    }
+  }
 }
 
 String _requestTime(DateTime value) {
@@ -183,6 +373,7 @@ String _etaText(OperatorQueueItem item) {
 }
 
 String _stateText(String state) => switch (state) {
+  'WAITING_PREPARATION' => 'Hazırlık Bekleniyor',
   'REQUESTED' => 'İstendi',
   'QUEUED' => 'Sırada',
   'ROBOT_ASSIGNED' => 'Robot atandı',
@@ -192,3 +383,4 @@ String _stateText(String state) => switch (state) {
   'CANCELLED' => 'İptal',
   _ => 'Güncelleniyor',
 };
+

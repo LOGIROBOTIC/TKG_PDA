@@ -33,15 +33,23 @@ class OperationScreen extends StatelessWidget {
               : '${controller.selectedMachine!.code} · Parça ve İşlem',
         ),
         actions: [
-          if (!controller.batchMode)
-            IconButton(
-              key: const Key('enter-batch-selection'),
-              tooltip: 'Birden Fazla Parça Seç',
-              onPressed: controller.busy
-                  ? null
-                  : controller.enterBatchSelection,
-              icon: const Icon(Icons.playlist_add),
+          IconButton(
+            key: const Key('enter-batch-selection'),
+            tooltip: controller.batchMode
+                ? 'Toplu Seçim Modunu Kapat'
+                : 'Birden Fazla Parça / Toplu Mod',
+            onPressed: controller.busy ? null : controller.toggleBatchMode,
+            icon: Badge(
+              isLabelVisible: controller.batchCart.isNotEmpty,
+              label: Text('${controller.batchCart.length}'),
+              child: Icon(
+                controller.batchMode
+                    ? Icons.playlist_add_check
+                    : Icons.playlist_add,
+                color: controller.batchMode ? Colors.amberAccent : null,
+              ),
             ),
+          ),
           IconButton(
             key: const Key('open-operator-queue-from-machine'),
             tooltip: 'Görevler',
@@ -81,10 +89,10 @@ class OperationScreen extends StatelessWidget {
             if (controller.isConfiguringBatchItem)
               _BatchConfiguringBanner(controller: controller),
             Expanded(
-              child: controller.batchMode && !controller.isConfiguringBatchItem
-                  ? MultiPartBatchWorkspace(controller: controller)
-                  : _PartFirstWithBatchSkip(controller: controller),
+              child: _PartFirstWithBatchSkip(controller: controller),
             ),
+            if (controller.batchMode || controller.batchCart.isNotEmpty)
+              BatchCartTray(controller: controller),
             if (controller.busy) const LinearProgressIndicator(minHeight: 5),
           ],
         ),
@@ -296,4 +304,153 @@ class _AmbiguousBatchBanner extends StatelessWidget {
       ],
     ),
   );
+}
+
+class BatchCartTray extends StatefulWidget {
+  const BatchCartTray({required this.controller, super.key});
+
+  final AppController controller;
+
+  @override
+  State<BatchCartTray> createState() => _BatchCartTrayState();
+}
+
+class _BatchCartTrayState extends State<BatchCartTray> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final cart = controller.batchCart;
+    final theme = Theme.of(context);
+
+    return Material(
+      key: const Key('batch-cart-tray'),
+      elevation: 8,
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.shopping_cart_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: cart.isEmpty
+                          ? null
+                          : () => setState(() => _expanded = !_expanded),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                'Toplu Taşıma Sepeti',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                key: const Key('batch-cart-count'),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${cart.length}',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onPrimary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            cart.isEmpty
+                                ? 'Parça ve kasa butonuna basarak ekleyin'
+                                : '${cart.length} kasa hazır · Detaylar için dokunun',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: theme.hintColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (cart.isNotEmpty) ...[
+                    TextButton(
+                      key: const Key('batch-clear-cart'),
+                      onPressed: controller.busy
+                          ? null
+                          : controller.exitBatchSelection,
+                      child: const Text('Temizle'),
+                    ),
+                    const SizedBox(width: 4),
+                    FilledButton.icon(
+                      key: const Key('batch-submit'),
+                      onPressed: controller.canReviewBatch && !controller.busy
+                          ? controller.submitBatch
+                          : null,
+                      icon: const Icon(Icons.send, size: 16),
+                      label: const Text('Tümünü Gönder'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (_expanded && cart.isNotEmpty)
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  itemCount: cart.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = cart[index];
+                    final actionText = item.actionCode == 'FULL'
+                        ? 'Dolu Kasa'
+                        : 'Boş Kasa';
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${item.effectivePart.partCode} · ${item.slotDisplayName}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(actionText),
+                      trailing: IconButton(
+                        key: Key('batch-remove-item-${item.cartItemId}'),
+                        tooltip: 'Sepetten Çıkar',
+                        icon: const Icon(
+                          Icons.close,
+                          size: 18,
+                          color: Colors.redAccent,
+                        ),
+                        onPressed: () =>
+                            controller.removePartFromBatch(item.cartItemId),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

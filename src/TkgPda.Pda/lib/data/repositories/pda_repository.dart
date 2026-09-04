@@ -74,6 +74,13 @@ abstract interface class PdaDataSource {
 
   /// Customer Monitoring — Robot Alarm Visibility.
   Future<RobotAlarmSummary> robotAlarmSummary();
+
+  /// Real RDSCore Telemetry & Control (Phase 4).
+  Future<List<RobotTelemetry>> robots();
+  Future<void> pauseRobot([List<String>? vehicles]);
+  Future<void> resumeRobot([List<String>? vehicles]);
+  Future<void> clearRobotErrors([List<String>? vehicles]);
+  Future<void> setRequestPriority(String requestId, int priority);
 }
 
 class PdaRepository implements PdaDataSource {
@@ -339,6 +346,37 @@ class PdaRepository implements PdaDataSource {
   Future<RobotAlarmSummary> robotAlarmSummary() async {
     final response = await _api.get('/api/v1/rds/robot-alarm-summary');
     return RobotAlarmSummary.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<List<RobotTelemetry>> robots() async {
+    final response = await _api.get('/api/v1/rds/robots');
+    final map = _json(response.body);
+    final values = map['robots'] is List ? map['robots'] as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(RobotTelemetry.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> pauseRobot([List<String>? vehicles]) async {
+    await _api.post('/api/v1/rds/robots/pause', body: {'vehicles': vehicles});
+  }
+
+  @override
+  Future<void> resumeRobot([List<String>? vehicles]) async {
+    await _api.post('/api/v1/rds/robots/resume', body: {'vehicles': vehicles});
+  }
+
+  @override
+  Future<void> clearRobotErrors([List<String>? vehicles]) async {
+    await _api.post('/api/v1/rds/robots/clear-errors', body: {'vehicles': vehicles});
+  }
+
+  @override
+  Future<void> setRequestPriority(String requestId, int priority) async {
+    await _api.post('/api/v1/transport-requests/$requestId/priority', body: {'priority': priority});
   }
 
   static JsonMap _json(Object? body) =>

@@ -298,6 +298,33 @@ public sealed record RdsCoreTerminateResult(
     string? Message,
     JsonElement? RawResponse);
 
+public sealed record RdsCoreSimpleResult(
+    bool HttpAccepted,
+    bool CoreAccepted,
+    int HttpStatusCode,
+    int? Code,
+    string? Message,
+    JsonElement? RawResponse);
+
+public sealed record RdsCoreRobotTelemetry(
+    string VehicleId,
+    string? Model,
+    string? CurrentMap,
+    string? CurrentStation,
+    string? LastStation,
+    int ConnectionStatus,
+    bool Dispatchable,
+    bool IsLoaded,
+    bool IsError,
+    double BatteryLevel,
+    double? X,
+    double? Y,
+    double? Angle,
+    double? RemainingTime,
+    string? CurrentOrderId,
+    string? CurrentOrderState,
+    IReadOnlyList<string> Alarms);
+
 public interface IRdsCoreNativeOrderClient
 {
     bool MutationEnabled { get; }
@@ -309,6 +336,14 @@ public interface IRdsCoreNativeOrderClient
     Task<RdsCoreOrderDetails> GetOrderDetailsByBlockIdAsync(string blockId, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreBlockDetails> GetBlockDetailsByIdAsync(string blockId, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreTerminateResult> TerminateAsync(string orderId, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> SetPriorityAsync(string orderId, int priority, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> ClearRobotAllErrorAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> GotoSitePauseAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> GotoSiteResumeAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
 }
 
 public sealed class RdsCoreNativeOrderException(string code, string message, Exception? innerException = null)

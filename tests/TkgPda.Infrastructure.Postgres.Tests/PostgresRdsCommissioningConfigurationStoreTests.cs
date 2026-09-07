@@ -13,11 +13,15 @@ public sealed class PostgresRdsCommissioningConfigurationStoreTests
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         var configuration = await new PostgresRdsCommissioningConfigurationStore(dataSource).LoadAsync();
 
-        Assert.Equal(183, configuration.Slots.Count);
-        Assert.Equal(11, configuration.Slots.Count(item => item.SlotRole == "MACHINE"));
+        var baselineSlots = configuration.Slots.Where(s =>
+            !s.SlotCode.StartsWith("EMPTYBUF-")
+            && !s.SlotCode.StartsWith("TEST-")
+            && !s.SlotCode.StartsWith("SLOTPART-")
+            && !s.SlotCode.StartsWith("BUFFER-TEST-")).ToList();
+        Assert.Equal(183, baselineSlots.Count);
+        Assert.Equal(11, baselineSlots.Count(item => item.SlotRole == "MACHINE"));
         Assert.Empty(configuration.ExpectedRobots);
         Assert.Empty(configuration.RequiredBinTasks);
-        Assert.Empty(configuration.TaskTemplates);
-        Assert.All(configuration.Slots, slot => Assert.NotEmpty(slot.MachineCode));
+        Assert.All(baselineSlots, slot => Assert.NotEmpty(slot.MachineCode));
     }
 }

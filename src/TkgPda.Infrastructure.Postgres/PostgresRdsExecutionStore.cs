@@ -180,8 +180,8 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                        AND sgm.slot_group_id = template.destination_slot_group_id AND ls.layout_id = r.layout_id)
                    OR (r.destination_slot_id IS NULL AND template.destination_slot_group_id IS NULL
                        AND ls.layout_id = r.layout_id AND ls.is_enabled AND (
-                           (tt.code = 'REMOVE_FULL' AND ls.slot_role IN ('DROP', 'FULL_STORAGE'))
-                           OR (tt.code = 'REMOVE_EMPTY' AND ls.slot_role IN ('EMPTY_STORAGE', 'DROP'))
+                           (tt.code = 'REMOVE_FULL' AND ls.slot_role = 'DROP')
+                           OR (tt.code = 'REMOVE_EMPTY' AND ls.slot_role = 'EMPTY_STORAGE')
                        ))
                 ORDER BY CASE WHEN ls.id = r.destination_slot_id THEN 0 ELSE 1 END,
                          sgm.priority, ls.display_order, ls.id
@@ -411,35 +411,27 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
     public async Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(
         Guid? profileId,
         Guid variantId,
+        Guid machineId,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        string sql;
-        NpgsqlCommand command;
-        if (profileId.HasValue)
-        {
-            sql =
-                """
-                SELECT np.id, np.code, np.name, np.status, np.robot_map_name, np.config_json::text
-                FROM master.navigation_profiles np
-                WHERE np.id = @profile_id
-                """;
-            command = new NpgsqlCommand(sql, connection);
-            command.Parameters.AddWithValue("profile_id", profileId.Value);
-        }
-        else
-        {
-            sql =
-                """
-                SELECT np.id, np.code, np.name, np.status, np.robot_map_name, np.config_json::text
-                FROM master.variant_navigation_profile_assignments vna
-                JOIN master.navigation_profiles np ON np.id = vna.navigation_profile_id AND np.machine_id = vna.machine_id
-                WHERE vna.variant_id = @variant_id AND vna.is_default AND np.status = 'PUBLISHED'
-                LIMIT 1
-                """;
-            command = new NpgsqlCommand(sql, connection);
-            command.Parameters.AddWithValue("variant_id", variantId);
-        }
+        const string sql =
+            """
+            SELECT np.id, np.code, np.name, np.status, np.robot_map_name, np.config_json::text
+            FROM master.variant_navigation_profile_assignments vna
+            JOIN master.navigation_profiles np ON np.id = vna.navigation_profile_id AND np.machine_id = vna.machine_id
+            WHERE vna.variant_id = @variant_id
+              AND vna.machine_id = @machine_id
+              AND np.machine_id = @machine_id
+              AND np.status = 'PUBLISHED'
+              AND (@profile_id::uuid IS NULL OR np.id = @profile_id)
+            ORDER BY (vna.is_default) DESC, np.id
+            LIMIT 1
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("variant_id", variantId);
+        command.Parameters.AddWithValue("machine_id", machineId);
+        command.Parameters.Add(new NpgsqlParameter("profile_id", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)profileId ?? DBNull.Value });
 
         await using (command)
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -555,6 +547,28 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         Json(reader.GetString(9)), reader.GetBoolean(10), WorkflowCode.ParseTransportStatus(reader.GetString(11)));
 
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();
+    public async Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default)
+    {
+        const string sql =
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM audit.audit_logs
+                WHERE entity_type = 'TRANSPORT_REQUEST'
+                  AND entity_id = @request_id
+                  AND action = 'MAP_PREP_LOCK_ACQUIRED'
+            ) AND NOT EXISTS (
+                SELECT 1 FROM audit.audit_logs
+                WHERE entity_type = 'TRANSPORT_REQUEST'
+                  AND entity_id = @request_id
+                  AND action = 'MAP_PREP_LOCK_RELEASED'
+            );
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("request_id", requestId.ToString());
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
+    }
+
     private static Guid? Uuid(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetGuid(ordinal);
     private static string? Text(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     private static int? Number(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetInt32(ordinal);

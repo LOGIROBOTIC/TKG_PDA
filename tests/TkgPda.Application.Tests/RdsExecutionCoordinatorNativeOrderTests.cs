@@ -403,6 +403,167 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.Equal(RequestId.ToString("D"), fixture.NativeClient.LastOrder?.Id);
     }
 
+    [Fact]
+    public async Task ExecutionMode_missing_fails_closed_with_EXECUTION_MODE_UNRESOLVED()
+    {
+        var fixture = Fixture();
+        fixture.Store.Context = Context(TransportReadinessState.Ready, executionMode: null);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("EXECUTION_MODE_UNRESOLVED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+        Assert.Equal(0, fixture.ExecutionClient.CreateCount);
+    }
+
+    [Fact]
+    public async Task ExecutionMode_invalid_fails_closed_with_EXECUTION_MODE_INVALID()
+    {
+        var fixture = Fixture();
+        fixture.Store.Context = Context(TransportReadinessState.Ready, executionMode: "INVALID_MODE");
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("EXECUTION_MODE_INVALID", result.Code);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+        Assert.Equal(0, fixture.ExecutionClient.CreateCount);
+    }
+
+    [Fact]
+    public async Task Unmapped_variant_fails_closed_with_NAVIGATION_PROFILE_UNRESOLVED()
+    {
+        var fixture = Fixture();
+        fixture.Store.NavigationProfileSummary = null;
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("NAVIGATION_PROFILE_UNRESOLVED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
+    }
+
+    [Fact]
+    public async Task Wrong_machine_or_different_variant_never_resolves_profile()
+    {
+        var fixture = Fixture();
+        var expectedVariant = Guid.NewGuid();
+        var wrongVariant = Guid.NewGuid();
+        fixture.Store.ExpectedVariantId = expectedVariant;
+        fixture.Store.Context = Context(TransportReadinessState.Ready, variantId: wrongVariant);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("NAVIGATION_PROFILE_UNRESOLVED", result.Code);
+    }
+
+    [Fact]
+    public async Task Switch_transition_unconfirmed_when_robot_station_does_not_match_transition_station()
+    {
+        var fixture = Fixture();
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak";
+        fixture.NativeClient.CurrentRobotStation = "AP21";
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        // Prep order finished, but robot telemetry reports current_station still at AP21 (not SM11)
+        fixture.NativeClient.TransitionOrderState = RdsCoreKnownOrderState.Finished;
+        fixture.NativeClient.CurrentRobotStation = "AP21";
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("SWITCH_TRANSITION_NOT_CONFIRMED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.LockCount);
+        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
+    }
+
+    [Fact]
+    public async Task Switch_transition_unconfirmed_when_robot_has_alarm_at_transition_station()
+    {
+        var fixture = Fixture();
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak";
+        fixture.NativeClient.CurrentRobotStation = "SM11";
+        fixture.NativeClient.TransitionOrderState = RdsCoreKnownOrderState.Finished;
+        fixture.NativeClient.RobotIsError = true;
+        fixture.NativeClient.RobotAlarms.Add("BLOCKING_SENSOR_FAULT");
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("ROBOT_HAS_BLOCKING_ALARM", result.Code);
+        Assert.Equal(0, fixture.NativeClient.LockCount);
+        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
+    }
+
+    [Fact]
+    public async Task Crash_recovery_scenario_A_lock_acquired_before_switchMap_crashed_fails_closed()
+    {
+        var fixture = Fixture();
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak";
+        fixture.NativeClient.RobotDispatchable = true;
+        fixture.Store.HasUnreleasedLock = true;
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Fact]
+    public async Task Crash_recovery_scenario_B_C_D_post_switchMap_unreleased_lock_is_safely_unlocked_and_dispatched()
+    {
+        var fixture = Fixture();
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.Store.HasUnreleasedLock = true;
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.True(result.Dispatched);
+        Assert.Equal(1, fixture.NativeClient.UnlockCount);
+        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
+        Assert.Equal(1, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Fact]
+    public async Task Locked_robot_without_proven_TKG_lock_ownership_never_blindly_unlocked()
+    {
+        var fixture = Fixture();
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.Store.HasUnreleasedLock = false;
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-A", "DEV-MAP-A", "ACTIVE", "26.7.2026_map_optimak", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("ROBOT_NOT_DISPATCHABLE", result.Code);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
     private static NativeTestFixture Fixture(
         TransportRequestStatus requestStatus = TransportRequestStatus.Queued,
         TransportReadinessState readinessState = TransportReadinessState.Ready,
@@ -410,7 +571,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         bool cancellationRequested = false,
         RdsExecutionMode mode = RdsExecutionMode.RdsCoreNativeOrder)
     {
-        var context = Context(readinessState: readinessState);
+        var executionMode = mode == RdsExecutionMode.WindTask ? "WIND_TASK" : "RDSCORE_NATIVE_ORDER";
+        var context = Context(readinessState: readinessState, executionMode: executionMode);
         var store = new FakeNativeStore
         {
             Context = context,
@@ -448,22 +610,36 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         return new(coordinator, store, workflowStore, executionClient, nativeClient);
     }
 
-    private static RdsDispatchContext Context(TransportReadinessState readinessState) => new(
+    private static RdsDispatchContext Context(
+        TransportReadinessState readinessState,
+        string? executionMode = "RDSCORE_NATIVE_ORDER",
+        Guid? variantId = null,
+        Guid? machineId = null) => new(
         new TransportRequestSnapshot(
             RequestId, 1, "test-key", TransportRequestStatus.Queued, TransportTaskType.BringEmpty,
-            RequestOrigin.Api, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            RequestOrigin.Api, Guid.NewGuid(), machineId ?? Guid.NewGuid(), variantId ?? Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 100,
             readinessState, null),
         "SH-01-A", "V1", "71550", "715A2", "KCK", Guid.NewGuid(),
         "TKG_TRANSPORT", 100,
-        JsonSerializer.SerializeToElement(new
-        {
-            rdsInputBindings = new[]
+        executionMode is not null
+            ? JsonSerializer.SerializeToElement(new
             {
-                new { param = "fromSite", source = "SOURCE_RDS_SITE_ID", required = true, value = (string?)null },
-                new { param = "toSite", source = "DESTINATION_RDS_SITE_ID", required = true, value = (string?)null }
-            }
-        }),
+                executionMode = executionMode,
+                rdsInputBindings = new[]
+                {
+                    new { param = "fromSite", source = "SOURCE_RDS_SITE_ID", required = true, value = (string?)null },
+                    new { param = "toSite", source = "DESTINATION_RDS_SITE_ID", required = true, value = (string?)null }
+                }
+            })
+            : JsonSerializer.SerializeToElement(new
+            {
+                rdsInputBindings = new[]
+                {
+                    new { param = "fromSite", source = "SOURCE_RDS_SITE_ID", required = true, value = (string?)null },
+                    new { param = "toSite", source = "DESTINATION_RDS_SITE_ID", required = true, value = (string?)null }
+                }
+            }),
         new RdsDispatchEndpoint(Guid.NewGuid(), "SOURCE_STATION", "GRP", "STAGING", "SOURCE_STATION", 1, 0, 0, 0, 0, DateTimeOffset.UtcNow, true),
         new RdsDispatchEndpoint(Guid.NewGuid(), "DEST_STATION", "GRP", "STAGING", "DEST_STATION", 1, 0, 0, 0, 0, DateTimeOffset.UtcNow, true));
 
@@ -498,6 +674,10 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             "Sfl-Cbd15",
             JsonDocument.Parse("{}").RootElement);
 
+        public bool HasUnreleasedLock { get; set; } = false;
+        public Guid? ExpectedVariantId { get; set; }
+        public Guid? ExpectedMachineId { get; set; }
+
         public Task<IReadOnlyList<Guid>> ListQueuedRequestIdsAsync(int limit, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Guid>>([RequestId]);
         public Task<IReadOnlyList<RdsTaskProjection>> ListActiveTasksAsync(int limit, CancellationToken cancellationToken = default) =>
@@ -526,8 +706,14 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             Task.CompletedTask;
         public Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default) =>
             Task.FromResult<RdsMappedWorkSite?>(null);
-        public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? navigationProfileId, Guid machineId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(NavigationProfileSummary);
+        public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default)
+        {
+            if (ExpectedVariantId.HasValue && variantId != ExpectedVariantId.Value) return Task.FromResult<RdsNavigationProfileSummary?>(null);
+            if (ExpectedMachineId.HasValue && machineId != ExpectedMachineId.Value) return Task.FromResult<RdsNavigationProfileSummary?>(null);
+            return Task.FromResult(NavigationProfileSummary);
+        }
+        public Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default) =>
+            Task.FromResult(HasUnreleasedLock);
         public Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RdsTaskTemplateSummary>>([]);
         public Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default) =>
@@ -668,6 +854,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         {
             LockCount++;
             if (LockError is not null) throw LockError;
+            RobotDispatchable = false;
             return Task.FromResult(new RdsCoreSimpleResult(true, true, 200, 0, "ok", JsonDocument.Parse("{}").RootElement));
         }
 
@@ -675,6 +862,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         {
             UnlockCount++;
             if (UnlockError is not null) throw UnlockError;
+            RobotDispatchable = true;
             return Task.FromResult(new RdsCoreSimpleResult(true, true, 200, 0, "ok", JsonDocument.Parse("{}").RootElement));
         }
 

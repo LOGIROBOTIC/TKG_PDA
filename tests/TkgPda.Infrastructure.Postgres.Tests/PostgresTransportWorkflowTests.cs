@@ -248,6 +248,199 @@ public sealed class PostgresTransportWorkflowTests
     }
 
     [PostgresFact]
+    public async Task Endpoint_resolution_REMOVE_EMPTY_resolves_strictly_to_EMPTY_STORAGE_never_DROP()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        var machineSlots = await LogisticsSlotsAsync(context.LayoutId, 3);
+        await SetSlotAsync(machineSlots[0], OccupancyState.Occupied, LoadState.Empty);
+        await SetSlotAsync(machineSlots[1], OccupancyState.Occupied, LoadState.Full);
+        await SetSlotAsync(machineSlots[2], OccupancyState.Vacant, LoadState.Unknown);
+
+        // Create an EMPTY_STORAGE slot and map it
+        var emptyStorageSlotId = await ScalarAsync<Guid>(
+            """
+            INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, is_enabled, display_order)
+            VALUES (@layout_id, 'TEST-EMPTY-BUF', 'Empty Buffer', 'EMPTY_STORAGE', true, -1000)
+            RETURNING id
+            """,
+            ("layout_id", context.LayoutId));
+        var emptyWorkSiteId = await ScalarAsync<Guid>(
+            """
+            INSERT INTO integration.rds_worksites (rds_site_id, rds_type, last_filled, last_locked, last_disabled, last_sync_failed, last_sync_at, raw_state_json)
+            VALUES ('WS-EMPTY-STORAGE-TEST', 1, 0, 0, 0, 0, now(), '{"siteId":"WS-EMPTY-STORAGE-TEST"}'::jsonb)
+            RETURNING id
+            """);
+        await ExecuteAsync(
+            "INSERT INTO integration.layout_slot_rds_mapping (layout_slot_id, rds_worksite_id) VALUES (@slot_id, @worksite_id)",
+            ("slot_id", emptyStorageSlotId),
+            ("worksite_id", emptyWorkSiteId));
+
+        // Create a DROP slot and map it
+        var dropSlotId = await ScalarAsync<Guid>(
+            """
+            INSERT INTO master.layout_slots (layout_id, code, display_name, slot_role, is_enabled, display_order)
+            VALUES (@layout_id, 'TEST-DROP-AREA', 'Drop Area', 'DROP', true, -900)
+            RETURNING id
+            """,
+            ("layout_id", context.LayoutId));
+        var dropWorkSiteId = await ScalarAsync<Guid>(
+            """
+            INSERT INTO integration.rds_worksites (rds_site_id, rds_type, last_filled, last_locked, last_disabled, last_sync_failed, last_sync_at, raw_state_json)
+            VALUES ('WS-DROP-TEST', 1, 0, 0, 0, 0, now(), '{"siteId":"WS-DROP-TEST"}'::jsonb)
+            RETURNING id
+            """);
+        await ExecuteAsync(
+            "INSERT INTO integration.layout_slot_rds_mapping (layout_slot_id, rds_worksite_id) VALUES (@slot_id, @worksite_id)",
+            ("slot_id", dropSlotId),
+            ("worksite_id", dropWorkSiteId));
+
+        await ExecuteAsync(
+            """
+            INSERT INTO master.task_templates (
+                variant_id, task_type_id, rds_task_label, priority, config_json, is_active)
+            SELECT @variant_id, id, 'TKG_' || code, 10,
+                   '{"testScope":"P08B","executionMode":"RDSCORE_NATIVE_ORDER","rdsInputBindings":[{"param":"fromSite","source":"SOURCE_RDS_SITE_ID","required":true}]}'::jsonb,
+                   true
+            FROM master.task_types WHERE code IN ('REMOVE_EMPTY', 'REMOVE_FULL', 'BRING_EMPTY')
+            """,
+            ("variant_id", context.VariantId));
+
+        try
+        {
+            await using var workflowStore = new PostgresTransportWorkflowStore(_connectionString);
+            await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+            var executionStore = new PostgresRdsExecutionStore(dataSource);
+
+            // 1. REMOVE_EMPTY without destination -> must resolve to EMPTY_STORAGE, NEVER DROP
+            await SetSlotAsync(emptyStorageSlotId, OccupancyState.Vacant, LoadState.Unknown);
+            var removeEmptyReq = await workflowStore.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveEmpty, "re-test", source: machineSlots[0]));
+            var removeEmptyDispatch = await executionStore.GetDispatchContextAsync(removeEmptyReq.Request.Id);
+            Assert.NotNull(removeEmptyDispatch);
+            Assert.Equal("EMPTY_STORAGE", removeEmptyDispatch.Destination.SlotRole);
+            Assert.Equal("WS-EMPTY-STORAGE-TEST", removeEmptyDispatch.Destination.SiteId);
+            Assert.NotEqual("DROP", removeEmptyDispatch.Destination.SlotRole);
+            Assert.NotEqual("WS-DROP-TEST", removeEmptyDispatch.Destination.SiteId);
+
+            // 2. REMOVE_FULL without destination -> must resolve to DROP, NEVER EMPTY_STORAGE
+            var removeFullReq = await workflowStore.CreateAndQueueAsync(Command(context, TransportTaskType.RemoveFull, "rf-test", source: machineSlots[1]));
+            var removeFullDispatch = await executionStore.GetDispatchContextAsync(removeFullReq.Request.Id);
+            Assert.NotNull(removeFullDispatch);
+            Assert.Equal("DROP", removeFullDispatch.Destination.SlotRole);
+            Assert.Equal("WS-DROP-TEST", removeFullDispatch.Destination.SiteId);
+            Assert.NotEqual("EMPTY_STORAGE", removeFullDispatch.Destination.SlotRole);
+            Assert.NotEqual("WS-EMPTY-STORAGE-TEST", removeFullDispatch.Destination.SiteId);
+
+            // 3. BRING_EMPTY without source -> must resolve source to EMPTY_STORAGE
+            await ExecuteAsync("UPDATE ops.transport_requests SET status = 'CANCELLED' WHERE id = @id", ("id", removeEmptyReq.Request.Id));
+            await SetSlotAsync(emptyStorageSlotId, OccupancyState.Occupied, LoadState.Empty);
+            var bringEmptyReq = await workflowStore.CreateAndQueueAsync(Command(context, TransportTaskType.BringEmpty, "be-test", destination: machineSlots[2]));
+            var bringEmptyDispatch = await executionStore.GetDispatchContextAsync(bringEmptyReq.Request.Id);
+            Assert.NotNull(bringEmptyDispatch);
+            Assert.Equal("EMPTY_STORAGE", bringEmptyDispatch.Source.SlotRole);
+            Assert.Equal("WS-EMPTY-STORAGE-TEST", bringEmptyDispatch.Source.SiteId);
+        }
+        finally
+        {
+            await ExecuteAsync(
+                """
+                DELETE FROM ops.transport_requests WHERE source_slot_id IN (@empty_id, @drop_id) OR destination_slot_id IN (@empty_id, @drop_id);
+                DELETE FROM integration.layout_slot_rds_mapping WHERE layout_slot_id IN (@empty_id, @drop_id);
+                DELETE FROM master.layout_slots WHERE id IN (@empty_id, @drop_id);
+                DELETE FROM master.task_templates WHERE variant_id = @variant_id AND config_json ->> 'testScope' = 'P08B';
+                DELETE FROM integration.rds_worksites WHERE id IN (@empty_ws_id, @drop_ws_id);
+                """,
+                ("empty_id", emptyStorageSlotId),
+                ("drop_id", dropSlotId),
+                ("variant_id", context.VariantId),
+                ("empty_ws_id", emptyWorkSiteId),
+                ("drop_ws_id", dropWorkSiteId));
+        }
+    }
+
+    [PostgresFact]
+    public async Task Navigation_profile_fails_closed_and_never_leaks_unmapped_or_other_variants()
+    {
+        await ResetAsync();
+        var context = await ConfigureAsync("SH-01-A", "1");
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var executionStore = new PostgresRdsExecutionStore(dataSource);
+
+        // Create a published navigation profile for this machine
+        var profileId = await ScalarAsync<Guid>(
+            """
+            INSERT INTO master.navigation_profiles (
+                code, name, machine_id, robot_map_name, config_json, status)
+            VALUES ('NAV-V1', 'Profile V1', @machine_id, 'map_v1', '{"switchTransitionStation":"SM11","vehicle":"Sfl-Cbd15"}'::jsonb, 'PUBLISHED')
+            RETURNING id
+            """,
+            ("machine_id", context.MachineId));
+
+        try
+        {
+            // Before assignment: unmapped variant must return null (fail closed)
+            var unresolved = await executionStore.GetNavigationProfileSummaryAsync(null, context.VariantId, context.MachineId);
+            Assert.Null(unresolved);
+
+            // Assign to variant
+            await ExecuteAsync(
+                """
+                INSERT INTO master.variant_navigation_profile_assignments (
+                    variant_id, machine_id, navigation_profile_id, is_default)
+                VALUES (@variant_id, @machine_id, @profile_id, true)
+                """,
+                ("variant_id", context.VariantId),
+                ("machine_id", context.MachineId),
+                ("profile_id", profileId));
+
+            // Exact match resolves
+            var resolved = await executionStore.GetNavigationProfileSummaryAsync(null, context.VariantId, context.MachineId);
+            Assert.NotNull(resolved);
+            Assert.Equal("NAV-V1", resolved.Code);
+            Assert.Equal("map_v1", resolved.RobotMapName);
+
+            // Different variant never leaks this profile (returns null)
+            var otherVariantId = Guid.NewGuid();
+            var otherVariantResult = await executionStore.GetNavigationProfileSummaryAsync(null, otherVariantId, context.MachineId);
+            Assert.Null(otherVariantResult);
+
+            // Different machine never resolves this profile (returns null)
+            var otherMachineId = Guid.NewGuid();
+            var otherMachineResult = await executionStore.GetNavigationProfileSummaryAsync(null, context.VariantId, otherMachineId);
+            Assert.Null(otherMachineResult);
+        }
+        finally
+        {
+            await ExecuteAsync(
+                """
+                DELETE FROM master.variant_navigation_profile_assignments WHERE navigation_profile_id = @profile_id;
+                DELETE FROM master.navigation_profiles WHERE id = @profile_id;
+                """,
+                ("profile_id", profileId));
+        }
+    }
+
+    [PostgresFact]
+    public async Task HasUnreleasedMapSwitchLock_tracks_lock_lifecycle_in_audit_logs()
+    {
+        await ResetAsync();
+        var requestId = Guid.NewGuid();
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var executionStore = new PostgresRdsExecutionStore(dataSource);
+
+        // Initially no lock
+        Assert.False(await executionStore.HasUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
+
+        // Acquire lock audit
+        await executionStore.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_ACQUIRED", "LOCK_ACQUIRED", "Acquired lock", Guid.NewGuid());
+        Assert.True(await executionStore.HasUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
+
+        // Release lock audit
+        await executionStore.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "UNLOCK_SUCCESS", "Released lock", Guid.NewGuid());
+        Assert.False(await executionStore.HasUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
+    }
+
+    [PostgresFact]
     public async Task Machine_region_is_rejected()
     {
         await ResetAsync();
@@ -808,8 +1001,10 @@ public sealed class PostgresTransportWorkflowTests
             """
             TRUNCATE integration.rds_tasks, ops.transport_request_events, ops.transport_requests, ops.slot_runtime_state, ops.machine_runtime_state RESTART IDENTITY CASCADE;
             DELETE FROM integration.layout_slot_rds_mapping
-            WHERE rds_worksite_id IN (SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%');
-            DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%';
+            WHERE layout_slot_id IN (SELECT id FROM master.layout_slots WHERE code LIKE 'TEST-%')
+               OR rds_worksite_id IN (SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%' OR rds_site_id LIKE 'WS-%TEST%');
+            DELETE FROM master.layout_slots WHERE code LIKE 'TEST-%';
+            DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08B-%' OR rds_site_id LIKE 'WS-%TEST%';
             DELETE FROM master.task_templates WHERE config_json ->> 'testScope' = 'P08B';
             DELETE FROM master.layout_slot_parts
             WHERE layout_slot_id IN (SELECT id FROM master.layout_slots WHERE code LIKE 'SLOTPART-%');
@@ -966,7 +1161,7 @@ public sealed class PostgresTransportWorkflowTests
     {
         var condition = requireContainer ? "AND default_container_type_id IS NOT NULL" : string.Empty;
         return await ScalarAsync<Guid>(
-            $"SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND slot_role <> 'MACHINE' {condition} ORDER BY display_order, code LIMIT 1",
+            $"SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND slot_role NOT IN ('MACHINE', 'EMPTY_STORAGE', 'DROP') {condition} ORDER BY display_order, code LIMIT 1",
             ("layout_id", layoutId));
     }
 
@@ -975,7 +1170,7 @@ public sealed class PostgresTransportWorkflowTests
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND slot_role <> 'MACHINE' ORDER BY display_order, code LIMIT @count",
+            "SELECT id FROM master.layout_slots WHERE layout_id = @layout_id AND slot_role NOT IN ('MACHINE', 'EMPTY_STORAGE', 'DROP') ORDER BY display_order, code LIMIT @count",
             connection);
         command.Parameters.AddWithValue("layout_id", layoutId);
         command.Parameters.AddWithValue("count", count);

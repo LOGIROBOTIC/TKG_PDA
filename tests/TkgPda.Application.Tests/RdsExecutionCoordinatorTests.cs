@@ -138,7 +138,7 @@ public sealed class RdsExecutionCoordinatorTests
     [Fact]
     public async Task Missing_template_binding_keeps_other_dispatch_cycles_recoverable()
     {
-        var fixture = Fixture(context: Context(Json("{}")));
+        var fixture = Fixture(context: Context(Json("""{"executionMode":"WIND_TASK"}""")));
         var results = await fixture.Coordinator.DispatchQueuedAsync(10);
         var blocked = Assert.Single(results);
         Assert.False(blocked.Dispatched);
@@ -285,6 +285,7 @@ public sealed class RdsExecutionCoordinatorTests
     private static JsonElement Bindings(params (string Param, string Source, bool Required, object? Value)[] values) =>
         JsonSerializer.SerializeToElement(new
         {
+            executionMode = "WIND_TASK",
             rdsInputBindings = values.Select(item => new { param = item.Param, source = item.Source, required = item.Required, value = item.Value })
         });
 
@@ -324,7 +325,8 @@ public sealed class RdsExecutionCoordinatorTests
         public Task MarkCancellationRequestedAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset requestedAt, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default) => Task.FromResult<RdsMappedWorkSite?>(new(slotId, Guid.NewGuid(), "WS", 1, 0, 0, DateTimeOffset.UtcNow));
-        public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? navigationProfileId, Guid machineId, CancellationToken cancellationToken = default) => Task.FromResult<RdsNavigationProfileSummary?>(null);
+        public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default) => Task.FromResult<RdsNavigationProfileSummary?>(null);
+        public Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RdsTaskTemplateSummary>>([]);
         public Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }

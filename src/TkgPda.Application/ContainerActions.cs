@@ -47,10 +47,16 @@ public static class ContainerActionResolutionPolicy
             new(TransportTaskType.BringEmpty, MarkFullBeforeCreate: false, RequiresPreparation: true),
         OperatorContainerAction.Empty when occupancy == OccupancyState.Occupied =>
             throw new WorkflowRuleException("CONTAINER_POSITION_OCCUPIED", "Bu konumda zaten bir kasa bulunuyor."),
-        _ when occupancy == OccupancyState.Unknown || load == LoadState.Unknown =>
-            throw new WorkflowRuleException("BUSINESS_RULE_NOT_CONFIGURED", "Kasa konumunun mevcut durumu güvenli bir işlem seçmek için yeterli değildir."),
+        // A VACANT position is only ever stored with LoadState.Unknown (enforced by
+        // ck_slot_load_requires_occupancy), so this arm must be evaluated BEFORE the
+        // broad unknown-state arm below. Otherwise "Kasa Doldu" on an empty position
+        // reports the generic BUSINESS_RULE_NOT_CONFIGURED instead of the specific,
+        // actionable reason, and this arm is unreachable for every DB-valid state.
+        // Rejection itself is unchanged — only the reason becomes accurate.
         OperatorContainerAction.Full when occupancy == OccupancyState.Vacant =>
             throw new WorkflowRuleException("OCCUPIED_CONTAINER_REQUIRED", "Dolu bildirimi için konumda bir kasa bulunmalıdır."),
+        _ when occupancy == OccupancyState.Unknown || load == LoadState.Unknown =>
+            throw new WorkflowRuleException("BUSINESS_RULE_NOT_CONFIGURED", "Kasa konumunun mevcut durumu güvenli bir işlem seçmek için yeterli değildir."),
         _ => throw new WorkflowRuleException("CONTAINER_STATE_CONFLICT", "Kasa konumunun mevcut durumu bu işlemle uyumlu değildir.")
     };
 
@@ -285,8 +291,11 @@ public sealed record OperatorQueueItemRecord(
     string State,
     int? EtaSeconds,
     string EtaState,
-    Guid? RequestId = null,
-    string? AgvId = null);
+    // RequestId is a TKG identity the Operator legitimately needs in order to cancel
+    // its own transport. The raw RDS AGV identifier was previously carried here and
+    // has been removed: the Operator queue is a business view, and hiding the value
+    // in the widget layer did not stop the API from serializing it.
+    Guid? RequestId = null);
 
 public sealed record OperatorQueuePageRecord(
     bool Terminal,

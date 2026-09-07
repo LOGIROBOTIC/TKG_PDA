@@ -892,8 +892,7 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                 state,
                 etaProjection.Seconds,
                 etaProjection.State,
-                requestId,
-                agvId));
+                requestId));
         }
 
         var hasMore = rows.Count > query.Limit;

@@ -6,6 +6,78 @@ namespace TkgPda.Application.Tests;
 
 public sealed class ContainerActionResolutionPolicyTests
 {
+    // ---------------------------------------------------------------------
+    // Rejection reasons must be specific and actionable. A VACANT slot is only
+    // ever stored with LoadState.Unknown, so the broad unknown-state arm used to
+    // shadow the VACANT arm entirely and operators saw a generic message.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void Full_on_a_vacant_position_reports_that_a_container_is_required()
+    {
+        var error = Assert.Throws<WorkflowRuleException>(() =>
+            ContainerActionResolutionPolicy.ResolveSingle(
+                OperatorContainerAction.Full,
+                OccupancyState.Vacant,
+                LoadState.Unknown));
+
+        Assert.Equal("OCCUPIED_CONTAINER_REQUIRED", error.Code);
+    }
+
+    [Fact]
+    public void Full_on_an_occupied_position_with_unknown_load_still_reports_insufficient_state()
+    {
+        // Occupied but with an unproven load is genuinely not enough information,
+        // so this must keep the generic reason rather than borrow the VACANT one.
+        var error = Assert.Throws<WorkflowRuleException>(() =>
+            ContainerActionResolutionPolicy.ResolveSingle(
+                OperatorContainerAction.Full,
+                OccupancyState.Occupied,
+                LoadState.Unknown));
+
+        Assert.Equal("BUSINESS_RULE_NOT_CONFIGURED", error.Code);
+    }
+
+    [Fact]
+    public void Unknown_occupancy_still_reports_insufficient_state_for_both_actions()
+    {
+        var full = Assert.Throws<WorkflowRuleException>(() =>
+            ContainerActionResolutionPolicy.ResolveSingle(
+                OperatorContainerAction.Full, OccupancyState.Unknown, LoadState.Unknown));
+        var empty = Assert.Throws<WorkflowRuleException>(() =>
+            ContainerActionResolutionPolicy.ResolveSingle(
+                OperatorContainerAction.Empty, OccupancyState.Unknown, LoadState.Unknown));
+
+        Assert.Equal("BUSINESS_RULE_NOT_CONFIGURED", full.Code);
+        Assert.Equal("BUSINESS_RULE_NOT_CONFIGURED", empty.Code);
+    }
+
+    [Fact]
+    public void Legal_db_states_keep_their_established_resolutions()
+    {
+        // Guard rail: the reorder must not touch any accepted action.
+        var markFull = ContainerActionResolutionPolicy.ResolveSingle(
+            OperatorContainerAction.Full, OccupancyState.Occupied, LoadState.Empty);
+        Assert.Equal(TransportTaskType.RemoveFull, markFull.Operation);
+        Assert.True(markFull.MarkFullBeforeCreate);
+        Assert.False(markFull.RequiresPreparation);
+
+        var alreadyFull = ContainerActionResolutionPolicy.ResolveSingle(
+            OperatorContainerAction.Full, OccupancyState.Occupied, LoadState.Full);
+        Assert.Equal(TransportTaskType.RemoveFull, alreadyFull.Operation);
+        Assert.False(alreadyFull.MarkFullBeforeCreate);
+
+        var bringEmpty = ContainerActionResolutionPolicy.ResolveSingle(
+            OperatorContainerAction.Empty, OccupancyState.Vacant, LoadState.Unknown);
+        Assert.Equal(TransportTaskType.BringEmpty, bringEmpty.Operation);
+        Assert.True(bringEmpty.RequiresPreparation);
+
+        var occupied = Assert.Throws<WorkflowRuleException>(() =>
+            ContainerActionResolutionPolicy.ResolveSingle(
+                OperatorContainerAction.Empty, OccupancyState.Occupied, LoadState.Full));
+        Assert.Equal("CONTAINER_POSITION_OCCUPIED", occupied.Code);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

@@ -150,3 +150,53 @@ Bu boşluklar onaylanmadan native-order modu production varsayılanı yapılamaz
 ## WP-31A doğrulama sınırı
 
 Testler yalnız mock HTTP yanıtları kullanır. WP-31A sırasında canlı RDS çağrısı, order oluşturma, terminate veya robot hareketi yapılmaz.
+
+## Çoklu Harita (Multi-Map) Yürütme ve Harita Semantiği (WP-31B / Readiness)
+
+### 1. Harita Semantiği ve Pre-Dispatch Gereksinimi
+`NavigationProfile.RobotMapName` (`requiredMap`) TKG iş sözleşmesinde şu anlama gelir:
+> **Ana transport emri gönderilmeden önceki (PRE-DISPATCH) gerekli / tercih edilen robot haritası.**
+
+Bu değer, ana native order boyunca robotun o haritada kalmasını zorunlu kılan bir runtime değişmezi (invariant) **değildir**.
+Ana native order RDS'e sunulduktan sonra, RDSCore yapılandırılmış sahne (scene) rotası farklı haritalara bağlı bölgeleri (Area) kestiğinde kendi iç harita geçişlerini meşru biçimde yürütür.
+
+Örnek Simülatör Sahnesi:
+- `Area-01`: Eğrileri (curves) `26.7.2026_map_optimak_1` haritasına bağlıdır.
+- `hairou`: Eğrileri `26.7.2026_map_optimak` haritasına bağlıdır.
+- `AP21` istasyonu `Area-01` içerisinde, `AP7` istasyonu ise `hairou` içerisinde yer almaktadır.
+
+Bu nedenle `AP21 -> AP7` rotası gerçek bir multi-map rotasıdır. RDSCore rota planlayıcısı, alan sınırını geçerken dahili olarak `generateSwitchMapTask -> syspy/switchMap.py` üretir. Bu durum bir simülatör veya kod hatası değil, SEER sahne mimarisinin doğal ve beklenen davranışıdır.
+
+### 2. Kabul Senaryoları Sınıflandırması
+1. **Senaryo 1 (Map A -> Map B)**:
+   - Harita A başlangıcı → TKG ana dispatch öncesi Harita B'ye geçiş hazırlar → Ana native order Harita B'de başlar → Harita B üzerinde `AP21`'e ulaşılır → RDSCore `AP7`'ye doğru ilerlerken dahili olarak Harita A'ya geçer → Ana native order `FINISHED` → TKG `COMPLETED`.
+   - **Sonuç**: `PASS_SIMULATOR_RDSCORE_MULTI_MAP_ROUTE`
+2. **Senaryo 2 (Map B -> Map A)**:
+   - Kararlı Harita B başlangıcı → TKG V1 için Harita A gereksinimini tespit eder → `MAP_PREP_LOCK_ACQUIRED` ve lock fingerprint yakalanır → Uygulama Harita A'ya `/switchMap` çağırır → `/unlock` → Ana native order `RUNNING` → `FINISHED` → TKG `COMPLETED`.
+   - **Sonuç**: `PASS_SIMULATOR`
+3. **Senaryo 3 (Aynı Harita / Same-Map Bypass)**:
+   - `requiredMap == currentMap` → 0 `MAP_PREP` audit olayı → 0 lock → 0 switchMap → Doğrudan ana native order → `COMPLETED`.
+   - **Sonuç**: `PASS_SIMULATOR`
+
+### 3. Sorumluluk Sınırları ve Mimari İlke
+- **TKG**: İş niyeti, Varyant çözümlemesi, NavigationProfile, dispatch öncesi harita hazır bulunuşluğu ve dispatch öncesi güvenli kilitli harita geçiş orkestrasyonu.
+- **RDSCore**: Rota planlama, trafik koordinasyonu, MAPF, native order icrası ve RDS sahne konfigürasyonunun gerektirdiği rota içi çoklu harita geçişleri.
+- **Kural**: Ana native order dispatch edildikten sonra robotu `NavigationProfile.requiredMap` üzerinde kalmaya zorlama girişimi yapılmamalıdır. RDSCore'un dahili harita geçişleriyle savaşan runtime mantığı eklenmemelidir.
+
+### 4. Gelecek Konfigürasyon Modeli
+Gelecekteki sürümlerde bloke edici olmayan bir iyileştirme olarak:
+- `NavigationProfile.requiredMap` kavramsal olarak `entryMap` veya `preDispatchMap` olarak adlandırılabilir (bu görevde şema değişikliği yapılmaz).
+- İleride açık bir geçiş politikası (`TKG_PRE_DISPATCH` vs `RDSCORE_ROUTE_MANAGED`) konfigürasyonu desteklenebilir.
+
+### 5. Fiziksel Commissioning Limitleri (Açık Kalan Maddeler)
+Yazılım/simülatör doğrulaması tamamlansa da, aşağıdaki unsurlar fiziksel sahada doğrulanana kadar beklemektedir (pending):
+- Gerçek TKG `.smap` dosyaları
+- Gerçek Area / curve harita bağları
+- Gerçek WorkSite / Bin eşlemeleri
+- Gerçek forklift / binTask icrası
+- Docking / optik tanıma (recognition)
+- Gerçek robot `SwitchMap` donanım tepkisi
+- RoboShopPro / RDSCore kilit sahipliği davranışı
+- Endüstriyel Wi-Fi / AP dolaşımı (roaming)
+- Fiziksel Saha Kabul Testi (SAT)
+

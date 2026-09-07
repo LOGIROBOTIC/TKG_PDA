@@ -172,6 +172,132 @@ public sealed class RdsReadClientTests
         Assert.Equal(0, handler.Calls);
     }
 
+    [Fact]
+    public async Task Robot_telemetry_fields_are_parsed_accurately()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {
+                    "uuid":"1003",
+                    "vehicle_id":"1003",
+                    "dispatchable":true,
+                    "connection_status":1,
+                    "isLoaded":false,
+                    "basic_info":{"model":"HELIFORK","current_map":"26.7.2026_map_optimak"},
+                    "current_order":{"id":"ORD-999","state":"RUNNING"},
+                    "rbk_report":{
+                        "battery_level":0.88,
+                        "charging":true,
+                        "current_station":"PP80",
+                        "last_station":"LM12",
+                        "current_map":"26.7.2026_map_optimak",
+                        "lock_info":{"locked":true,"nick_name":"TKG_LOCK"},
+                        "errors":[],"fatals":[],"warnings":[],"notices":[]
+                    }
+                }
+            ]}}
+            """);
+        var client = Client(handler);
+
+        var result = await client.GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(result.Data.Robots);
+        Assert.Equal("1003", robot.RobotId);
+        Assert.Equal("HELIFORK", robot.Model);
+        Assert.True(robot.Dispatchable);
+        Assert.True(robot.Online);
+        Assert.Equal(0.88, robot.BatteryLevel);
+        Assert.True(robot.IsCharging);
+        Assert.Equal("PP80", robot.CurrentStation);
+        Assert.Equal("LM12", robot.LastStation);
+        Assert.Equal("26.7.2026_map_optimak", robot.CurrentMap);
+        Assert.True(robot.IsLocked);
+        Assert.Equal("TKG_LOCK", robot.LockNickName);
+        Assert.Equal("ORD-999", robot.ActiveOrderId);
+        Assert.Equal("RUNNING", robot.ActiveOrderState);
+        Assert.False(robot.RdsReportedPayloadLoaded);
+    }
+
+    [Fact]
+    public async Task Both_seer_identity_spaces_are_preserved_when_uuid_differs_from_vehicle_id()
+    {
+        // Real SEER robots report a different internal uuid and dispatch vehicle_id.
+        // The simulator reports them identically, which is why the previous
+        // uuid-first / vehicle-first disagreement between readers went unnoticed.
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {
+                    "uuid":"ROBOT-INTERNAL-123",
+                    "vehicle_id":"AGV-01",
+                    "dispatchable":true,
+                    "connection_status":1,
+                    "rbk_report":{"errors":[],"fatals":[],"warnings":[],"notices":[]}
+                }
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(result.Data.Robots);
+        // RobotId is the vehicle-space mutation/join key.
+        Assert.Equal("AGV-01", robot.RobotId);
+        // Both spaces stay addressable.
+        Assert.Equal("ROBOT-INTERNAL-123", robot.ResolvedIdentity.Uuid);
+        Assert.Equal("AGV-01", robot.ResolvedIdentity.VehicleId);
+        // Correlation is identity-space agnostic in both directions...
+        Assert.True(robot.ResolvedIdentity.Matches("AGV-01"));
+        Assert.True(robot.ResolvedIdentity.Matches("ROBOT-INTERNAL-123"));
+        // ...but never widens to an unrelated robot or a blank candidate.
+        Assert.False(robot.ResolvedIdentity.Matches("AGV-99"));
+        Assert.False(robot.ResolvedIdentity.Matches(null));
+        Assert.False(robot.ResolvedIdentity.Matches("   "));
+    }
+
+    [Fact]
+    public async Task Absent_connectivity_and_lock_telemetry_stay_unknown_rather_than_online_and_unlocked()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"AGV-02","vehicle_id":"AGV-02",
+                 "rbk_report":{"errors":[],"fatals":[],"warnings":[],"notices":[]}}
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(result.Data.Robots);
+        Assert.Null(robot.Online);
+        Assert.Null(robot.LockInfo);
+        Assert.Null(robot.IsLocked);
+        Assert.Null(robot.BatteryLevel);
+        Assert.Null(robot.Dispatchable);
+    }
+
+    [Fact]
+    public async Task Full_seer_lock_fingerprint_is_captured_for_correlation()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"AGV-03","vehicle_id":"AGV-03","connection_status":1,
+                 "rbk_report":{
+                    "lock_info":{"locked":true,"nick_name":"TKG_LOCK","ip":"10.0.0.5","port":8088,"time_t":1788522696,"type":1,"desc":"map prep"},
+                    "errors":[],"fatals":[],"warnings":[],"notices":[]}}
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var lockInfo = Assert.Single(result.Data.Robots).LockInfo;
+        Assert.NotNull(lockInfo);
+        Assert.True(lockInfo.Locked);
+        Assert.Equal("TKG_LOCK", lockInfo.NickName);
+        Assert.Equal("10.0.0.5", lockInfo.Ip);
+        Assert.Equal(8088, lockInfo.Port);
+        Assert.Equal("1788522696", lockInfo.TimeT);
+        Assert.Equal(1, lockInfo.Type);
+        Assert.True(lockInfo.HasUsableFingerprint);
+    }
+
     private static RdsReadClient Client(RecordingHandler handler)
     {
         var options = new RdsOptions(true, "http://127.0.0.1:8080/private/path?hidden=yes", 5);

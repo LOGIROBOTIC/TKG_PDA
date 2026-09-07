@@ -410,7 +410,8 @@ public sealed record RdsCoreRobotTelemetry(
     bool Dispatchable,
     bool IsLoaded,
     bool IsError,
-    double BatteryLevel,
+    /// <summary>Null when battery telemetry is absent — UNAVAILABLE, never 0%.</summary>
+    double? BatteryLevel,
     double? X,
     double? Y,
     double? Angle,
@@ -418,7 +419,16 @@ public sealed record RdsCoreRobotTelemetry(
     string? CurrentOrderId,
     string? CurrentOrderState,
     IReadOnlyList<string> Alarms,
-    RdsCoreRobotLockInfo? LockInfo = null);
+    RdsCoreRobotLockInfo? LockInfo = null,
+    /// <summary>Both SEER identity spaces. See <see cref="RdsRobotIdentity"/>.</summary>
+    RdsRobotIdentity? Identity = null)
+{
+    /// <summary>
+    /// Identity for target matching. Falls back to treating <see cref="VehicleId"/>
+    /// as the vehicle-space identifier, which is what the reader produces.
+    /// </summary>
+    public RdsRobotIdentity ResolvedIdentity => Identity ?? new RdsRobotIdentity(null, VehicleId);
+}
 
 public interface IRdsCoreNativeOrderClient
 {

@@ -746,7 +746,8 @@ public sealed class RdsCoreNativeOrderClient(
         foreach (var robot in report.EnumerateArray())
         {
             if (robot.ValueKind != JsonValueKind.Object) continue;
-            var vehicleId = Text(robot, "vehicle_id") ?? Text(robot, "uuid");
+            var identity = RdsRobotIdentity.FromRobotElement(robot);
+            var vehicleId = identity.MutationTarget;
             if (string.IsNullOrWhiteSpace(vehicleId)) continue;
 
             var basic = Object(robot, "basic_info");
@@ -756,7 +757,8 @@ public sealed class RdsCoreNativeOrderClient(
             var rbk = Object(robot, "rbk_report");
             var currentStation = rbk is { } rcs ? Text(rcs, "current_station") : null;
             var lastStation = rbk is { } rls ? Text(rls, "last_station") : null;
-            var batteryLevel = rbk is { } rbl && rbl.TryGetProperty("battery_level", out var bl) && bl.TryGetDouble(out var bld) ? bld : 0.0;
+            // Absence of battery telemetry is UNAVAILABLE (null), never a 0% reading.
+            var batteryLevel = rbk is { } rbl && rbl.TryGetProperty("battery_level", out var bl) && bl.TryGetDouble(out var bld) ? bld : (double?)null;
             var x = rbk is { } rx && rx.TryGetProperty("x", out var xp) && xp.TryGetDouble(out var xd) ? xd : (double?)null;
             var y = rbk is { } ry && ry.TryGetProperty("y", out var yp) && yp.TryGetDouble(out var yd) ? yd : (double?)null;
             var angle = rbk is { } ra && ra.TryGetProperty("angle", out var ap) && ap.TryGetDouble(out var ad) ? ad : (double?)null;
@@ -833,7 +835,8 @@ public sealed class RdsCoreNativeOrderClient(
                 currentOrderId,
                 currentOrderState,
                 alarms,
-                lockInfo));
+                lockInfo,
+                identity));
         }
 
         return list;

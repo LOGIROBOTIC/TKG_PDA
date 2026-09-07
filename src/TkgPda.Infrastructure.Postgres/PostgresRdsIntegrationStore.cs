@@ -11,7 +11,7 @@ public sealed class PostgresRdsIntegrationStore(NpgsqlDataSource dataSource) : I
     {
         await using var command = dataSource.CreateCommand(
             """
-            SELECT n.id, n.machine_id, m.code, n.code, n.name, n.version, n.status
+            SELECT n.id, n.machine_id, m.code, n.code, n.name, n.version, n.status, n.robot_map_name
             FROM master.navigation_profiles n
             JOIN master.machines m ON m.id = n.machine_id
             ORDER BY m.display_order, m.code, n.code, n.version DESC
@@ -22,7 +22,8 @@ public sealed class PostgresRdsIntegrationStore(NpgsqlDataSource dataSource) : I
         {
             result.Add(new(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3),
-                reader.GetString(4), reader.GetInt32(5), reader.GetString(6)));
+                reader.GetString(4), reader.GetInt32(5), reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7)));
         }
 
         return result;
@@ -364,6 +365,105 @@ public sealed class PostgresRdsIntegrationStore(NpgsqlDataSource dataSource) : I
     private static void AddInt(NpgsqlCommand command, string name, int? value) => command.Parameters.Add(name, NpgsqlDbType.Integer).Value = value.HasValue ? value.Value : DBNull.Value;
     private static void AddUuid(NpgsqlCommand command, string name, Guid? value) => command.Parameters.Add(name, NpgsqlDbType.Uuid).Value = value.HasValue ? value.Value : DBNull.Value;
     private static void AddJson(NpgsqlCommand command, string name, object? value) => command.Parameters.Add(name, NpgsqlDbType.Jsonb).Value = value is null ? DBNull.Value : JsonSerializer.Serialize(value);
+
+    public async Task<IReadOnlyList<RdsActiveLockFingerprint>> GetActiveTkgLockFingerprintsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Bounded on both time and row count. An unreleased lock record is only
+        // meaningful for correlating a lock that is still held right now; without a
+        // bound this scan grows with the audit table on a polled Admin path.
+        // Correlation itself is decided by the captured fingerprint, never by the
+        // mere existence of a historical row.
+        const string sql =
+            """
+            SELECT a.after_json
+            FROM audit.audit_logs a
+            WHERE a.entity_type = 'TRANSPORT_REQUEST'
+              AND a.action = 'MAP_PREP_LOCK_ACQUIRED'
+              AND a.created_at >= now() - @lookback
+              AND NOT EXISTS (
+                  SELECT 1 FROM audit.audit_logs r
+                  WHERE r.entity_type = 'TRANSPORT_REQUEST'
+                    AND r.entity_id = a.entity_id
+                    AND r.action = 'MAP_PREP_LOCK_RELEASED'
+                    AND r.created_at >= a.created_at
+              )
+            ORDER BY a.created_at DESC
+            LIMIT @max_rows;
+            """;
+        var list = new List<RdsActiveLockFingerprint>();
+        await using var command = dataSource.CreateCommand(sql);
+        command.Parameters.Add("lookback", NpgsqlDbType.Interval).Value = ActiveLockLookback;
+        command.Parameters.AddWithValue("max_rows", ActiveLockMaxRows);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (reader.IsDBNull(0)) continue;
+            var jsonStr = reader.GetString(0);
+            if (string.IsNullOrWhiteSpace(jsonStr)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(jsonStr);
+                var root = doc.RootElement;
+                var vehicle = ReadString(root, "vehicle");
+                var requiredMap = ReadString(root, "requiredMap");
+                list.Add(new(vehicle, requiredMap, ReadCapturedLockInfo(root)));
+            }
+            catch (JsonException)
+            {
+                // A malformed audit payload yields no fingerprint, so it can never
+                // correlate. Skipping it keeps the fail-closed posture.
+            }
+        }
+        return list;
+    }
+
+    /// <summary>How far back an unreleased map-prep lock record stays correlatable.</summary>
+    private static readonly TimeSpan ActiveLockLookback = TimeSpan.FromDays(7);
+
+    private const int ActiveLockMaxRows = 200;
+
+    /// <summary>
+    /// Rebuilds the verbatim SEER fingerprint captured when TKG acquired the lock.
+    /// Returns null when no fingerprint was captured (for example the post-lock
+    /// telemetry query failed), which makes the record uncorrelatable by design.
+    /// </summary>
+    private static RdsCoreRobotLockInfo? ReadCapturedLockInfo(JsonElement root)
+    {
+        if (!root.TryGetProperty("lockInfo", out var li) || li.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var locked = li.TryGetProperty("locked", out var lockedValue)
+            && lockedValue.ValueKind is JsonValueKind.True or JsonValueKind.False
+            && lockedValue.GetBoolean();
+
+        return new RdsCoreRobotLockInfo(
+            locked,
+            ReadString(li, "ip"),
+            ReadString(li, "nickName") ?? ReadString(li, "nick_name"),
+            ReadInt(li, "port"),
+            ReadString(li, "timeT") ?? ReadString(li, "time_t"),
+            ReadInt(li, "type"),
+            ReadString(li, "desc"));
+    }
+
+    private static string? ReadString(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value)) return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => string.IsNullOrWhiteSpace(value.GetString()) ? null : value.GetString()!.Trim(),
+            JsonValueKind.Number => value.ToString(),
+            _ => null
+        };
+    }
+
+    private static int? ReadInt(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
+            ? number
+            : null;
 
     private sealed record SlotIdentity(Guid LayoutId, string Role, Guid MachineId);
     private sealed record WorkSiteIdentity(string SiteId, int? Type, Guid MachineId);

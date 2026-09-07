@@ -243,7 +243,10 @@ public sealed class RdsReadClient(
                 continue;
             }
 
-            var robotId = Text(robot, "uuid") ?? Text(robot, "vehicle_id");
+            // Both SEER identity spaces are preserved; RobotId is the vehicle-space
+            // mutation/join key so that every reader agrees (see RdsRobotIdentity).
+            var identity = RdsRobotIdentity.FromRobotElement(robot);
+            var robotId = identity.MutationTarget;
             if (string.IsNullOrEmpty(robotId))
             {
                 continue;
@@ -260,15 +263,85 @@ public sealed class RdsReadClient(
             var model = robot.TryGetProperty("basic_info", out var basicInfo) && basicInfo.ValueKind == JsonValueKind.Object
                 ? Text(basicInfo, "model")
                 : null;
-            robots.Add(new RdsRobotStateSnapshot(robotId, model, dispatchable, UndispatchableReasonText(robot)));
+            var basicMap = robot.TryGetProperty("basic_info", out var bi) && bi.ValueKind == JsonValueKind.Object
+                ? Text(bi, "current_map")
+                : null;
+
+            double? batteryLevel = null;
+            bool? isCharging = null;
+            string? currentStation = null;
+            string? lastStation = null;
+            string? currentMap = basicMap;
+            RdsCoreRobotLockInfo? lockInfo = null;
+            string? activeOrderId = null;
+            string? activeOrderState = null;
+            bool? rdsReportedPayloadLoaded = Bool(robot, "isLoaded");
+            // Absence of connectivity evidence is UNKNOWN (null), never ONLINE.
+            bool? online = Bool(robot, "connection_status");
+            bool? blocked = Bool(robot, "blocked");
+            bool? emergency = null;
+            double? vx = null;
+            double? vy = null;
+            int? taskStatus = null;
 
             if (robot.TryGetProperty("rbk_report", out var rbkReport) && rbkReport.ValueKind == JsonValueKind.Object)
             {
+                batteryLevel = Double(rbkReport, "battery_level");
+                isCharging = Bool(rbkReport, "charging");
+                currentStation = Text(rbkReport, "current_station");
+                lastStation = Text(rbkReport, "last_station");
+                var rbkMap = Text(rbkReport, "current_map");
+                if (!string.IsNullOrWhiteSpace(rbkMap)) currentMap = rbkMap;
+
+                if (Bool(rbkReport, "blocked") is { } b) blocked = b;
+                emergency = Bool(rbkReport, "emergency");
+                vx = Double(rbkReport, "vx");
+                vy = Double(rbkReport, "vy");
+                taskStatus = Number(rbkReport, "task_status");
+
+                if (rbkReport.TryGetProperty("lock_info", out var rbkLock) && rbkLock.ValueKind == JsonValueKind.Object)
+                {
+                    lockInfo = ReadLockInfo(rbkLock);
+                }
+
                 AppendAlarms(alarms, rbkReport, robotId, "fatals", "fatal");
                 AppendAlarms(alarms, rbkReport, robotId, "errors", "error");
                 AppendAlarms(alarms, rbkReport, robotId, "warnings", "warning");
                 AppendAlarms(alarms, rbkReport, robotId, "notices", "notice");
             }
+
+            if (lockInfo is null && robot.TryGetProperty("lock_info", out var topLock) && topLock.ValueKind == JsonValueKind.Object)
+            {
+                lockInfo = ReadLockInfo(topLock);
+            }
+
+            if (robot.TryGetProperty("current_order", out var curOrder) && curOrder.ValueKind == JsonValueKind.Object)
+            {
+                activeOrderId = Text(curOrder, "id");
+                activeOrderState = Text(curOrder, "state");
+            }
+
+            robots.Add(new RdsRobotStateSnapshot(
+                robotId,
+                model,
+                dispatchable,
+                UndispatchableReasonText(robot),
+                batteryLevel,
+                isCharging,
+                currentStation,
+                lastStation,
+                currentMap,
+                lockInfo,
+                activeOrderId,
+                activeOrderState,
+                rdsReportedPayloadLoaded,
+                online,
+                blocked,
+                emergency,
+                vx,
+                vy,
+                taskStatus,
+                identity));
         }
 
         var readAt = MarkSuccess();
@@ -424,6 +497,53 @@ public sealed class RdsReadClient(
         value.ValueKind == JsonValueKind.Number
             ? value.TryGetInt32(out number)
             : int.TryParse(value.ValueKind == JsonValueKind.String ? value.GetString() : null, out number);
+
+    private static double? Double(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var d)) return d;
+        if (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var ds)) return ds;
+        return null;
+    }
+
+    private static bool? Bool(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind == JsonValueKind.True) return true;
+        if (value.ValueKind == JsonValueKind.False) return false;
+        if (value.ValueKind == JsonValueKind.Number) return value.GetInt32() != 0;
+        return null;
+    }
+
+    /// <summary>
+    /// Reads the full SEER <c>lock_info</c> fingerprint so Admin correlation can use
+    /// the same contract as execution recovery. Returns null when the object carries
+    /// no usable <c>locked</c> flag, so that missing telemetry stays UNKNOWN rather
+    /// than collapsing to UNLOCKED.
+    /// </summary>
+    private static RdsCoreRobotLockInfo? ReadLockInfo(JsonElement lockElement)
+    {
+        if (Bool(lockElement, "locked") is not { } locked) return null;
+        return new RdsCoreRobotLockInfo(
+            locked,
+            Text(lockElement, "ip"),
+            Text(lockElement, "nick_name"),
+            Number(lockElement, "port"),
+            TimeToken(lockElement, "time_t"),
+            Number(lockElement, "type"),
+            Text(lockElement, "desc"));
+    }
+
+    private static string? TimeToken(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value)) return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => string.IsNullOrWhiteSpace(value.GetString()) ? null : value.GetString()!.Trim(),
+            JsonValueKind.Number => value.ToString(),
+            _ => null
+        };
+    }
 
     private static void Add(Dictionary<string, object?> target, string key, object? value)
     {

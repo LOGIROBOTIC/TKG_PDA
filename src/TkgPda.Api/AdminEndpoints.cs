@@ -72,6 +72,7 @@ public static class AdminEndpoints
             service.ListAuditAsync(limit ?? 100, actorUserId, entityType, ct));
 
         admin.MapGet("/rds/status", RdsStatusAsync);
+        admin.MapGet("/rds/robots", ListRdsRobotsAsync);
         admin.MapGet("/rds/alarms", ListRdsRobotAlarmsAsync);
         admin.MapGet("/rds/navigation-profiles", (RdsIntegrationService service, CancellationToken ct) => service.ListNavigationProfilesAsync(ct));
         admin.MapPost("/rds/worksites/sync", SyncRdsWorkSitesAsync);
@@ -88,6 +89,9 @@ public static class AdminEndpoints
 
     private static Task<RdsConnectionStatusRecord> RdsStatusAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
         service.GetStatusAsync(CorrelationId(context), ct);
+
+    private static Task<IReadOnlyList<RdsRobotAdminRecord>> ListRdsRobotsAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
+        service.ListRobotsForAdminAsync(CorrelationId(context), ct);
 
     private static Task<IReadOnlyList<RdsRobotAlarmAdminRecord>> ListRdsRobotAlarmsAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
         service.ListRobotAlarmsForAdminAsync(CorrelationId(context), ct);

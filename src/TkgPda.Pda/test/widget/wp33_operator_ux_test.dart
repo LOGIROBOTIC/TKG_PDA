@@ -156,7 +156,6 @@ void main() {
             etaSeconds: 90,
             etaState: 'AVAILABLE',
             requestId: testRequestId,
-            agvId: 'sim_02',
           ),
         ],
       );
@@ -165,8 +164,7 @@ void main() {
     await tester.tap(find.byKey(const Key('open-operator-queue')));
     await tester.pumpAndSettle();
 
-    // Raw agvId must NOT be shown to operator
-    expect(find.textContaining('Robot: sim_02'), findsNothing);
+    // The raw AGV identifier is no longer part of the model at all.
     expect(find.textContaining('sim_02'), findsNothing);
     expect(find.text('Yaklaşık 2 dakika'), findsOneWidget);
 
@@ -235,22 +233,16 @@ void main() {
   });
 
   testWidgets('robot status bar shows business info without maintenance controls', (tester) async {
+    // The Operator model no longer has fields for raw RDS telemetry at all — the
+    // API refuses to serialize them — so this is now a contract guarantee rather
+    // than a rendering choice.
     final repository = FakePdaRepository()
       ..robotsValue = [
         const RobotTelemetry(
-          vehicleId: 'Sfl-Cbd15',
-          model: 'HELIFORK',
-          currentMap: '26.7.2026_map_optimak',
-          currentStation: 'PP80',
-          lastStation: 'LM12',
-          connectionStatus: 1,
-          dispatchable: true,
-          isLoaded: false,
-          isError: false,
+          displayName: 'HELIFORK',
+          online: true,
           batteryLevel: 0.98,
-          x: 2.304,
-          y: 4.691,
-          alarms: ['E101'],
+          hasActiveAlarm: true,
         ),
       ];
     final harness = await _loggedInHarness(tester, repository);
@@ -259,22 +251,58 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('robot-status-bar')), findsOneWidget);
-    // Shows model name instead of raw vehicleId
     expect(find.text('HELIFORK'), findsOneWidget);
-    expect(find.text('Sfl-Cbd15'), findsNothing);
-    // Shows battery
     expect(find.text('98%'), findsOneWidget);
-    // Shows online/offline status
     expect(find.text('Çevrimiçi'), findsOneWidget);
-    // Does NOT show raw currentStation
-    expect(find.text('PP80'), findsNothing);
-    // Alarm icon is visible but no clear-errors button
+    // Alarm icon is visible but no maintenance controls are reachable.
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     expect(find.byKey(const Key('clear-robot-errors-Sfl-Cbd15')), findsNothing);
-    // No pause/resume button
     expect(find.byKey(const Key('pause-resume-robot-Sfl-Cbd15')), findsNothing);
 
     harness.dispose();
+  });
+
+  testWidgets('robot card reports unknown battery and connectivity honestly', (tester) async {
+    final repository = FakePdaRepository()
+      ..robotsValue = [
+        const RobotTelemetry(displayName: 'HELIFORK'),
+      ];
+    final harness = await _loggedInHarness(tester, repository);
+
+    await tester.tap(find.byKey(const Key('open-operator-queue')));
+    await tester.pumpAndSettle();
+
+    // Missing battery telemetry must not render as a 0% reading.
+    expect(find.text('0%'), findsNothing);
+    expect(find.text('—'), findsOneWidget);
+    // Unknown connectivity is not presented as online.
+    expect(find.text('Çevrimiçi'), findsNothing);
+    // A robot with no fault must not show the fault icon.
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+
+    harness.dispose();
+  });
+
+  test('operator queue item ignores a raw AGV identifier even if the server sends one', () {
+    // The model has no agvId field, so the compiler prevents it being carried and
+    // a stray server value is dropped rather than reaching the Operator.
+    final item = OperatorQueueItem.fromJson(const {
+      'queuePosition': 1,
+      'machine': 'SH-01-A · Hücre',
+      'part': '71550BN000-10-HAOS',
+      'logicalContainerNumber': 2,
+      'businessAction': 'Dolu kasa kaldırılıyor',
+      'requestedAt': '2026-09-03T09:30:00Z',
+      'state': 'IN_PROGRESS',
+      'etaSeconds': 90,
+      'etaState': 'AVAILABLE',
+      'requestId': 'req-1',
+      'agvId': 'Sfl-Cbd15',
+    });
+
+    expect(item.requestId, 'req-1');
+    expect(item.machine, 'SH-01-A · Hücre');
+    expect(item.toString(), isNot(contains('Sfl-Cbd15')));
   });
 }
 

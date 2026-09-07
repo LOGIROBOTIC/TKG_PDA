@@ -358,7 +358,6 @@ class OperatorQueueItem {
     required this.etaSeconds,
     required this.etaState,
     this.requestId,
-    this.agvId,
   });
 
   final int queuePosition;
@@ -371,7 +370,8 @@ class OperatorQueueItem {
   final int? etaSeconds;
   final String etaState;
   final String? requestId;
-  final String? agvId;
+  // No agvId: the Operator queue is a business view and the API no longer
+  // serializes the raw RDS AGV identifier.
 
   factory OperatorQueueItem.fromJson(JsonMap json) => OperatorQueueItem(
     queuePosition: _integer(json['queuePosition']),
@@ -385,7 +385,6 @@ class OperatorQueueItem {
     etaSeconds: _nullableInteger(json['etaSeconds']),
     etaState: json['etaState'] as String? ?? 'UNAVAILABLE',
     requestId: json['requestId'] as String?,
-    agvId: json['agvId'] as String?,
   );
 }
 
@@ -1040,65 +1039,42 @@ class TransportBatchResult {
   );
 }
 
+/// Operator-safe robot view.
+///
+/// The API deliberately does not serialize raw RDS technical data to a Line or
+/// Warehouse Operator — no SEER uuid, vehicle_id, map, WorkSite/station, pose,
+/// order or block identifier, and no lock fingerprint. This model therefore has
+/// no fields for them: the boundary is a contract, not a rendering choice.
+///
+/// Connectivity and battery are nullable because absent telemetry is UNKNOWN,
+/// never "offline" or "0%".
 class RobotTelemetry {
   const RobotTelemetry({
-    required this.vehicleId,
-    this.model,
-    this.currentMap,
-    this.currentStation,
-    this.lastStation,
-    required this.connectionStatus,
-    required this.dispatchable,
-    required this.isLoaded,
-    required this.isError,
-    required this.batteryLevel,
-    this.x,
-    this.y,
-    this.angle,
-    this.remainingTime,
-    this.currentOrderId,
-    this.currentOrderState,
-    this.alarms = const [],
+    this.displayName,
+    this.online,
+    this.batteryLevel,
+    this.hasActiveAlarm = false,
   });
 
-  final String vehicleId;
-  final String? model;
-  final String? currentMap;
-  final String? currentStation;
-  final String? lastStation;
-  final int connectionStatus;
-  final bool dispatchable;
-  final bool isLoaded;
-  final bool isError;
-  final double batteryLevel;
-  final double? x;
-  final double? y;
-  final double? angle;
-  final double? remainingTime;
-  final String? currentOrderId;
-  final String? currentOrderState;
-  final List<String> alarms;
+  /// Verified friendly model/display name. Never a raw dispatch identifier.
+  final String? displayName;
 
-  bool get isConnected => connectionStatus == 1;
+  /// Null when connectivity could not be observed.
+  final bool? online;
+
+  /// Null when battery telemetry is unavailable. Never defaulted to zero.
+  final double? batteryLevel;
+
+  /// True only for fatal/error faults. Benign notices do not raise this.
+  final bool hasActiveAlarm;
+
+  bool get isConnected => online == true;
 
   factory RobotTelemetry.fromJson(JsonMap json) => RobotTelemetry(
-    vehicleId: json['vehicleId'] as String? ?? json['vehicle_id'] as String? ?? '',
-    model: json['model'] as String?,
-    currentMap: json['currentMap'] as String? ?? json['current_map'] as String?,
-    currentStation: json['currentStation'] as String? ?? json['current_station'] as String?,
-    lastStation: json['lastStation'] as String? ?? json['last_station'] as String?,
-    connectionStatus: _integer(json['connectionStatus'] ?? json['connection_status']),
-    dispatchable: json['dispatchable'] as bool? ?? false,
-    isLoaded: json['isLoaded'] as bool? ?? false,
-    isError: json['isError'] as bool? ?? json['is_error'] as bool? ?? false,
-    batteryLevel: _decimal(json['batteryLevel'] ?? json['battery_level']) ?? 0.0,
-    x: _decimal(json['x']),
-    y: _decimal(json['y']),
-    angle: _decimal(json['angle']),
-    remainingTime: _decimal(json['remainingTime'] ?? json['remaining_time']),
-    currentOrderId: json['currentOrderId'] as String? ?? json['current_order_id'] as String?,
-    currentOrderState: json['currentOrderState'] as String? ?? json['current_order_state'] as String?,
-    alarms: _strings(json['alarms']),
+    displayName: json['displayName'] as String?,
+    online: json['online'] as bool?,
+    batteryLevel: _decimal(json['batteryLevel']),
+    hasActiveAlarm: json['hasActiveAlarm'] as bool? ?? false,
   );
 }
 

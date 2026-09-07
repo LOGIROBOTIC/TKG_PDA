@@ -86,7 +86,9 @@ class _RobotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final batteryPct = (robot.batteryLevel * 100).toInt();
+    final battery = robot.batteryLevel;
+    // Unavailable battery telemetry shows as unknown, never as a 0% reading.
+    final batteryLabel = battery == null ? '—' : '${(battery * 100).toInt()}%';
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -107,7 +109,7 @@ class _RobotCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              robot.model ?? 'Robot',
+              robot.displayName ?? 'Robot',
               style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
@@ -136,12 +138,12 @@ class _RobotCard extends StatelessWidget {
                 children: [
                   const Icon(Icons.battery_std, size: 14),
                   const SizedBox(width: 2),
-                  Text('$batteryPct%', style: theme.textTheme.labelSmall),
+                  Text(batteryLabel, style: theme.textTheme.labelSmall),
                 ],
               ),
             ),
             const Spacer(),
-            if (robot.alarms.isNotEmpty)
+            if (robot.hasActiveAlarm)
               Tooltip(
                 message: 'Robot arızası mevcut',
                 child: Icon(

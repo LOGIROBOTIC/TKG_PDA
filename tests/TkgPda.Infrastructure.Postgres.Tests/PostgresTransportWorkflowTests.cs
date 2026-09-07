@@ -430,14 +430,33 @@ public sealed class PostgresTransportWorkflowTests
 
         // Initially no lock
         Assert.False(await executionStore.HasUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
+        Assert.Null(await executionStore.GetUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
 
-        // Acquire lock audit
-        await executionStore.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_ACQUIRED", "LOCK_ACQUIRED", "Acquired lock", Guid.NewGuid());
+        // Acquire lock audit with fingerprint
+        var lockInfo = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        await executionStore.WriteExecutionAuditAsync(
+            requestId,
+            "MAP_PREP_LOCK_ACQUIRED",
+            "LOCK_ACQUIRED",
+            "Acquired lock",
+            Guid.NewGuid(),
+            extraDetails: new { vehicle = "Sfl-Cbd15", requiredMap = "26.7.2026_map_optimak_1", lockInfo });
+
         Assert.True(await executionStore.HasUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
+        var snapshot = await executionStore.GetUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15");
+        Assert.NotNull(snapshot);
+        Assert.True(snapshot.HasUnreleasedLock);
+        Assert.Equal("Sfl-Cbd15", snapshot.Vehicle);
+        Assert.Equal("26.7.2026_map_optimak_1", snapshot.TargetMap);
+        Assert.NotNull(snapshot.CapturedLockInfo);
+        Assert.True(snapshot.CapturedLockInfo.Locked);
+        Assert.Equal("10.0.0.1", snapshot.CapturedLockInfo.Ip);
+        Assert.Equal("1634023715", snapshot.CapturedLockInfo.TimeT);
 
         // Release lock audit
         await executionStore.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "UNLOCK_SUCCESS", "Released lock", Guid.NewGuid());
         Assert.False(await executionStore.HasUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
+        Assert.Null(await executionStore.GetUnreleasedMapSwitchLockAsync(requestId, "Sfl-Cbd15"));
     }
 
     [PostgresFact]

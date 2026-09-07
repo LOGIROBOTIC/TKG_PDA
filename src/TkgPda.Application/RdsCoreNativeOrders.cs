@@ -168,7 +168,7 @@ public sealed class RdsCoreNormalOrder
             externalId: null,
             vehicle: vehicle,
             group: null,
-            label: "MAP_PREP",
+            label: null,
             keyRoute: null,
             keyTask: null,
             priority: priority,
@@ -342,6 +342,64 @@ public sealed record RdsCoreSimpleResult(
     string? Message,
     JsonElement? RawResponse);
 
+public sealed record RdsCoreRobotLockInfo(
+    bool Locked,
+    string? Ip = null,
+    string? NickName = null,
+    int? Port = null,
+    string? TimeT = null,
+    int? Type = null,
+    string? Desc = null)
+{
+    public bool HasUsableFingerprint =>
+        Locked && (!string.IsNullOrWhiteSpace(TimeT) ||
+                   !string.IsNullOrWhiteSpace(Ip) ||
+                   !string.IsNullOrWhiteSpace(NickName));
+
+    public bool CorrelatesWith(RdsCoreRobotLockInfo? other)
+    {
+        if (other is null || !Locked || !other.Locked) return false;
+        if (!HasUsableFingerprint || !other.HasUsableFingerprint) return false;
+
+        bool hasMatchingPrimaryId = false;
+
+        if (!string.IsNullOrWhiteSpace(TimeT))
+        {
+            if (string.IsNullOrWhiteSpace(other.TimeT) || !string.Equals(TimeT, other.TimeT, StringComparison.Ordinal))
+                return false;
+            hasMatchingPrimaryId = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Ip))
+        {
+            if (string.IsNullOrWhiteSpace(other.Ip) || !string.Equals(Ip, other.Ip, StringComparison.OrdinalIgnoreCase))
+                return false;
+            hasMatchingPrimaryId = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(NickName))
+        {
+            if (string.IsNullOrWhiteSpace(other.NickName) || !string.Equals(NickName, other.NickName, StringComparison.OrdinalIgnoreCase))
+                return false;
+            hasMatchingPrimaryId = true;
+        }
+
+        if (Port.HasValue && other.Port.HasValue && Port.Value != other.Port.Value)
+            return false;
+
+        if (Type.HasValue && other.Type.HasValue && Type.Value != other.Type.Value)
+            return false;
+
+        return hasMatchingPrimaryId;
+    }
+}
+
+public sealed record RdsMapSwitchLockSnapshot(
+    bool HasUnreleasedLock,
+    string? Vehicle,
+    string? TargetMap,
+    RdsCoreRobotLockInfo? CapturedLockInfo);
+
 public sealed record RdsCoreRobotTelemetry(
     string VehicleId,
     string? Model,
@@ -359,7 +417,8 @@ public sealed record RdsCoreRobotTelemetry(
     double? RemainingTime,
     string? CurrentOrderId,
     string? CurrentOrderState,
-    IReadOnlyList<string> Alarms);
+    IReadOnlyList<string> Alarms,
+    RdsCoreRobotLockInfo? LockInfo = null);
 
 public interface IRdsCoreNativeOrderClient
 {

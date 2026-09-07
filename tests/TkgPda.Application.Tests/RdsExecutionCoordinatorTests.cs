@@ -324,9 +324,11 @@ public sealed class RdsExecutionCoordinatorTests
         public Task RecordTaskStatusAsync(Guid requestId, RdsWindTaskSnapshot task, DateTimeOffset syncedAt, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task MarkCancellationRequestedAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset requestedAt, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, object? extraDetails, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default) => Task.FromResult<RdsMappedWorkSite?>(new(slotId, Guid.NewGuid(), "WS", 1, 0, 0, DateTimeOffset.UtcNow));
         public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default) => Task.FromResult<RdsNavigationProfileSummary?>(null);
         public Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<RdsMapSwitchLockSnapshot?> GetUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default) => Task.FromResult<RdsMapSwitchLockSnapshot?>(null);
         public Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RdsTaskTemplateSummary>>([]);
         public Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }

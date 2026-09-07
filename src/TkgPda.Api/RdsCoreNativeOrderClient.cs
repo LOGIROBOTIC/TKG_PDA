@@ -801,6 +801,19 @@ public sealed class RdsCoreNativeOrderClient(
                     }
                 }
             }
+            var lockInfoObj = Object(robot, "lock_info") ?? (rbk is { } r ? Object(r, "lock_info") : null);
+            RdsCoreRobotLockInfo? lockInfo = null;
+            if (lockInfoObj is { } li)
+            {
+                var locked = Boolean(li, "locked");
+                var ip = Text(li, "ip");
+                var nickName = Text(li, "nick_name") ?? Text(li, "nickname");
+                var port = Number(li, "port");
+                var timeT = Text(li, "time_t");
+                var type = Number(li, "type");
+                var desc = Text(li, "desc");
+                lockInfo = new RdsCoreRobotLockInfo(locked, ip, nickName, port, timeT, type, desc);
+            }
 
             list.Add(new(
                 vehicleId,
@@ -819,7 +832,8 @@ public sealed class RdsCoreNativeOrderClient(
                 remainingTime,
                 currentOrderId,
                 currentOrderState,
-                alarms));
+                alarms,
+                lockInfo));
         }
 
         return list;

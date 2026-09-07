@@ -99,11 +99,13 @@ public interface IRdsExecutionStore
     Task RecordTaskStatusAsync(Guid requestId, RdsWindTaskSnapshot task, DateTimeOffset syncedAt, CancellationToken cancellationToken = default);
     Task MarkCancellationRequestedAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset requestedAt, CancellationToken cancellationToken = default);
     Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default);
+    Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, object? extraDetails, CancellationToken cancellationToken = default);
     Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default);
     Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default);
     Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default);
     Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default);
+    Task<RdsMapSwitchLockSnapshot?> GetUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default);
 }
 
 public sealed record RdsValidateTransportRequest(
@@ -666,30 +668,62 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, taskRecordId, false, false, "ROBOT_OFFLINE", $"Robot '{vehicle}' is offline or not found.");
         }
 
-        var hasUnreleasedLock = await store.HasUnreleasedMapSwitchLockAsync(requestId, vehicle, cancellationToken);
-        if (!robot.Dispatchable)
+        var lockSnapshot = await store.GetUnreleasedMapSwitchLockAsync(requestId, vehicle, cancellationToken);
+        var hasUnreleasedLock = lockSnapshot?.HasUnreleasedLock == true;
+        var capturedLockInfo = lockSnapshot?.CapturedLockInfo;
+        var isRobotLocked = robot.LockInfo?.Locked == true;
+        var isLockCorrelated = hasUnreleasedLock
+                               && capturedLockInfo is not null
+                               && robot.LockInfo is not null
+                               && capturedLockInfo.CorrelatesWith(robot.LockInfo);
+
+        if (hasUnreleasedLock)
         {
-            // Scenarios B, C, D: If robot is not dispatchable and already on required map, recover lock if TKG owned it
-            if (hasUnreleasedLock && string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+            var isObservedUnlocked = robot.Dispatchable && robot.LockInfo?.Locked == false;
+            if (isObservedUnlocked)
             {
-                var unlockRecovery = await nativeOrderClient.UnlockAsync([vehicle], correlationId, cancellationToken);
-                if (unlockRecovery.CoreAccepted)
+                if (string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
                 {
-                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_RECOVERY_SUCCESS", "Successfully released post-switchMap lock after crash recovery.", correlationId, cancellationToken);
-                    robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
-                    robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_ALREADY_RELEASED", $"Robot '{vehicle}' observed unlocked on required map; closing prior map-switch lock record.", correlationId, cancellationToken: cancellationToken);
+                }
+                else
+                {
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "MAP_SWITCH_LOCK_RECOVERY_REQUIRED", $"Robot '{vehicle}' has an unreleased map switch lock from a crashed attempt before map switch completed.", correlationId, cancellationToken: cancellationToken);
+                    return new(requestId, taskRecordId, false, false, "MAP_SWITCH_LOCK_RECOVERY_REQUIRED", $"Robot '{vehicle}' has an unreleased map switch lock from a crashed attempt before map switch completed.");
                 }
             }
-
-            if (robot is null || !robot.Dispatchable)
+            else
             {
-                var errorCode = hasUnreleasedLock ? "MAP_SWITCH_LOCK_RECOVERY_REQUIRED" : "ROBOT_NOT_DISPATCHABLE";
-                var errorMessage = hasUnreleasedLock
-                    ? $"Robot '{vehicle}' remains locked after a prior map-switch attempt; manual lock recovery is required."
-                    : $"Robot '{vehicle}' is not dispatchable.";
-                await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", errorCode, errorMessage, correlationId, cancellationToken);
-                return new(requestId, taskRecordId, false, false, errorCode, errorMessage);
+                // Robot is still locked, not dispatchable, or lock_info is unavailable
+                // Only perform automatic recovery /unlock when:
+                // 1. TKG has an unreleased map-prep lock record
+                // 2. Robot is currently locked
+                // 3. Current lock_info can be correlated with the lock_info captured by TKG
+                // 4. Current map / orchestration state makes unlock safe (current_map == requiredMap)
+                if (isLockCorrelated && string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+                {
+                    var unlockRecovery = await nativeOrderClient.UnlockAsync([vehicle], correlationId, cancellationToken);
+                    if (unlockRecovery.CoreAccepted)
+                    {
+                        await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_RECOVERY_SUCCESS", "Successfully released post-switchMap lock after correlated crash recovery.", correlationId, cancellationToken: cancellationToken);
+                        robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+                        robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+
+                if (robot is null || robot.LockInfo?.Locked == true || !robot.Dispatchable)
+                {
+                    const string errorCode = "MAP_SWITCH_LOCK_RECOVERY_REQUIRED";
+                    var errorMessage = $"Robot '{vehicle}' remains locked after a prior map-switch attempt; manual lock recovery is required.";
+                    await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", errorCode, errorMessage, correlationId, cancellationToken: cancellationToken);
+                    return new(requestId, taskRecordId, false, false, errorCode, errorMessage);
+                }
             }
+        }
+        else if (!robot.Dispatchable)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_NOT_DISPATCHABLE", $"Robot '{vehicle}' is not dispatchable.", correlationId, cancellationToken: cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_NOT_DISPATCHABLE", $"Robot '{vehicle}' is not dispatchable.");
         }
 
         if (robot.IsError || robot.Alarms.Count > 0)
@@ -699,7 +733,7 @@ public sealed class RdsExecutionCoordinator(
         }
 
         var mapPrepOrderId = RdsCoreNormalOrder.TransitionOrderId(requestId, requiredMap);
-        if (!string.IsNullOrWhiteSpace(robot.CurrentOrderId)
+        if (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState)
             && !string.Equals(robot.CurrentOrderId, taskRecordId, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
         {
@@ -737,9 +771,9 @@ public sealed class RdsExecutionCoordinator(
                     // Order not yet found or query failed
                 }
 
-                if (prepDetails?.State.Known == RdsCoreKnownOrderState.Running)
+                if (prepDetails?.State.Known is RdsCoreKnownOrderState.Running or RdsCoreKnownOrderState.Created or RdsCoreKnownOrderState.Waiting or RdsCoreKnownOrderState.ToBeDispatched)
                 {
-                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_AWAITING", "RUNNING", "Preliminary navigation to transition station is running.", correlationId, cancellationToken);
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_AWAITING", prepDetails.State.Known.ToString().ToUpperInvariant(), "Preliminary navigation to transition station is in progress.", correlationId, cancellationToken);
                     return new(requestId, mapPrepOrderId, false, false, "MAP_PREP_RUNNING", "Preliminary navigation to transition station is running.");
                 }
                 else if (prepDetails?.State.Known != RdsCoreKnownOrderState.Finished)
@@ -776,7 +810,7 @@ public sealed class RdsExecutionCoordinator(
                 || !robot.Dispatchable
                 || robot.IsError
                 || robot.Alarms.Count > 0
-                || (!string.IsNullOrEmpty(robot.CurrentOrderId) && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
+                || (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState) && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
                 || !string.Equals(robot.CurrentStation?.Trim(), transitionStation, StringComparison.OrdinalIgnoreCase))
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCH_TRANSITION_NOT_CONFIRMED", $"Transition station arrival could not be confirmed. Station='{robot?.CurrentStation}', expected='{transitionStation}'.", correlationId, cancellationToken);
@@ -800,7 +834,27 @@ public sealed class RdsExecutionCoordinator(
                 return new(requestId, taskRecordId, false, false, "LOCK_FAILED", lockResult.Message ?? "Lock vehicle rejected before switchMap.");
             }
 
-            await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_ACQUIRED", "LOCK_ACQUIRED", $"Lock acquired on vehicle '{vehicle}' for map switch to '{requiredMap}'.", correlationId, cancellationToken);
+            // Immediately query /robotsStatus to capture lock_info fingerprint
+            RdsCoreRobotLockInfo? activeLockInfo = null;
+            try
+            {
+                var postLockRobots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+                var postLockRobot = postLockRobots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                activeLockInfo = postLockRobot?.LockInfo;
+            }
+            catch
+            {
+                // Telemetry capture failure does not block switchMap attempt, but leaves lock uncorrelatable on crash
+            }
+
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "MAP_PREP_LOCK_ACQUIRED",
+                "LOCK_ACQUIRED",
+                $"Lock acquired on vehicle '{vehicle}' for map switch to '{requiredMap}'.",
+                correlationId,
+                extraDetails: new { vehicle, requiredMap, lockInfo = activeLockInfo },
+                cancellationToken: cancellationToken);
 
             RdsCoreSimpleResult switchResult;
             try
@@ -1218,4 +1272,12 @@ public sealed class RdsExecutionCoordinator(
         var text = FindText(value, name);
         return int.TryParse(text, out var number) ? number : null;
     }
+
+    private static bool IsOrderActive(string? orderId, string? orderState) =>
+        !string.IsNullOrWhiteSpace(orderId)
+        && !string.Equals(orderState, "FINISHED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "TERMINATED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "CANCELLED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "CANCELED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "COMPLETED", StringComparison.OrdinalIgnoreCase);
 }

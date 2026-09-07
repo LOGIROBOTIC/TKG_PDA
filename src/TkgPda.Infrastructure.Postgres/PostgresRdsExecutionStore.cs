@@ -335,29 +335,61 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
             throw new RdsExecutionException("RDS_TASK_NOT_FOUND", "The RDS task projection does not exist.");
     }
 
+    public Task WriteExecutionAuditAsync(
+        Guid requestId,
+        string action,
+        string code,
+        string message,
+        Guid correlationId,
+        CancellationToken cancellationToken = default) =>
+        WriteExecutionAuditAsync(requestId, action, code, message, correlationId, null, cancellationToken);
+
     public async Task WriteExecutionAuditAsync(
         Guid requestId,
         string action,
         string code,
         string message,
         Guid correlationId,
+        object? extraDetails,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        string afterJson;
+        if (extraDetails is null || extraDetails is CancellationToken)
+        {
+            afterJson = JsonSerializer.Serialize(new { code, message });
+        }
+        else
+        {
+            var dict = new Dictionary<string, object?>
+            {
+                ["code"] = code,
+                ["message"] = message
+            };
+            var extraJson = JsonSerializer.SerializeToElement(extraDetails);
+            if (extraJson.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in extraJson.EnumerateObject())
+                {
+                    dict[prop.Name] = prop.Value.Clone();
+                }
+            }
+            afterJson = JsonSerializer.Serialize(dict);
+        }
+
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO audit.audit_logs (
                 action, entity_type, entity_id, after_json, correlation_id)
             VALUES (
                 @action, 'TRANSPORT_REQUEST', @entity_id,
-                jsonb_build_object('code', @code, 'message', @message),
+                @after_json::jsonb,
                 @correlation_id)
             """,
             connection);
         command.Parameters.AddWithValue("action", action);
         command.Parameters.AddWithValue("entity_id", requestId.ToString());
-        command.Parameters.AddWithValue("code", code);
-        command.Parameters.AddWithValue("message", message);
+        command.Parameters.AddWithValue("after_json", afterJson);
         command.Parameters.AddWithValue("correlation_id", correlationId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -549,24 +581,84 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();
     public async Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default)
     {
+        var snapshot = await GetUnreleasedMapSwitchLockAsync(requestId, vehicle, cancellationToken);
+        return snapshot?.HasUnreleasedLock == true;
+    }
+
+    public async Task<RdsMapSwitchLockSnapshot?> GetUnreleasedMapSwitchLockAsync(
+        Guid requestId,
+        string vehicle,
+        CancellationToken cancellationToken = default)
+    {
         const string sql =
             """
-            SELECT EXISTS (
-                SELECT 1 FROM audit.audit_logs
-                WHERE entity_type = 'TRANSPORT_REQUEST'
-                  AND entity_id = @request_id
-                  AND action = 'MAP_PREP_LOCK_ACQUIRED'
-            ) AND NOT EXISTS (
-                SELECT 1 FROM audit.audit_logs
-                WHERE entity_type = 'TRANSPORT_REQUEST'
-                  AND entity_id = @request_id
-                  AND action = 'MAP_PREP_LOCK_RELEASED'
-            );
+            SELECT after_json
+            FROM audit.audit_logs
+            WHERE entity_type = 'TRANSPORT_REQUEST'
+              AND entity_id = @request_id
+              AND action = 'MAP_PREP_LOCK_ACQUIRED'
+              AND NOT EXISTS (
+                  SELECT 1 FROM audit.audit_logs
+                  WHERE entity_type = 'TRANSPORT_REQUEST'
+                    AND entity_id = @request_id
+                    AND action = 'MAP_PREP_LOCK_RELEASED'
+              )
+            ORDER BY created_at DESC
+            LIMIT 1;
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("request_id", requestId.ToString());
-        return (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        if (result is null or DBNull)
+            return null;
+
+        var jsonStr = result.ToString();
+        if (string.IsNullOrWhiteSpace(jsonStr))
+            return null;
+
+        using var doc = JsonDocument.Parse(jsonStr);
+        var root = doc.RootElement;
+
+        string? recordedVehicle = TryGetPropertyIgnoreCase(root, "vehicle", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? targetMap = TryGetPropertyIgnoreCase(root, "requiredMap", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+
+        RdsCoreRobotLockInfo? lockInfo = null;
+        if (TryGetPropertyIgnoreCase(root, "lockInfo", out var li) && li.ValueKind == JsonValueKind.Object)
+        {
+            bool locked = TryGetPropertyIgnoreCase(li, "locked", out var l) && (l.ValueKind == JsonValueKind.True || (l.ValueKind == JsonValueKind.String && bool.TryParse(l.GetString(), out var lb) && lb));
+            string? ip = TryGetPropertyIgnoreCase(li, "ip", out var ipP) && ipP.ValueKind == JsonValueKind.String ? ipP.GetString() : null;
+            string? nickName = TryGetPropertyIgnoreCase(li, "nickName", out var nP) && nP.ValueKind == JsonValueKind.String ? nP.GetString()
+                : (TryGetPropertyIgnoreCase(li, "nick_name", out var nP2) && nP2.ValueKind == JsonValueKind.String ? nP2.GetString() : null);
+            int? port = TryGetPropertyIgnoreCase(li, "port", out var pP) && pP.TryGetInt32(out var pVal) ? pVal : null;
+            string? timeT = TryGetPropertyIgnoreCase(li, "timeT", out var tP) && tP.ValueKind is JsonValueKind.String or JsonValueKind.Number ? tP.ToString()
+                : (TryGetPropertyIgnoreCase(li, "time_t", out var tP2) && tP2.ValueKind is JsonValueKind.String or JsonValueKind.Number ? tP2.ToString() : null);
+            int? type = TryGetPropertyIgnoreCase(li, "type", out var typeP) && typeP.TryGetInt32(out var typeVal) ? typeVal : null;
+            string? desc = TryGetPropertyIgnoreCase(li, "desc", out var dP) && dP.ValueKind == JsonValueKind.String ? dP.GetString() : null;
+
+            lockInfo = new RdsCoreRobotLockInfo(locked, ip, nickName, port, timeT, type, desc);
+        }
+
+        return new RdsMapSwitchLockSnapshot(true, recordedVehicle, targetMap, lockInfo);
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty(propertyName, out value))
+                return true;
+            foreach (var prop in element.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = prop.Value;
+                    return true;
+                }
+            }
+        }
+        value = default;
+        return false;
     }
 
     private static Guid? Uuid(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetGuid(ordinal);

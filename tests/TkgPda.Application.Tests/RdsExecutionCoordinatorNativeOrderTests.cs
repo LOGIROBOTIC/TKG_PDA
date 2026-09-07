@@ -527,12 +527,14 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     }
 
     [Fact]
-    public async Task Crash_recovery_scenario_B_C_D_post_switchMap_unreleased_lock_is_safely_unlocked_and_dispatched()
+    public async Task Crash_race_A_TKG_lock_fingerprint_matches_after_restart_safe_recovery_behavior()
     {
         var fixture = Fixture();
+        var lockInfo = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
         fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
         fixture.NativeClient.RobotDispatchable = false;
-        fixture.Store.HasUnreleasedLock = true;
+        fixture.NativeClient.RobotLockInfo = lockInfo;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "Sfl-Cbd15", "26.7.2026_map_optimak_1", lockInfo);
         fixture.Store.NavigationProfileSummary = new(
             Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
 
@@ -541,27 +543,92 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.NotNull(result);
         Assert.True(result.Dispatched);
         Assert.Equal(1, fixture.NativeClient.UnlockCount);
-        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
         Assert.Equal(1, fixture.NativeClient.SetOrderCount);
     }
 
     [Fact]
-    public async Task Locked_robot_without_proven_TKG_lock_ownership_never_blindly_unlocked()
+    public async Task Crash_race_B_TKG_historical_unreleased_audit_exists_but_current_lock_info_differs_never_unlocks()
     {
         var fixture = Fixture();
-        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak";
+        var tkgLock = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        var externalLock = new RdsCoreRobotLockInfo(true, "10.0.0.99", "EXT-ENG", 5500, "1634029999", 2, "commissioning");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
         fixture.NativeClient.RobotDispatchable = false;
-        fixture.Store.HasUnreleasedLock = false;
+        fixture.NativeClient.RobotLockInfo = externalLock;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "Sfl-Cbd15", "26.7.2026_map_optimak_1", tkgLock);
         fixture.Store.NavigationProfileSummary = new(
-            Guid.NewGuid(), "DEV-MAP-A", "DEV-MAP-A", "ACTIVE", "26.7.2026_map_optimak", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
 
         var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
 
         Assert.NotNull(result);
         Assert.False(result.Dispatched);
-        Assert.Equal("ROBOT_NOT_DISPATCHABLE", result.Code);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
         Assert.Equal(0, fixture.NativeClient.UnlockCount);
         Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Fact]
+    public async Task Crash_race_C_TKG_historical_unreleased_audit_exists_but_current_lock_info_unavailable_never_unlocks()
+    {
+        var fixture = Fixture();
+        var tkgLock = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = null;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "Sfl-Cbd15", "26.7.2026_map_optimak_1", tkgLock);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Fact]
+    public async Task Crash_race_D_unlock_succeeded_but_release_audit_lost_then_external_lock_acquired_never_unlocks_external_lock()
+    {
+        var fixture = Fixture();
+        var oldTkgLock = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        var externalLock = new RdsCoreRobotLockInfo(true, "192.168.1.88", "ENG-ROBOSHOP", 6000, "1634030000", 255, "tuning");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = externalLock;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "Sfl-Cbd15", "26.7.2026_map_optimak_1", oldTkgLock);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Fact]
+    public async Task Crash_race_E_same_TKG_lock_still_exists_after_crash_and_target_map_already_switched_safe_correlated_recovery_unlock()
+    {
+        var fixture = Fixture();
+        var tkgLock = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = tkgLock;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "Sfl-Cbd15", "26.7.2026_map_optimak_1", tkgLock);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.True(result.Dispatched);
+        Assert.Equal(1, fixture.NativeClient.UnlockCount);
+        Assert.Equal(1, fixture.NativeClient.SetOrderCount);
     }
 
     private static NativeTestFixture Fixture(
@@ -675,6 +742,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             JsonDocument.Parse("{}").RootElement);
 
         public bool HasUnreleasedLock { get; set; } = false;
+        public RdsMapSwitchLockSnapshot? MapSwitchLockSnapshot { get; set; }
         public Guid? ExpectedVariantId { get; set; }
         public Guid? ExpectedMachineId { get; set; }
 
@@ -704,6 +772,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             Task.CompletedTask;
         public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+        public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, object? extraDetails, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
         public Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default) =>
             Task.FromResult<RdsMappedWorkSite?>(null);
         public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default)
@@ -713,7 +783,9 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             return Task.FromResult(NavigationProfileSummary);
         }
         public Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default) =>
-            Task.FromResult(HasUnreleasedLock);
+            Task.FromResult(HasUnreleasedLock || MapSwitchLockSnapshot?.HasUnreleasedLock == true);
+        public Task<RdsMapSwitchLockSnapshot?> GetUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default) =>
+            Task.FromResult(MapSwitchLockSnapshot ?? (HasUnreleasedLock ? new RdsMapSwitchLockSnapshot(true, vehicle, null, null) : null));
         public Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RdsTaskTemplateSummary>>([]);
         public Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default) =>
@@ -805,6 +877,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         public bool KeepOldMapOnSwitch { get; set; } = false;
         public bool AlarmAfterSwitch { get; set; } = false;
 
+        public RdsCoreRobotLockInfo? RobotLockInfo { get; set; }
+
         public RdsCoreKnownOrderState DetailsState { get; set; } = RdsCoreKnownOrderState.Waiting;
         public RdsCoreKnownOrderState TransitionOrderState { get; set; } = RdsCoreKnownOrderState.Unknown;
 
@@ -819,11 +893,12 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
 
         public Task<RdsCoreOrderDetails> GetOrderDetailsAsync(string orderId, Guid correlationId, CancellationToken cancellationToken = default)
         {
-            var state = orderId.Contains(":map-prep:") ? TransitionOrderState : DetailsState;
+            var isTransition = orderId.Contains(":map-prep:");
+            var state = isTransition ? TransitionOrderState : DetailsState;
             return Task.FromResult(new RdsCoreOrderDetails(
                 orderId,
                 null,
-                new(state, state.ToString().ToUpperInvariant()),
+                new RdsCoreOrderState(state, state.ToString()),
                 [],
                 RdsCoreOrderDiagnostics.Empty,
                 JsonDocument.Parse("{}").RootElement));
@@ -846,7 +921,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 0, 0, 0, null,
                 RobotCurrentOrderId,
                 null,
-                RobotAlarms);
+                RobotAlarms,
+                RobotLockInfo);
             return Task.FromResult<IReadOnlyList<RdsCoreRobotTelemetry>>([telemetry]);
         }
 
@@ -855,6 +931,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             LockCount++;
             if (LockError is not null) throw LockError;
             RobotDispatchable = false;
+            RobotLockInfo ??= new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG", 5000, "1634023715", 2, "ok");
             return Task.FromResult(new RdsCoreSimpleResult(true, true, 200, 0, "ok", JsonDocument.Parse("{}").RootElement));
         }
 
@@ -863,6 +940,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             UnlockCount++;
             if (UnlockError is not null) throw UnlockError;
             RobotDispatchable = true;
+            RobotLockInfo = new RdsCoreRobotLockInfo(false, null, null, null, null, null, null);
             return Task.FromResult(new RdsCoreSimpleResult(true, true, 200, 0, "ok", JsonDocument.Parse("{}").RootElement));
         }
 

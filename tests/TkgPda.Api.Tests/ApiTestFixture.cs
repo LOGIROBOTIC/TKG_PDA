@@ -26,6 +26,8 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
     {
         builder.UseSetting("Rds:CallbackKey", CallbackKey);
         builder.UseSetting("Cors:AllowedOrigins:0", "https://operator.example.test");
+        builder.UseSetting("RdsCoreExecution:Enabled", "false");
+        builder.UseSetting("Authentication:Jwt:ExpiryMinutes", "15");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<IRdsReadClient>();
@@ -58,6 +60,11 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
             WHERE rds_worksite_id IN (
                 SELECT id FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08A-%');
             DELETE FROM integration.rds_worksites WHERE rds_site_id LIKE 'P08A-%';
+            DELETE FROM integration.layout_slot_rds_mapping
+            WHERE rds_worksite_id IN (
+                SELECT id FROM integration.rds_worksites WHERE area = 'OPTIMAK_SIM_2026');
+            DELETE FROM integration.rds_worksites WHERE area = 'OPTIMAK_SIM_2026';
+            DELETE FROM master.navigation_profiles WHERE code LIKE 'DEV-RDS-SIM-%';
             DELETE FROM master.navigation_profiles WHERE code LIKE 'P08A-%';
             DELETE FROM master.task_templates
             WHERE config_json ->> 'testScope' = 'P07A';

@@ -158,6 +158,10 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 WHERE (r.source_slot_id IS NOT NULL AND ls.id = r.source_slot_id)
                    OR (r.source_slot_id IS NULL AND template.source_slot_group_id IS NOT NULL
                        AND sgm.slot_group_id = template.source_slot_group_id AND ls.layout_id = r.layout_id)
+                   OR (r.source_slot_id IS NULL AND template.source_slot_group_id IS NULL
+                       AND ls.layout_id = r.layout_id AND ls.is_enabled AND (
+                           (tt.code = 'BRING_EMPTY' AND ls.slot_role = 'EMPTY_STORAGE')
+                       ))
                 ORDER BY CASE WHEN ls.id = r.source_slot_id THEN 0 ELSE 1 END,
                          sgm.priority, ls.display_order, ls.id
                 LIMIT 1
@@ -174,6 +178,11 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 WHERE (r.destination_slot_id IS NOT NULL AND ls.id = r.destination_slot_id)
                    OR (r.destination_slot_id IS NULL AND template.destination_slot_group_id IS NOT NULL
                        AND sgm.slot_group_id = template.destination_slot_group_id AND ls.layout_id = r.layout_id)
+                   OR (r.destination_slot_id IS NULL AND template.destination_slot_group_id IS NULL
+                       AND ls.layout_id = r.layout_id AND ls.is_enabled AND (
+                           (tt.code = 'REMOVE_FULL' AND ls.slot_role = 'DROP')
+                           OR (tt.code = 'REMOVE_EMPTY' AND ls.slot_role = 'EMPTY_STORAGE')
+                       ))
                 ORDER BY CASE WHEN ls.id = r.destination_slot_id THEN 0 ELSE 1 END,
                          sgm.priority, ls.display_order, ls.id
                 LIMIT 1
@@ -326,29 +335,61 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
             throw new RdsExecutionException("RDS_TASK_NOT_FOUND", "The RDS task projection does not exist.");
     }
 
+    public Task WriteExecutionAuditAsync(
+        Guid requestId,
+        string action,
+        string code,
+        string message,
+        Guid correlationId,
+        CancellationToken cancellationToken = default) =>
+        WriteExecutionAuditAsync(requestId, action, code, message, correlationId, null, cancellationToken);
+
     public async Task WriteExecutionAuditAsync(
         Guid requestId,
         string action,
         string code,
         string message,
         Guid correlationId,
+        object? extraDetails,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        string afterJson;
+        if (extraDetails is null || extraDetails is CancellationToken)
+        {
+            afterJson = JsonSerializer.Serialize(new { code, message });
+        }
+        else
+        {
+            var dict = new Dictionary<string, object?>
+            {
+                ["code"] = code,
+                ["message"] = message
+            };
+            var extraJson = JsonSerializer.SerializeToElement(extraDetails);
+            if (extraJson.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in extraJson.EnumerateObject())
+                {
+                    dict[prop.Name] = prop.Value.Clone();
+                }
+            }
+            afterJson = JsonSerializer.Serialize(dict);
+        }
+
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO audit.audit_logs (
                 action, entity_type, entity_id, after_json, correlation_id)
             VALUES (
                 @action, 'TRANSPORT_REQUEST', @entity_id,
-                jsonb_build_object('code', @code, 'message', @message),
+                @after_json::jsonb,
                 @correlation_id)
             """,
             connection);
         command.Parameters.AddWithValue("action", action);
         command.Parameters.AddWithValue("entity_id", requestId.ToString());
-        command.Parameters.AddWithValue("code", code);
-        command.Parameters.AddWithValue("message", message);
+        command.Parameters.AddWithValue("after_json", afterJson);
         command.Parameters.AddWithValue("correlation_id", correlationId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -397,6 +438,79 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 reader.GetInt32(7), Json(reader.GetString(8)), reader.GetBoolean(9)));
         }
         return rows;
+    }
+
+    public async Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(
+        Guid? profileId,
+        Guid variantId,
+        Guid machineId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        const string sql =
+            """
+            SELECT np.id, np.code, np.name, np.status, np.robot_map_name, np.config_json::text
+            FROM master.variant_navigation_profile_assignments vna
+            JOIN master.navigation_profiles np ON np.id = vna.navigation_profile_id AND np.machine_id = vna.machine_id
+            WHERE vna.variant_id = @variant_id
+              AND vna.machine_id = @machine_id
+              AND np.machine_id = @machine_id
+              AND np.status = 'PUBLISHED'
+              AND (@profile_id::uuid IS NULL OR np.id = @profile_id)
+            ORDER BY (vna.is_default) DESC, np.id
+            LIMIT 1
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("variant_id", variantId);
+        command.Parameters.AddWithValue("machine_id", machineId);
+        command.Parameters.Add(new NpgsqlParameter("profile_id", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)profileId ?? DBNull.Value });
+
+        await using (command)
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            if (!await reader.ReadAsync(cancellationToken)) return null;
+
+            var id = reader.GetGuid(0);
+            var code = reader.GetString(1);
+            var name = reader.GetString(2);
+            var status = reader.GetString(3);
+            var robotMapName = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var configStr = reader.IsDBNull(5) ? "{}" : reader.GetString(5);
+            var configJson = Json(configStr);
+
+            string? switchTransition = null;
+            string? vehicle = null;
+            if (configJson.ValueKind == JsonValueKind.Object)
+            {
+                if (configJson.TryGetProperty("switchTransitionStation", out var stProp) && stProp.ValueKind == JsonValueKind.String)
+                {
+                    switchTransition = stProp.GetString();
+                }
+                else if (configJson.TryGetProperty("transitionStation", out var tsProp) && tsProp.ValueKind == JsonValueKind.String)
+                {
+                    switchTransition = tsProp.GetString();
+                }
+
+                if (configJson.TryGetProperty("vehicle", out var vProp) && vProp.ValueKind == JsonValueKind.String)
+                {
+                    vehicle = vProp.GetString();
+                }
+                else if (configJson.TryGetProperty("allowedVehicles", out var avProp) && avProp.ValueKind == JsonValueKind.Array && avProp.GetArrayLength() > 0)
+                {
+                    vehicle = avProp[0].GetString();
+                }
+            }
+
+            return new RdsNavigationProfileSummary(
+                id,
+                code,
+                name,
+                status,
+                robotMapName,
+                switchTransition,
+                vehicle,
+                configJson);
+        }
     }
 
     public async Task EnrichRemainingTimesAsync(
@@ -465,6 +579,88 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         Json(reader.GetString(9)), reader.GetBoolean(10), WorkflowCode.ParseTransportStatus(reader.GetString(11)));
 
     private static JsonElement Json(string value) => JsonDocument.Parse(value).RootElement.Clone();
+    public async Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetUnreleasedMapSwitchLockAsync(requestId, vehicle, cancellationToken);
+        return snapshot?.HasUnreleasedLock == true;
+    }
+
+    public async Task<RdsMapSwitchLockSnapshot?> GetUnreleasedMapSwitchLockAsync(
+        Guid requestId,
+        string vehicle,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql =
+            """
+            SELECT after_json
+            FROM audit.audit_logs
+            WHERE entity_type = 'TRANSPORT_REQUEST'
+              AND entity_id = @request_id
+              AND action = 'MAP_PREP_LOCK_ACQUIRED'
+              AND NOT EXISTS (
+                  SELECT 1 FROM audit.audit_logs
+                  WHERE entity_type = 'TRANSPORT_REQUEST'
+                    AND entity_id = @request_id
+                    AND action = 'MAP_PREP_LOCK_RELEASED'
+              )
+            ORDER BY created_at DESC
+            LIMIT 1;
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("request_id", requestId.ToString());
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        if (result is null or DBNull)
+            return null;
+
+        var jsonStr = result.ToString();
+        if (string.IsNullOrWhiteSpace(jsonStr))
+            return null;
+
+        using var doc = JsonDocument.Parse(jsonStr);
+        var root = doc.RootElement;
+
+        string? recordedVehicle = TryGetPropertyIgnoreCase(root, "vehicle", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? targetMap = TryGetPropertyIgnoreCase(root, "requiredMap", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+
+        RdsCoreRobotLockInfo? lockInfo = null;
+        if (TryGetPropertyIgnoreCase(root, "lockInfo", out var li) && li.ValueKind == JsonValueKind.Object)
+        {
+            bool locked = TryGetPropertyIgnoreCase(li, "locked", out var l) && (l.ValueKind == JsonValueKind.True || (l.ValueKind == JsonValueKind.String && bool.TryParse(l.GetString(), out var lb) && lb));
+            string? ip = TryGetPropertyIgnoreCase(li, "ip", out var ipP) && ipP.ValueKind == JsonValueKind.String ? ipP.GetString() : null;
+            string? nickName = TryGetPropertyIgnoreCase(li, "nickName", out var nP) && nP.ValueKind == JsonValueKind.String ? nP.GetString()
+                : (TryGetPropertyIgnoreCase(li, "nick_name", out var nP2) && nP2.ValueKind == JsonValueKind.String ? nP2.GetString() : null);
+            int? port = TryGetPropertyIgnoreCase(li, "port", out var pP) && pP.TryGetInt32(out var pVal) ? pVal : null;
+            string? timeT = TryGetPropertyIgnoreCase(li, "timeT", out var tP) && tP.ValueKind is JsonValueKind.String or JsonValueKind.Number ? tP.ToString()
+                : (TryGetPropertyIgnoreCase(li, "time_t", out var tP2) && tP2.ValueKind is JsonValueKind.String or JsonValueKind.Number ? tP2.ToString() : null);
+            int? type = TryGetPropertyIgnoreCase(li, "type", out var typeP) && typeP.TryGetInt32(out var typeVal) ? typeVal : null;
+            string? desc = TryGetPropertyIgnoreCase(li, "desc", out var dP) && dP.ValueKind == JsonValueKind.String ? dP.GetString() : null;
+
+            lockInfo = new RdsCoreRobotLockInfo(locked, ip, nickName, port, timeT, type, desc);
+        }
+
+        return new RdsMapSwitchLockSnapshot(true, recordedVehicle, targetMap, lockInfo);
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty(propertyName, out value))
+                return true;
+            foreach (var prop in element.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = prop.Value;
+                    return true;
+                }
+            }
+        }
+        value = default;
+        return false;
+    }
+
     private static Guid? Uuid(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetGuid(ordinal);
     private static string? Text(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     private static int? Number(NpgsqlDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetInt32(ordinal);

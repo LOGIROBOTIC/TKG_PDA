@@ -118,6 +118,37 @@ void main() {
         );
       },
     );
+
+    test(
+      'Web configuration automatically maps dev origin port to port 5000 on the same host',
+      () {
+        final platformLan = PlatformInfo(
+          isWeb: true,
+          browserOrigin: Uri(scheme: 'http', host: '192.168.40.220', port: 7357),
+        );
+        expect(
+          AppConfig.resolve(
+            platformInfo: platformLan,
+            runtimeApiBaseUrl: '',
+            buildApiBaseUrl: '',
+          ).apiBaseUri,
+          Uri.parse('http://192.168.40.220:5000'),
+        );
+
+        final platformLocalhost = PlatformInfo(
+          isWeb: true,
+          browserOrigin: Uri(scheme: 'http', host: 'localhost', port: 7357),
+        );
+        expect(
+          AppConfig.resolve(
+            platformInfo: platformLocalhost,
+            runtimeApiBaseUrl: '',
+            buildApiBaseUrl: '',
+          ).apiBaseUri,
+          Uri.parse('http://localhost:5000'),
+        );
+      },
+    );
   });
 
   group('HTTP security boundary', () {

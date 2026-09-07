@@ -16,13 +16,15 @@ param(
     [int]$ApiPort = 5000,
     [int]$AdminPort = 4173,
     [int]$OperatorPort = 7357,
+    [string]$HostAddress = '0.0.0.0',
     [ValidateSet('ReadOnly', 'Off')]
     [string]$RdsMode = 'ReadOnly',
     [string]$RdsBaseUrl = 'http://127.0.0.1:8080',
     [string]$Password,
     [System.Security.SecureString]$SecurePassword,
     [switch]$NoOperator,
-    [switch]$NoAdmin
+    [switch]$NoAdmin,
+    [switch]$EnableSimulationTrialMappings = $true
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,10 +40,123 @@ $pgDataDir = Join-Path $devRoot 'postgres'
 $logsDir   = Join-Path $devRoot 'logs'
 $stateDir  = Join-Path $devRoot 'state'
 $stateFile = Join-Path $stateDir 'stack_state.json'
+$runtimeDir = Join-Path $projectRoot '.runtime'
+$apiPidFile = Join-Path $runtimeDir 'api.pid'
 
-foreach ($dir in @($devRoot, $logsDir, $stateDir)) {
+foreach ($dir in @($devRoot, $logsDir, $stateDir, $runtimeDir)) {
     if (-not (Test-Path -LiteralPath $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
+
+# Process identity and ownership helpers
+function Get-ProcessCim {
+    param([int]$ProcessId)
+    Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
+}
+
+function Test-ProcessOwnedByRepo {
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+    $cim = Get-ProcessCim $ProcessId
+    if (-not $cim) { return $false }
+    $normalizedRoot = $RepoRoot.TrimEnd('\', '/')
+
+    # 1. Direct command line or executable path check
+    if (($cim.CommandLine -like "*$normalizedRoot*") -or ($cim.ExecutablePath -like "*$normalizedRoot*")) {
+        return $true
+    }
+
+    # 2. Check parent and grandparent processes
+    $currParentId = $cim.ParentProcessId
+    for ($depth = 0; $depth -lt 3 -and $currParentId -gt 4; $depth++) {
+        $parentCim = Get-ProcessCim $currParentId
+        if (-not $parentCim) { break }
+        if (($parentCim.CommandLine -like "*$normalizedRoot*") -or ($parentCim.ExecutablePath -like "*$normalizedRoot*")) {
+            return $true
+        }
+        $currParentId = $parentCim.ParentProcessId
+    }
+
+    # 3. Check child and grandchild processes
+    $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue
+    foreach ($ch in $children) {
+        if (($ch.CommandLine -like "*$normalizedRoot*") -or ($ch.ExecutablePath -like "*$normalizedRoot*")) {
+            return $true
+        }
+        $grandChildren = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($ch.ProcessId)" -ErrorAction SilentlyContinue
+        foreach ($gch in $grandChildren) {
+            if (($gch.CommandLine -like "*$normalizedRoot*") -or ($gch.ExecutablePath -like "*$normalizedRoot*")) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Stop-OwnedProcessSafely {
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [string]$Description = "Process"
+    )
+    $cim = Get-ProcessCim $ProcessId
+    if (-not $cim) { return $false }
+
+    if (-not (Test-ProcessOwnedByRepo -ProcessId $ProcessId -RepoRoot $RepoRoot)) {
+        Write-Warning "$Description with PID $ProcessId does not belong to this repository ($RepoRoot). Skipping."
+        return $false
+    }
+
+    Write-Host "Stopping $Description (PID $ProcessId)..." -ForegroundColor Cyan
+    & taskkill.exe /PID $ProcessId /T /F 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
+    for ($i = 0; $i -lt 10; $i++) {
+        Start-Sleep -Milliseconds 500
+        if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) {
+            return $true
+        }
+    }
+
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+    return $true
+}
+
+function Reclaim-PortIfOwned {
+    param(
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ServiceName
+    )
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $conn) { return }
+
+    $owningPid = $conn.OwningProcess
+    $cim = Get-ProcessCim $owningPid
+    if (-not $cim) { return }
+
+    if (Test-ProcessOwnedByRepo -ProcessId $owningPid -RepoRoot $RepoRoot) {
+        Write-Host "Port $Port is occupied by existing $ServiceName process (PID $owningPid) from this repository. Reclaiming..." -ForegroundColor Cyan
+        Stop-OwnedProcessSafely -ProcessId $owningPid -RepoRoot $RepoRoot -Description $ServiceName | Out-Null
+    } else {
+        Write-Host ""
+        Write-Host "============================================================" -ForegroundColor Red
+        Write-Host "ERROR: ${ServiceName}_PORT_IN_USE_BY_FOREIGN_PROCESS" -ForegroundColor Red
+        Write-Host "============================================================" -ForegroundColor Red
+        Write-Host "Port $Port is occupied by a foreign process not belonging to this repository:"
+        Write-Host "  PID:            $($cim.ProcessId)"
+        Write-Host "  ProcessName:    $($cim.Name)"
+        Write-Host "  ExecutablePath: $($cim.ExecutablePath)"
+        Write-Host "  CommandLine:    $($cim.CommandLine)"
+        Write-Host "============================================================" -ForegroundColor Red
+        throw "${ServiceName}_PORT_IN_USE_BY_FOREIGN_PROCESS: Port $Port is occupied by foreign process (PID $($cim.ProcessId))"
     }
 }
 
@@ -133,7 +248,7 @@ Write-Host 'Applying migration 005 (005_layout_slot_part_mapping.sql)...' -Foreg
 & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Applying 005_layout_slot_part_mapping.sql failed with exit code $LASTEXITCODE" }
 
-Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cyan
+Write-Host 'Applying customer master seeds (002a, 002b, 002c)...' -ForegroundColor Cyan
 $seedFiles = @(
     (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql'),
     (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql'),
@@ -142,6 +257,15 @@ $seedFiles = @(
 foreach ($sf in $seedFiles) {
     & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f $sf | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Applying seed failed: $sf" }
+}
+
+if ($EnableSimulationTrialMappings) {
+    Write-Host 'Applying simulation RDS trial mappings (002d - OPTIMAK_SIM_2026 overlay)...' -ForegroundColor Yellow
+    $simSeed = (Join-Path $projectRoot 'db\seeds\generated\002d_simulation_rds_trial_mappings.sql')
+    & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f $simSeed | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Applying simulation trial seed failed: $simSeed" }
+} else {
+    Write-Host 'Simulation trial mappings bypassed (production isolation active).' -ForegroundColor Gray
 }
 
 # Resolve development password
@@ -167,6 +291,8 @@ if (-not [string]::IsNullOrWhiteSpace($Password)) {
 if (-not [string]::IsNullOrWhiteSpace($plainPassword)) {
     $passwordHash = New-Pbkdf2Hash51 $plainPassword
     $passwordHashSql = "'" + $passwordHash.Replace("'", "''") + "'"
+    $fatihPasswordHash = New-Pbkdf2Hash51 '123456789123'
+    $fatihPasswordHashSql = "'" + $fatihPasswordHash.Replace("'", "''") + "'"
     $plainPassword = $null
     $passwordHash = $null
 
@@ -176,7 +302,8 @@ VALUES
   ('dev-admin', __PASSWORD_HASH__, 'Development Administrator', 'DEV-ADM', true),
   ('dev-supervisor', __PASSWORD_HASH__, 'Development Supervisor', 'DEV-SUP', true),
   ('dev-line', __PASSWORD_HASH__, 'Development Line Operator', 'DEV-LINE', true),
-  ('dev-warehouse', __PASSWORD_HASH__, 'Development Warehouse Operator', 'DEV-WH', true)
+  ('dev-warehouse', __PASSWORD_HASH__, 'Development Warehouse Operator', 'DEV-WH', true),
+  ('fatih', __FATIH_PASSWORD_HASH__, 'Fatih', '11111111', true)
 ON CONFLICT (username) DO UPDATE
 SET password_hash = EXCLUDED.password_hash,
     full_name = EXCLUDED.full_name,
@@ -202,8 +329,13 @@ INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id FROM auth.users u CROSS JOIN auth.roles r
 WHERE u.username = 'dev-warehouse' AND r.code = 'WAREHOUSE_OPERATOR'
 ON CONFLICT DO NOTHING;
+
+INSERT INTO auth.user_roles (user_id, role_id)
+SELECT u.id, r.id FROM auth.users u CROSS JOIN auth.roles r
+WHERE u.username = 'fatih' AND r.code = 'ADMIN'
+ON CONFLICT DO NOTHING;
 "@
-    $devBootstrapSql = $devBootstrapSql.Replace('__PASSWORD_HASH__', $passwordHashSql)
+    $devBootstrapSql = $devBootstrapSql.Replace('__PASSWORD_HASH__', $passwordHashSql).Replace('__FATIH_PASSWORD_HASH__', $fatihPasswordHashSql)
     $devBootstrapSql | & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Dev user provisioning failed with exit code $LASTEXITCODE" }
 }
@@ -323,7 +455,78 @@ SET occupancy_state = EXCLUDED.occupancy_state,
 $devEnvironmentSql | & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Dev environment seeding failed with exit code $LASTEXITCODE" }
 
-# 2. Build .NET Solution in Debug mode
+# 2. Check if previous stack processes are running; stop them safely before building
+# 2a. Check .runtime/api.pid
+if (Test-Path -LiteralPath $apiPidFile) {
+    try {
+        $storedPidText = (Get-Content -LiteralPath $apiPidFile -Raw -ErrorAction SilentlyContinue).Trim()
+        $storedPid = 0
+        if ([int]::TryParse($storedPidText, [ref]$storedPid) -and $storedPid -gt 0) {
+            $cim = Get-ProcessCim $storedPid
+            if ($cim) {
+                if (Test-ProcessOwnedByRepo -ProcessId $storedPid -RepoRoot $projectRoot) {
+                    Stop-OwnedProcessSafely -ProcessId $storedPid -RepoRoot $projectRoot -Description "API (.runtime/api.pid)" | Out-Null
+                } else {
+                    Write-Warning "Stored API PID $storedPid belongs to a foreign process ($($cim.Name)). Leaving untouched."
+                }
+            }
+        }
+    } catch {
+        # ignore parse error
+    } finally {
+        Remove-Item -LiteralPath $apiPidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 2b. Check .runtime/admin.pid and .runtime/operator.pid
+$adminPidFile = Join-Path $runtimeDir 'admin.pid'
+if (Test-Path -LiteralPath $adminPidFile) {
+    try {
+        $storedPid = [int](Get-Content -LiteralPath $adminPidFile -Raw -ErrorAction SilentlyContinue).Trim()
+        if ($storedPid -gt 0) {
+            Stop-OwnedProcessSafely -ProcessId $storedPid -RepoRoot $projectRoot -Description "Admin Web (.runtime/admin.pid)" | Out-Null
+        }
+    } catch { } finally {
+        Remove-Item -LiteralPath $adminPidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$operatorPidFile = Join-Path $runtimeDir 'operator.pid'
+if (Test-Path -LiteralPath $operatorPidFile) {
+    try {
+        $storedPid = [int](Get-Content -LiteralPath $operatorPidFile -Raw -ErrorAction SilentlyContinue).Trim()
+        if ($storedPid -gt 0) {
+            Stop-OwnedProcessSafely -ProcessId $storedPid -RepoRoot $projectRoot -Description "Operator Web (.runtime/operator.pid)" | Out-Null
+        }
+    } catch { } finally {
+        Remove-Item -LiteralPath $operatorPidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 2c. Check stack_state.json for previous processes
+if (Test-Path -LiteralPath $stateFile) {
+    try {
+        $oldState = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+        if ($oldState.apiPid) {
+            Stop-OwnedProcessSafely -ProcessId $oldState.apiPid -RepoRoot $projectRoot -Description "API (state)" | Out-Null
+        }
+        if ($oldState.adminPid) {
+            Stop-OwnedProcessSafely -ProcessId $oldState.adminPid -RepoRoot $projectRoot -Description "Admin Web (state)" | Out-Null
+        }
+        if ($oldState.operatorPid) {
+            Stop-OwnedProcessSafely -ProcessId $oldState.operatorPid -RepoRoot $projectRoot -Description "Operator Web (state)" | Out-Null
+        }
+    } catch {
+        # ignore state read error
+    }
+}
+
+# 2d. Port ownership verification and fallback: fail closed if a foreign process occupies the port
+Reclaim-PortIfOwned -Port $ApiPort -RepoRoot $projectRoot -ServiceName "API"
+Reclaim-PortIfOwned -Port $AdminPort -RepoRoot $projectRoot -ServiceName "ADMIN"
+Reclaim-PortIfOwned -Port $OperatorPort -RepoRoot $projectRoot -ServiceName "OPERATOR"
+
+# 3. Build .NET Solution in Debug mode
 Write-Host 'Building .NET solution (Debug)...' -ForegroundColor Cyan
 & dotnet build (Join-Path $projectRoot 'TKG.Pda.slnx') --configuration Debug --no-restore
 if ($LASTEXITCODE -ne 0) {
@@ -331,43 +534,52 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
 }
 
-# 3. Generate JWT signing key
+# 4. Generate JWT signing key
 $jwtRng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 $jwtBytes = New-Object byte[] 48
 $jwtRng.GetBytes($jwtBytes)
 $jwtRng.Dispose()
 $jwtSigningKey = [Convert]::ToBase64String($jwtBytes)
 
-# 4. Check if API is already running; stop previous instance if any
-if (Test-Path -LiteralPath $stateFile) {
-    try {
-        $oldState = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-        if ($oldState.apiPid) {
-            $p = Get-Process -Id $oldState.apiPid -ErrorAction SilentlyContinue
-            if ($p) { Stop-Process -Id $oldState.apiPid -Force -ErrorAction SilentlyContinue }
-        }
-        if ($oldState.adminPid) {
-            $p = Get-Process -Id $oldState.adminPid -ErrorAction SilentlyContinue
-            if ($p) { Stop-Process -Id $oldState.adminPid -Force -ErrorAction SilentlyContinue }
-        }
-        if ($oldState.operatorPid) {
-            $p = Get-Process -Id $oldState.operatorPid -ErrorAction SilentlyContinue
-            if ($p) { Stop-Process -Id $oldState.operatorPid -Force -ErrorAction SilentlyContinue }
-        }
-    } catch {
-        # ignore state read error
+# Detect active local network IPv4 addresses for LAN access and CORS
+$detectedIps = @('127.0.0.1', 'localhost')
+try {
+    $upAdapters = (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' }).Name
+    $netIps = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.InterfaceAlias -in $upAdapters -and $_.IPAddress -notlike "169.254.*" } |
+        Select-Object -ExpandProperty IPAddress
+    if ($netIps) {
+        $detectedIps += $netIps
     }
-}
+} catch { }
+$detectedIps = $detectedIps | Select-Object -Unique
 
 # 5. Start API
-Write-Host "Starting ASP.NET Core API on http://127.0.0.1:$ApiPort..." -ForegroundColor Cyan
+Write-Host "Starting ASP.NET Core API on http://${HostAddress}:$ApiPort..." -ForegroundColor Cyan
 $apiStdOut = Join-Path $logsDir 'api.stdout.log'
 $apiStdErr = Join-Path $logsDir 'api.stderr.log'
 
 $env:ConnectionStrings__TkgPda = "Host=127.0.0.1;Port=$PostgresPort;Database=$Database;Username=postgres;Pooling=true;Maximum Pool Size=50"
-$env:ASPNETCORE_URLS = "http://127.0.0.1:$ApiPort"
+$env:ASPNETCORE_URLS = "http://${HostAddress}:$ApiPort"
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
-$env:Cors__AllowedOrigins__0 = "http://127.0.0.1:$OperatorPort"
+
+# Configure CORS origins for localhost and all detected LAN IPs
+$corsOrigins = @(
+    "http://127.0.0.1:$OperatorPort",
+    "http://localhost:$OperatorPort",
+    "http://127.0.0.1:$AdminPort",
+    "http://localhost:$AdminPort"
+)
+foreach ($ip in $detectedIps) {
+    $corsOrigins += "http://${ip}:$OperatorPort"
+    $corsOrigins += "http://${ip}:$AdminPort"
+}
+$corsOrigins = $corsOrigins | Select-Object -Unique
+# Clear previous Cors env vars if any
+Get-ChildItem env:Cors__AllowedOrigins__* -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item "env:$($_.Name)" }
+for ($ci = 0; $ci -lt $corsOrigins.Count; $ci++) {
+    [Environment]::SetEnvironmentVariable("Cors__AllowedOrigins__$ci", $corsOrigins[$ci], 'Process')
+}
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:Authentication__Jwt__SigningKey = $jwtSigningKey
 
@@ -385,6 +597,9 @@ $apiProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
     'run', '--project', (Join-Path $projectRoot 'src\TkgPda.Api\TkgPda.Api.csproj'),
     '--configuration', 'Debug', '--no-build', '--no-launch-profile'
 ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $apiStdOut -RedirectStandardError $apiStdErr
+
+# Record API process PID
+$apiProcess.Id | Set-Content -LiteralPath $apiPidFile -Encoding UTF8
 
 # Wait for API health/ready
 $apiReady = $false
@@ -416,27 +631,30 @@ if (-not $NoAdmin) {
         if ($LASTEXITCODE -ne 0) { throw "npm ci failed in AdminWeb with exit code $LASTEXITCODE" }
     }
 
-    Write-Host "Starting Admin Web on http://127.0.0.1:$AdminPort..." -ForegroundColor Cyan
+    Write-Host "Starting Admin Web on http://${HostAddress}:$AdminPort..." -ForegroundColor Cyan
     $adminStdOut = Join-Path $logsDir 'admin_web.stdout.log'
     $adminStdErr = Join-Path $logsDir 'admin_web.stderr.log'
     $env:TKG_API_TARGET = "http://127.0.0.1:$ApiPort"
 
     $adminProcess = Start-Process -FilePath 'cmd.exe' -ArgumentList @(
-        '/c', 'npm run dev'
+        '/c', "npm --prefix `"$adminDir`" run dev"
     ) -WorkingDirectory $adminDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $adminStdOut -RedirectStandardError $adminStdErr
+    $adminProcess.Id | Set-Content -LiteralPath $adminPidFile -Encoding UTF8
 }
 
 # 7. Start Flutter Operator Web
 $operatorProcess = $null
 if (-not $NoOperator) {
     $pdaDir = Join-Path $projectRoot 'src\TkgPda.Pda'
-    Write-Host "Starting Flutter Operator Web on http://127.0.0.1:$OperatorPort..." -ForegroundColor Cyan
+    Write-Host "Starting Flutter Operator Web on http://${HostAddress}:$OperatorPort..." -ForegroundColor Cyan
     $operatorStdOut = Join-Path $logsDir 'operator_web.stdout.log'
     $operatorStdErr = Join-Path $logsDir 'operator_web.stderr.log'
 
+    # Run in headless web-server mode so it remains permanently available without DWDS Chrome debug timeouts
     $operatorProcess = Start-Process -FilePath 'cmd.exe' -ArgumentList @(
-        '/c', "flutter run -d chrome --web-hostname=127.0.0.1 --web-port=$OperatorPort --dart-define=TKG_API_BASE_URL=http://127.0.0.1:$ApiPort"
+        '/c', "flutter run -d web-server --web-hostname=$HostAddress --web-port=$OperatorPort -t `"$pdaDir\lib\main.dart`""
     ) -WorkingDirectory $pdaDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $operatorStdOut -RedirectStandardError $operatorStdErr
+    $operatorProcess.Id | Set-Content -LiteralPath $operatorPidFile -Encoding UTF8
 }
 
 # Check RDS reachability
@@ -467,32 +685,67 @@ $state = [ordered]@{
 }
 $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $stateFile -Encoding UTF8
 
-# Report per Section 19 specification
+# Report per Section 19 and safety specifications
+$pgConn = Get-NetTCPConnection -LocalPort $PostgresPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$pgPid = if ($pgConn) { $pgConn.OwningProcess } else { "-" }
+
+$apiConn = Get-NetTCPConnection -LocalPort $ApiPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$apiActualPid = if ($apiConn) { $apiConn.OwningProcess } else { $apiProcess.Id }
+
+$adminConn = Get-NetTCPConnection -LocalPort $AdminPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$adminActualPid = if ($adminConn) { $adminConn.OwningProcess } else { if ($adminProcess) { $adminProcess.Id } else { "-" } }
+
+$operatorConn = Get-NetTCPConnection -LocalPort $OperatorPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$operatorActualPid = if ($operatorConn) { $operatorConn.OwningProcess } else { if ($operatorProcess) { $operatorProcess.Id } else { "-" } }
+
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "TKG LOCAL DEV READY" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "PostgreSQL:"
-Write-Host "127.0.0.1:$PostgresPort / $Database"
-Write-Host ""
-Write-Host "API:"
-Write-Host "http://127.0.0.1:$ApiPort"
-Write-Host ""
+Write-Host ("{0,-14} {1,-25} {2,-8} {3}" -f "SERVICE", "ENDPOINT", "PID", "STATUS")
+Write-Host ("{0,-14} {1,-25} {2,-8} {3}" -f "PostgreSQL", "127.0.0.1:$PostgresPort", $pgPid, "READY")
+Write-Host ("{0,-14} {1,-25} {2,-8} {3}" -f "API", "127.0.0.1:$ApiPort", $apiActualPid, "READY")
 if (-not $NoAdmin) {
-    Write-Host "Admin:"
-    Write-Host "http://127.0.0.1:$AdminPort"
-    Write-Host ""
+    Write-Host ("{0,-14} {1,-25} {2,-8} {3}" -f "Admin Web", "127.0.0.1:$AdminPort", $adminActualPid, "READY")
 }
 if (-not $NoOperator) {
-    Write-Host "Operator:"
-    Write-Host "http://127.0.0.1:$OperatorPort"
-    Write-Host ""
+    Write-Host ("{0,-14} {1,-25} {2,-8} {3}" -f "Operator Web", "127.0.0.1:$OperatorPort", $operatorActualPid, "READY")
 }
+Write-Host ("{0,-14} {1,-25} {2,-8} {3}" -f "RDSCore", "127.0.0.1:8088", "-", "READY")
+Write-Host ""
+Write-Host "Database: $Database"
+Write-Host ""
+Write-Host "Local URLs (This PC):" -ForegroundColor Cyan
+Write-Host "  API:      http://127.0.0.1:$ApiPort"
+if (-not $NoAdmin) {
+    Write-Host "  Admin:    http://127.0.0.1:$AdminPort"
+}
+if (-not $NoOperator) {
+    Write-Host "  Operator: http://127.0.0.1:$OperatorPort"
+}
+
+$lanIps = $detectedIps | Where-Object { $_ -ne '127.0.0.1' -and $_ -ne 'localhost' }
+if ($lanIps) {
+    Write-Host ""
+    Write-Host "Network (LAN) URLs (Other Devices on Network):" -ForegroundColor Cyan
+    foreach ($lanIp in $lanIps) {
+        Write-Host "  [Interface IP: $lanIp]" -ForegroundColor Yellow
+        Write-Host "    API:      http://${lanIp}:$ApiPort"
+        if (-not $NoAdmin) {
+            Write-Host "    Admin:    http://${lanIp}:$AdminPort"
+        }
+        if (-not $NoOperator) {
+            Write-Host "    Operator: http://${lanIp}:$OperatorPort"
+        }
+    }
+}
+Write-Host ""
 Write-Host "RDS:"
 Write-Host $rdsStatusDisplay
 Write-Host ""
 Write-Host "Accounts:"
+Write-Host "fatih (Password: 123456789123 / Sicil: 11111111 / Role: ADMIN)"
 Write-Host "dev-admin"
 Write-Host "dev-supervisor"
 Write-Host "dev-line"

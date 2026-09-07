@@ -72,6 +72,16 @@ public sealed record RdsMappedWorkSite(
     int? SyncFailed,
     DateTimeOffset? LastSyncAt);
 
+public sealed record RdsNavigationProfileSummary(
+    Guid Id,
+    string Code,
+    string Name,
+    string Status,
+    string? RobotMapName,
+    string? SwitchTransitionStation,
+    string? Vehicle,
+    JsonElement ConfigJson);
+
 public interface IRdsExecutionLease : IAsyncDisposable;
 
 public interface IRdsExecutionStore
@@ -89,9 +99,13 @@ public interface IRdsExecutionStore
     Task RecordTaskStatusAsync(Guid requestId, RdsWindTaskSnapshot task, DateTimeOffset syncedAt, CancellationToken cancellationToken = default);
     Task MarkCancellationRequestedAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset requestedAt, CancellationToken cancellationToken = default);
     Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default);
+    Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, object? extraDetails, CancellationToken cancellationToken = default);
     Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RdsTaskTemplateSummary>> ListTaskTemplatesAsync(CancellationToken cancellationToken = default);
     Task EnrichRemainingTimesAsync(IReadOnlyDictionary<string, double> agvRemainingTimes, CancellationToken cancellationToken = default);
+    Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default);
+    Task<bool> HasUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default);
+    Task<RdsMapSwitchLockSnapshot?> GetUnreleasedMapSwitchLockAsync(Guid requestId, string vehicle, CancellationToken cancellationToken = default);
 }
 
 public sealed record RdsValidateTransportRequest(
@@ -345,8 +359,29 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, requestId.ToString(), false, false, "READINESS_WAITING_PREPARATION", "The request is waiting for warehouse preparation.");
         }
 
-        if (IsNativeMode)
+        var executionModeStr = GetLocation(context.TemplateConfig, "executionMode");
+        if (string.IsNullOrWhiteSpace(executionModeStr))
         {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "EXECUTION_MODE_UNRESOLVED", "The task template configuration does not define an explicit executionMode.", correlationId, cancellationToken);
+            return new(requestId, requestId.ToString(), false, false, "EXECUTION_MODE_UNRESOLVED", "The task template configuration does not define an explicit executionMode.");
+        }
+
+        var isNative = string.Equals(executionModeStr, "RDSCORE_NATIVE_ORDER", StringComparison.OrdinalIgnoreCase);
+        var isWindTask = string.Equals(executionModeStr, "WIND_TASK", StringComparison.OrdinalIgnoreCase);
+
+        if (!isNative && !isWindTask)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "EXECUTION_MODE_INVALID", $"Unsupported executionMode '{executionModeStr}'. Must be RDSCORE_NATIVE_ORDER or WIND_TASK.", correlationId, cancellationToken);
+            return new(requestId, requestId.ToString(), false, false, "EXECUTION_MODE_INVALID", $"Unsupported executionMode '{executionModeStr}'. Must be RDSCORE_NATIVE_ORDER or WIND_TASK.");
+        }
+
+        if (isNative)
+        {
+            if (!IsNativeMode)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "NATIVE_DISPATCH_DISABLED", "Template requires RDSCORE_NATIVE_ORDER but Native dispatch is not configured or disabled.", correlationId, cancellationToken);
+                return new(requestId, requestId.ToString(), false, false, "NATIVE_DISPATCH_DISABLED", "Template requires RDSCORE_NATIVE_ORDER but Native dispatch is not configured or disabled.");
+            }
             return await DispatchNativeOrderAsync(requestId, context, correlationId, cancellationToken);
         }
 
@@ -594,11 +629,294 @@ public sealed class RdsExecutionCoordinator(
         var taskLabel = string.IsNullOrWhiteSpace(context.RdsTaskLabel) ? "TKG_TRANSPORT" : context.RdsTaskLabel.Trim();
         var taskRecordId = requestId.ToString("D");
 
+        var navProfile = await store.GetNavigationProfileSummaryAsync(context.Request.NavigationProfileId, context.Request.VariantId, context.Request.MachineId, cancellationToken);
+        if (navProfile is null)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "NAVIGATION_PROFILE_UNRESOLVED", "No published NavigationProfile could be resolved for the effective variant.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "NAVIGATION_PROFILE_UNRESOLVED", "No published NavigationProfile could be resolved for the effective variant.");
+        }
+
+        var requiredMap = navProfile.RobotMapName?.Trim();
+        if (string.IsNullOrWhiteSpace(requiredMap))
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "REQUIRED_MAP_UNRESOLVED", "The resolved NavigationProfile has no configured robot map name.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "REQUIRED_MAP_UNRESOLVED", "The resolved NavigationProfile has no configured robot map name.");
+        }
+
+        var vehicle = GetLocation(context.TemplateConfig, "vehicle") ?? navProfile.Vehicle;
+        if (string.IsNullOrWhiteSpace(vehicle))
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "VEHICLE_UNRESOLVED", "No vehicle could be resolved from the template or navigation profile.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "VEHICLE_UNRESOLVED", "No vehicle could be resolved from the template or navigation profile.");
+        }
+
+        IReadOnlyList<RdsCoreRobotTelemetry> robots;
+        try
+        {
+            robots = await nativeOrderClient!.GetRobotsStatusAsync(correlationId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_OFFLINE", $"Failed to query robot telemetry: {ex.Message}", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_OFFLINE", "RDSCore robot status query failed.");
+        }
+
+        var robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+        if (robot is null || robot.ConnectionStatus != 1)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_OFFLINE", $"Robot '{vehicle}' is offline or not found.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_OFFLINE", $"Robot '{vehicle}' is offline or not found.");
+        }
+
+        var lockSnapshot = await store.GetUnreleasedMapSwitchLockAsync(requestId, vehicle, cancellationToken);
+        var hasUnreleasedLock = lockSnapshot?.HasUnreleasedLock == true;
+        var capturedLockInfo = lockSnapshot?.CapturedLockInfo;
+        var isRobotLocked = robot.LockInfo?.Locked == true;
+        var isLockCorrelated = hasUnreleasedLock
+                               && capturedLockInfo is not null
+                               && robot.LockInfo is not null
+                               && capturedLockInfo.CorrelatesWith(robot.LockInfo);
+
+        if (hasUnreleasedLock)
+        {
+            var isObservedUnlocked = robot.Dispatchable && robot.LockInfo?.Locked == false;
+            if (isObservedUnlocked)
+            {
+                if (string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+                {
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_ALREADY_RELEASED", $"Robot '{vehicle}' observed unlocked on required map; closing prior map-switch lock record.", correlationId, cancellationToken: cancellationToken);
+                }
+                else
+                {
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "MAP_SWITCH_LOCK_RECOVERY_REQUIRED", $"Robot '{vehicle}' has an unreleased map switch lock from a crashed attempt before map switch completed.", correlationId, cancellationToken: cancellationToken);
+                    return new(requestId, taskRecordId, false, false, "MAP_SWITCH_LOCK_RECOVERY_REQUIRED", $"Robot '{vehicle}' has an unreleased map switch lock from a crashed attempt before map switch completed.");
+                }
+            }
+            else
+            {
+                // Robot is still locked, not dispatchable, or lock_info is unavailable
+                // Only perform automatic recovery /unlock when:
+                // 1. TKG has an unreleased map-prep lock record
+                // 2. Robot is currently locked
+                // 3. Current lock_info can be correlated with the lock_info captured by TKG
+                // 4. Current map / orchestration state makes unlock safe (current_map == requiredMap)
+                if (isLockCorrelated && string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+                {
+                    var unlockRecovery = await nativeOrderClient.UnlockAsync([vehicle], correlationId, cancellationToken);
+                    if (unlockRecovery.CoreAccepted)
+                    {
+                        await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_RECOVERY_SUCCESS", "Successfully released post-switchMap lock after correlated crash recovery.", correlationId, cancellationToken: cancellationToken);
+                        robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+                        robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+
+                if (robot is null || robot.LockInfo?.Locked == true || !robot.Dispatchable)
+                {
+                    const string errorCode = "MAP_SWITCH_LOCK_RECOVERY_REQUIRED";
+                    var errorMessage = $"Robot '{vehicle}' remains locked after a prior map-switch attempt; manual lock recovery is required.";
+                    await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", errorCode, errorMessage, correlationId, cancellationToken: cancellationToken);
+                    return new(requestId, taskRecordId, false, false, errorCode, errorMessage);
+                }
+            }
+        }
+        else if (!robot.Dispatchable)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_NOT_DISPATCHABLE", $"Robot '{vehicle}' is not dispatchable.", correlationId, cancellationToken: cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_NOT_DISPATCHABLE", $"Robot '{vehicle}' is not dispatchable.");
+        }
+
+        if (robot.IsError || robot.Alarms.Count > 0)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_HAS_BLOCKING_ALARM", $"Robot '{vehicle}' has blocking errors/alarms.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_HAS_BLOCKING_ALARM", $"Robot '{vehicle}' has blocking errors/alarms.");
+        }
+
+        var mapPrepOrderId = RdsCoreNormalOrder.TransitionOrderId(requestId, requiredMap);
+        if (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState)
+            && !string.Equals(robot.CurrentOrderId, taskRecordId, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_BUSY_INCOMPATIBLE_ORDER", $"Robot '{vehicle}' is currently executing order '{robot.CurrentOrderId}'.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_BUSY_INCOMPATIBLE_ORDER", $"Robot '{vehicle}' is currently executing incompatible order '{robot.CurrentOrderId}'.");
+        }
+
+        var currentMap = robot.CurrentMap?.Trim();
+        if (!string.Equals(currentMap, requiredMap, StringComparison.OrdinalIgnoreCase))
+        {
+            if (hasUnreleasedLock)
+            {
+                // Scenario A: Lock was acquired, but crash occurred before map switch completed
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "MAP_SWITCH_LOCK_RECOVERY_REQUIRED", $"Robot '{vehicle}' has an unreleased map switch lock from a crashed attempt before map switch completed.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "MAP_SWITCH_LOCK_RECOVERY_REQUIRED", $"Robot '{vehicle}' has an unreleased map switch lock from a crashed attempt before map switch completed.");
+            }
+
+            var transitionStation = navProfile.SwitchTransitionStation?.Trim();
+            if (string.IsNullOrWhiteSpace(transitionStation))
+            {
+                await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "SWITCH_TRANSITION_UNRESOLVED", "Current robot map differs from required map, but no switch transition station is configured in navigation profile.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "SWITCH_TRANSITION_UNRESOLVED", "Current robot map differs from required map, but no switch transition station is configured in navigation profile.");
+            }
+
+            var isAtStation = string.Equals(robot.CurrentStation?.Trim(), transitionStation, StringComparison.OrdinalIgnoreCase);
+            if (!isAtStation)
+            {
+                RdsCoreOrderDetails? prepDetails = null;
+                try
+                {
+                    prepDetails = await nativeOrderClient.GetOrderDetailsAsync(mapPrepOrderId, correlationId, cancellationToken);
+                }
+                catch
+                {
+                    // Order not yet found or query failed
+                }
+
+                if (prepDetails?.State.Known is RdsCoreKnownOrderState.Running or RdsCoreKnownOrderState.Created or RdsCoreKnownOrderState.Waiting or RdsCoreKnownOrderState.ToBeDispatched)
+                {
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_AWAITING", prepDetails.State.Known.ToString().ToUpperInvariant(), "Preliminary navigation to transition station is in progress.", correlationId, cancellationToken);
+                    return new(requestId, mapPrepOrderId, false, false, "MAP_PREP_RUNNING", "Preliminary navigation to transition station is running.");
+                }
+                else if (prepDetails?.State.Known != RdsCoreKnownOrderState.Finished)
+                {
+                    var navBlock = new RdsCoreNavigationBlock(RdsCoreNormalOrder.TransitionBlockId(requestId), transitionStation);
+                    var navOrder = RdsCoreNormalOrder.CreateTransition(requestId, requiredMap, navBlock, vehicle, context.TemplatePriority);
+                    var navResult = await nativeOrderClient.SetOrderAsync(navOrder, correlationId, cancellationToken);
+                    if (!navResult.CoreAccepted && !navResult.DuplicateOrderId)
+                    {
+                        await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", navResult.Code?.ToString() ?? "REJECTED", navResult.Message ?? "SetOrder for map prep rejected.", correlationId, cancellationToken);
+                        return new(requestId, mapPrepOrderId, false, false, "MAP_PREP_SET_ORDER_REJECTED", navResult.Message ?? "SetOrder for transition navigation was rejected.");
+                    }
+
+                    await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_DISPATCHED", "TRANSITION_NAVIGATION", $"Dispatched preliminary navigation to transition site '{transitionStation}'.", correlationId, cancellationToken);
+                    return new(requestId, mapPrepOrderId, true, navResult.DuplicateOrderId, "MAP_PREP_DISPATCHED", "Dispatched preliminary navigation to transition station.");
+                }
+            }
+
+            // Requirement 5: Transition Arrival Verification
+            // Re-query /robotsStatus and strictly confirm current_station == transitionStation and robot health
+            try
+            {
+                robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCH_TRANSITION_NOT_CONFIRMED", $"Failed to query robot status for transition arrival verification: {ex.Message}", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "SWITCH_TRANSITION_NOT_CONFIRMED", "Failed to query robot status for transition arrival verification.");
+            }
+
+            robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+            if (robot is null
+                || robot.ConnectionStatus != 1
+                || !robot.Dispatchable
+                || robot.IsError
+                || robot.Alarms.Count > 0
+                || (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState) && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
+                || !string.Equals(robot.CurrentStation?.Trim(), transitionStation, StringComparison.OrdinalIgnoreCase))
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCH_TRANSITION_NOT_CONFIRMED", $"Transition station arrival could not be confirmed. Station='{robot?.CurrentStation}', expected='{transitionStation}'.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "SWITCH_TRANSITION_NOT_CONFIRMED", $"Transition station arrival could not be confirmed. Robot station is '{robot?.CurrentStation}', expected '{transitionStation}'.");
+            }
+
+            RdsCoreSimpleResult lockResult;
+            try
+            {
+                lockResult = await nativeOrderClient.LockAsync([vehicle], correlationId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "LOCK_FAILED", ex.Message, correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "LOCK_FAILED", ex.Message);
+            }
+
+            if (!lockResult.CoreAccepted)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "LOCK_FAILED", lockResult.Message ?? "Lock vehicle rejected before switchMap.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "LOCK_FAILED", lockResult.Message ?? "Lock vehicle rejected before switchMap.");
+            }
+
+            // Immediately query /robotsStatus to capture lock_info fingerprint
+            RdsCoreRobotLockInfo? activeLockInfo = null;
+            try
+            {
+                var postLockRobots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+                var postLockRobot = postLockRobots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                activeLockInfo = postLockRobot?.LockInfo;
+            }
+            catch
+            {
+                // Telemetry capture failure does not block switchMap attempt, but leaves lock uncorrelatable on crash
+            }
+
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "MAP_PREP_LOCK_ACQUIRED",
+                "LOCK_ACQUIRED",
+                $"Lock acquired on vehicle '{vehicle}' for map switch to '{requiredMap}'.",
+                correlationId,
+                extraDetails: new { vehicle, requiredMap, lockInfo = activeLockInfo },
+                cancellationToken: cancellationToken);
+
+            RdsCoreSimpleResult switchResult;
+            try
+            {
+                switchResult = await nativeOrderClient.SwitchMapAsync(vehicle, requiredMap, correlationId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_FAILED", ex.Message, correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "SWITCHMAP_FAILED", ex.Message);
+            }
+            finally
+            {
+                try
+                {
+                    var unlockResult = await nativeOrderClient.UnlockAsync([vehicle], correlationId, cancellationToken);
+                    if (unlockResult.CoreAccepted)
+                    {
+                        await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "UNLOCK_SUCCESS", $"Lock released on vehicle '{vehicle}'.", correlationId, cancellationToken);
+                    }
+                }
+                catch
+                {
+                    // If unlock throws or fails, MAP_PREP_LOCK_RELEASED is not written, enabling safe recovery on restart
+                }
+            }
+
+            if (!switchResult.CoreAccepted)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_REJECTED", switchResult.Message ?? "SwitchMap rejected by RDSCore.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "SWITCHMAP_REJECTED", switchResult.Message ?? "SwitchMap rejected by RDSCore.");
+            }
+
+            try
+            {
+                robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_TELEMETRY_FAILED", ex.Message, correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "POST_SWITCH_TELEMETRY_FAILED", ex.Message);
+            }
+            robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+            if (robot is null || !string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_VERIFICATION_FAILED", $"Robot map is '{robot?.CurrentMap}', expected '{requiredMap}'.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "SWITCHMAP_VERIFICATION_FAILED", "Robot did not switch to the required map.");
+            }
+
+            if (robot.IsError || robot.Alarms.Count > 0)
+            {
+                await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_ALARM", "Robot has alarms following map switch.", correlationId, cancellationToken);
+                return new(requestId, taskRecordId, false, false, "POST_SWITCH_ALARM", "Robot has alarms following map switch.");
+            }
+
+            await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_CONFIRMED", "SWITCHMAP_SUCCESS", $"Successfully switched robot map to '{requiredMap}'.", correlationId, cancellationToken);
+        }
+
         var pickupLocation = GetLocation(context.TemplateConfig, "pickupLocation")
             ?? context.Source.SiteId;
         var dropoffLocation = GetLocation(context.TemplateConfig, "dropoffLocation")
             ?? context.Destination.SiteId;
-        var vehicle = GetLocation(context.TemplateConfig, "vehicle");
 
         if (string.IsNullOrWhiteSpace(pickupLocation) || string.IsNullOrWhiteSpace(dropoffLocation))
         {
@@ -954,4 +1272,12 @@ public sealed class RdsExecutionCoordinator(
         var text = FindText(value, name);
         return int.TryParse(text, out var number) ? number : null;
     }
+
+    private static bool IsOrderActive(string? orderId, string? orderState) =>
+        !string.IsNullOrWhiteSpace(orderId)
+        && !string.Equals(orderState, "FINISHED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "TERMINATED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "CANCELLED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "CANCELED", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(orderState, "COMPLETED", StringComparison.OrdinalIgnoreCase);
 }

@@ -65,10 +65,11 @@ public sealed class RdsCoreNormalOrder
         string? label,
         IReadOnlyList<string>? keyRoute,
         string? keyTask,
-        int? priority)
+        int? priority,
+        string? customId = null)
     {
         TransportRequestId = transportRequestId;
-        Id = transportRequestId.ToString("D");
+        Id = customId ?? transportRequestId.ToString("D");
         ExternalId = Normalize(externalId);
         Vehicle = Normalize(vehicle);
         Group = Normalize(group);
@@ -138,6 +139,41 @@ public sealed class RdsCoreNormalOrder
 
     public static string PickupBlockId(Guid transportRequestId) => BlockId(transportRequestId, "pickup");
     public static string DropoffBlockId(Guid transportRequestId) => BlockId(transportRequestId, "dropoff");
+    public static string TransitionOrderId(Guid transportRequestId, string targetMap) =>
+        $"{transportRequestId:D}:map-prep:{targetMap.Trim()}";
+    public static string TransitionBlockId(Guid transportRequestId) =>
+        $"{transportRequestId:D}:map-prep:block";
+
+    public static RdsCoreNormalOrder CreateTransition(
+        Guid transportRequestId,
+        string targetMap,
+        RdsCoreOrderBlock transitionBlock,
+        string? vehicle = null,
+        int? priority = null)
+    {
+        if (transportRequestId == Guid.Empty)
+            throw new ArgumentException("A TransportRequest UUID is required.", nameof(transportRequestId));
+        ArgumentNullException.ThrowIfNull(transitionBlock);
+        if (string.IsNullOrWhiteSpace(targetMap))
+            throw new ArgumentException("A target map is required.", nameof(targetMap));
+
+        ValidateBlock(transitionBlock);
+        if (priority is < 0)
+            throw new ArgumentOutOfRangeException(nameof(priority), "Priority cannot be negative.");
+
+        var customId = TransitionOrderId(transportRequestId, targetMap);
+        return new(
+            transportRequestId,
+            [transitionBlock],
+            externalId: null,
+            vehicle: vehicle,
+            group: null,
+            label: null,
+            keyRoute: null,
+            keyTask: null,
+            priority: priority,
+            customId: customId);
+    }
 
     private static string BlockId(Guid requestId, string suffix)
     {
@@ -306,6 +342,64 @@ public sealed record RdsCoreSimpleResult(
     string? Message,
     JsonElement? RawResponse);
 
+public sealed record RdsCoreRobotLockInfo(
+    bool Locked,
+    string? Ip = null,
+    string? NickName = null,
+    int? Port = null,
+    string? TimeT = null,
+    int? Type = null,
+    string? Desc = null)
+{
+    public bool HasUsableFingerprint =>
+        Locked && (!string.IsNullOrWhiteSpace(TimeT) ||
+                   !string.IsNullOrWhiteSpace(Ip) ||
+                   !string.IsNullOrWhiteSpace(NickName));
+
+    public bool CorrelatesWith(RdsCoreRobotLockInfo? other)
+    {
+        if (other is null || !Locked || !other.Locked) return false;
+        if (!HasUsableFingerprint || !other.HasUsableFingerprint) return false;
+
+        bool hasMatchingPrimaryId = false;
+
+        if (!string.IsNullOrWhiteSpace(TimeT))
+        {
+            if (string.IsNullOrWhiteSpace(other.TimeT) || !string.Equals(TimeT, other.TimeT, StringComparison.Ordinal))
+                return false;
+            hasMatchingPrimaryId = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Ip))
+        {
+            if (string.IsNullOrWhiteSpace(other.Ip) || !string.Equals(Ip, other.Ip, StringComparison.OrdinalIgnoreCase))
+                return false;
+            hasMatchingPrimaryId = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(NickName))
+        {
+            if (string.IsNullOrWhiteSpace(other.NickName) || !string.Equals(NickName, other.NickName, StringComparison.OrdinalIgnoreCase))
+                return false;
+            hasMatchingPrimaryId = true;
+        }
+
+        if (Port.HasValue && other.Port.HasValue && Port.Value != other.Port.Value)
+            return false;
+
+        if (Type.HasValue && other.Type.HasValue && Type.Value != other.Type.Value)
+            return false;
+
+        return hasMatchingPrimaryId;
+    }
+}
+
+public sealed record RdsMapSwitchLockSnapshot(
+    bool HasUnreleasedLock,
+    string? Vehicle,
+    string? TargetMap,
+    RdsCoreRobotLockInfo? CapturedLockInfo);
+
 public sealed record RdsCoreRobotTelemetry(
     string VehicleId,
     string? Model,
@@ -323,7 +417,8 @@ public sealed record RdsCoreRobotTelemetry(
     double? RemainingTime,
     string? CurrentOrderId,
     string? CurrentOrderState,
-    IReadOnlyList<string> Alarms);
+    IReadOnlyList<string> Alarms,
+    RdsCoreRobotLockInfo? LockInfo = null);
 
 public interface IRdsCoreNativeOrderClient
 {
@@ -344,6 +439,9 @@ public interface IRdsCoreNativeOrderClient
     Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> LockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> UnlockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> SwitchMapAsync(string vehicle, string map, Guid correlationId, CancellationToken cancellationToken = default);
 }
 
 public sealed class RdsCoreNativeOrderException(string code, string message, Exception? innerException = null)

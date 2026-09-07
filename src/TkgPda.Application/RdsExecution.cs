@@ -3,6 +3,19 @@ using TkgPda.Domain;
 
 namespace TkgPda.Application;
 
+/// <summary>
+/// Outcome of an expert recovery action. <see cref="Vehicle"/> and
+/// <see cref="TaskRecordId"/> are the server-resolved targets, echoed back so the
+/// caller can see exactly what was acted on.
+/// </summary>
+public sealed record RdsExpertActionResult(
+    Guid RequestId,
+    string TaskRecordId,
+    string Vehicle,
+    int Code,
+    string Message,
+    bool Accepted);
+
 public sealed record RdsExecutionSettings(
     bool DispatchEnabled,
     TimeSpan WorkSiteFreshness,
@@ -293,11 +306,35 @@ public sealed class RdsExecutionCoordinator(
     IRobotTelemetryProvider? robotTelemetry = null,
     IRdsCoreNativeOrderClient? nativeOrderClient = null)
 {
+    /// <summary>
+    /// Global physical mutation gate. <c>Rds:DispatchEnabled = false</c> means ZERO
+    /// normal execution-triggered physical RDS mutation — <c>/setOrder</c>, native
+    /// order dispatch, WindTask dispatch, <c>/lock</c>, <c>/switchMap</c>,
+    /// <c>/unlock</c> and the automatic map preparation that surrounds them —
+    /// regardless of which execution engine happens to be configured.
+    /// Read-only telemetry, reconciliation and Admin diagnostics are deliberately
+    /// unaffected, and cancellation (<c>/terminate</c>) stays reachable because it
+    /// stops motion rather than starting it.
+    /// </summary>
+    private bool IsGlobalDispatchAllowed => settings.DispatchEnabled;
+
+    /// <summary>
+    /// Native engine <em>configuration</em> only: explicitly selected native mode,
+    /// enabled client, and a valid configured RDSCore endpoint. This selects which
+    /// engine reconciliation and cancellation talk to. It never authorises new
+    /// physical motion on its own and must never bypass
+    /// <see cref="IsGlobalDispatchAllowed"/>.
+    /// </summary>
     private bool IsNativeMode => nativeOrderClient is not null
         && nativeOrderClient.Mode == RdsExecutionMode.RdsCoreNativeOrder
         && nativeOrderClient.MutationEnabled;
 
-    public bool IsDispatchEnabled => (settings.DispatchEnabled && executionClient.DispatchEnabled) || IsNativeMode;
+    /// <summary>
+    /// Dispatch eligibility is the global gate AND at least one configured
+    /// execution engine. Native enablement can never bypass the gate.
+    /// </summary>
+    public bool IsDispatchEnabled => IsGlobalDispatchAllowed
+        && (executionClient.DispatchEnabled || IsNativeMode);
 
     public async Task<IReadOnlyList<RdsDispatchAttemptResult>> DispatchQueuedAsync(int limit, CancellationToken cancellationToken = default)
     {
@@ -341,6 +378,22 @@ public sealed class RdsExecutionCoordinator(
 
     public async Task<RdsDispatchAttemptResult?> DispatchOneAsync(Guid requestId, Guid correlationId, CancellationToken cancellationToken = default)
     {
+        // Defence in depth: this method is public and directly callable, so the
+        // global mutation gate is re-checked here and not only in
+        // DispatchQueuedAsync. No lease is taken and no RDS call is made when the
+        // gate is closed.
+        if (!IsDispatchEnabled)
+        {
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_DISPATCH_BLOCKED",
+                "RDS_DISPATCH_DISABLED",
+                "Physical RDS dispatch is globally disabled by configuration (Rds:DispatchEnabled=false).",
+                correlationId,
+                cancellationToken);
+            return new(requestId, requestId.ToString(), false, false, "RDS_DISPATCH_DISABLED", "Physical RDS dispatch is globally disabled by configuration.");
+        }
+
         await using var lease = await store.TryAcquireRequestLeaseAsync(requestId, cancellationToken);
         if (lease is null)
         {
@@ -524,6 +577,143 @@ public sealed class RdsExecutionCoordinator(
         }
     }
 
+    // ---------------------------------------------------------------------
+    // Expert recovery actions.
+    //
+    // These are high-risk maintenance operations, so the server resolves the
+    // exact target itself and never trusts a caller-supplied vehicle or order
+    // identifier. Each action binds to a real TKG TransportRequest, refuses
+    // terminal requests, targets exactly the robot RDS assigned to that request,
+    // and writes an execution audit record.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Resolves the authoritative RDS task and assigned vehicle for a request, or
+    /// throws with a precise reason. Never returns a caller-influenced target.
+    /// </summary>
+    private async Task<(TransportRequestSnapshot Request, RdsTaskProjection Task)> ResolveExpertTargetAsync(
+        Guid requestId,
+        bool requireAssignedVehicle,
+        CancellationToken cancellationToken)
+    {
+        var request = await store.FindRequestAsync(requestId, cancellationToken)
+            ?? throw new RdsExecutionException("REQUEST_NOT_FOUND", "The transport request does not exist.");
+
+        if (request.Status is TransportRequestStatus.Completed
+            or TransportRequestStatus.Cancelled
+            or TransportRequestStatus.Failed)
+        {
+            throw new RdsExecutionException(
+                "REQUEST_ALREADY_TERMINAL",
+                $"The transport request is already {request.Status.ToDatabase()}; expert recovery does not apply.");
+        }
+
+        var task = await store.FindTaskByRequestAsync(requestId, cancellationToken)
+            ?? throw new RdsExecutionException(
+                "RDS_TASK_NOT_FOUND",
+                "The request has no dispatched RDS task, so there is nothing to recover.");
+
+        if (requireAssignedVehicle && string.IsNullOrWhiteSpace(task.AgvId))
+        {
+            throw new RdsExecutionException(
+                "RDS_VEHICLE_UNASSIGNED",
+                "RDS has not assigned a robot to this request yet, so no exact vehicle can be targeted.");
+        }
+
+        return (request, task);
+    }
+
+    private void EnsureNativeExpertActionAvailable()
+    {
+        if (nativeOrderClient is null || !IsNativeMode)
+        {
+            throw new RdsExecutionException(
+                "NATIVE_EXECUTION_UNAVAILABLE",
+                "RDSCore native execution is not configured, so expert recovery is unavailable.");
+        }
+    }
+
+    public async Task<RdsExpertActionResult> ManualFinishAsync(
+        Guid requestId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNativeExpertActionAvailable();
+        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
+        var vehicle = task.AgvId!;
+
+        var result = await nativeOrderClient!.ManualFinishedAsync([vehicle], correlationId, cancellationToken);
+        await store.WriteExecutionAuditAsync(
+            requestId,
+            "RDS_EXPERT_MANUAL_FINISH",
+            result.CoreAccepted ? "ACCEPTED" : "REJECTED",
+            $"Manual finish targeted the RDS-assigned vehicle '{vehicle}' for task '{task.TaskRecordId}'.",
+            correlationId,
+            cancellationToken);
+
+        return new(requestId, task.TaskRecordId, vehicle, result.Code ?? 0, result.Message ?? string.Empty, result.CoreAccepted);
+    }
+
+    public async Task<RdsExpertActionResult> RedoFailedAsync(
+        Guid requestId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNativeExpertActionAvailable();
+        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
+        var vehicle = task.AgvId!;
+
+        var result = await nativeOrderClient!.RedoFailedOrderAsync([vehicle], correlationId, cancellationToken);
+        await store.WriteExecutionAuditAsync(
+            requestId,
+            "RDS_EXPERT_REDO_FAILED",
+            result.CoreAccepted ? "ACCEPTED" : "REJECTED",
+            $"Redo failed order targeted the RDS-assigned vehicle '{vehicle}' for task '{task.TaskRecordId}'.",
+            correlationId,
+            cancellationToken);
+
+        return new(requestId, task.TaskRecordId, vehicle, result.Code ?? 0, result.Message ?? string.Empty, result.CoreAccepted);
+    }
+
+    /// <summary>
+    /// Reprioritises the RDS order that belongs to this request. The order identity
+    /// comes from the persisted RDS task, never from the caller. SEER's numeric
+    /// priority direction is not documented in this repository, so the value is
+    /// range-checked and passed through without inventing overtaking semantics.
+    /// </summary>
+    public async Task<RdsExpertActionResult> SetRequestPriorityAsync(
+        Guid requestId,
+        int priority,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        // Input validation first: a malformed value is rejected regardless of which
+        // execution engine happens to be configured.
+        if (priority is < MinRdsPriority or > MaxRdsPriority)
+        {
+            throw new RdsExecutionException(
+                "PRIORITY_OUT_OF_RANGE",
+                $"Priority must be between {MinRdsPriority} and {MaxRdsPriority}.");
+        }
+
+        EnsureNativeExpertActionAvailable();
+        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: false, cancellationToken);
+
+        var result = await nativeOrderClient!.SetPriorityAsync(task.TaskRecordId, priority, correlationId, cancellationToken);
+        await store.WriteExecutionAuditAsync(
+            requestId,
+            "RDS_EXPERT_SET_PRIORITY",
+            result.CoreAccepted ? "ACCEPTED" : "REJECTED",
+            $"Priority {priority} applied to RDS order '{task.TaskRecordId}'.",
+            correlationId,
+            cancellationToken);
+
+        return new(requestId, task.TaskRecordId, task.AgvId ?? string.Empty, result.Code ?? 0, result.Message ?? string.Empty, result.CoreAccepted);
+    }
+
+    private const int MinRdsPriority = 0;
+    private const int MaxRdsPriority = 1000;
+
     public async Task<RdsCancellationResult> CancelAsync(Guid requestId, Guid? actorUserId, Guid correlationId, CancellationToken cancellationToken = default)
     {
         var request = await store.FindRequestAsync(requestId, cancellationToken)
@@ -661,7 +851,7 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, taskRecordId, false, false, "ROBOT_OFFLINE", "RDSCore robot status query failed.");
         }
 
-        var robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+        var robot = robots.FirstOrDefault(r => r.ResolvedIdentity.Matches(vehicle));
         if (robot is null || robot.ConnectionStatus != 1)
         {
             await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_OFFLINE", $"Robot '{vehicle}' is offline or not found.", correlationId, cancellationToken);
@@ -707,7 +897,7 @@ public sealed class RdsExecutionCoordinator(
                     {
                         await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_RECOVERY_SUCCESS", "Successfully released post-switchMap lock after correlated crash recovery.", correlationId, cancellationToken: cancellationToken);
                         robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
-                        robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                        robot = robots.FirstOrDefault(r => r.ResolvedIdentity.Matches(vehicle));
                     }
                 }
 
@@ -804,7 +994,7 @@ public sealed class RdsExecutionCoordinator(
                 return new(requestId, taskRecordId, false, false, "SWITCH_TRANSITION_NOT_CONFIRMED", "Failed to query robot status for transition arrival verification.");
             }
 
-            robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+            robot = robots.FirstOrDefault(r => r.ResolvedIdentity.Matches(vehicle));
             if (robot is null
                 || robot.ConnectionStatus != 1
                 || !robot.Dispatchable
@@ -839,7 +1029,7 @@ public sealed class RdsExecutionCoordinator(
             try
             {
                 var postLockRobots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
-                var postLockRobot = postLockRobots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                var postLockRobot = postLockRobots.FirstOrDefault(r => r.ResolvedIdentity.Matches(vehicle));
                 activeLockInfo = postLockRobot?.LockInfo;
             }
             catch
@@ -897,7 +1087,7 @@ public sealed class RdsExecutionCoordinator(
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_TELEMETRY_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "POST_SWITCH_TELEMETRY_FAILED", ex.Message);
             }
-            robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+            robot = robots.FirstOrDefault(r => r.ResolvedIdentity.Matches(vehicle));
             if (robot is null || !string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_VERIFICATION_FAILED", $"Robot map is '{robot?.CurrentMap}', expected '{requiredMap}'.", correlationId, cancellationToken);

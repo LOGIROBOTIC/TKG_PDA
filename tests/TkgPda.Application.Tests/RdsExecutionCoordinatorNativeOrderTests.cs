@@ -631,12 +631,87 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.Equal(1, fixture.NativeClient.SetOrderCount);
     }
 
+    // ---------------------------------------------------------------------
+    // P0 — Global physical mutation gate.
+    // Rds:DispatchEnabled=false must mean ZERO normal physical RDS mutation,
+    // even when the native engine is fully enabled and correctly configured.
+    // Before the fix IsDispatchEnabled was `(... ) || IsNativeMode`, so native
+    // enablement silently bypassed the gate and these tests failed.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void Global_dispatch_gate_closed_keeps_mutation_ineligible_even_when_native_is_fully_enabled()
+    {
+        var fixture = Fixture(mode: RdsExecutionMode.RdsCoreNativeOrder, dispatchEnabled: false);
+
+        Assert.True(fixture.NativeClient.MutationEnabled);
+        Assert.Equal(RdsExecutionMode.RdsCoreNativeOrder, fixture.NativeClient.Mode);
+        Assert.False(fixture.Coordinator.IsDispatchEnabled);
+    }
+
+    [Fact]
+    public void Global_dispatch_gate_open_allows_native_to_become_eligible()
+    {
+        var fixture = Fixture(mode: RdsExecutionMode.RdsCoreNativeOrder, dispatchEnabled: true);
+
+        Assert.True(fixture.Coordinator.IsDispatchEnabled);
+    }
+
+    [Fact]
+    public async Task Global_dispatch_gate_closed_blocks_dispatch_without_issuing_any_rdscore_mutation()
+    {
+        var fixture = Fixture(mode: RdsExecutionMode.RdsCoreNativeOrder, dispatchEnabled: false);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("RDS_DISPATCH_DISABLED", result.Code);
+
+        // No /setOrder, /lock, /switchMap or /unlock may leave the process.
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+        Assert.Equal(0, fixture.NativeClient.LockCount);
+        Assert.Equal(0, fixture.NativeClient.SwitchMapCount);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+        Assert.Equal(0, fixture.ExecutionClient.CreateCount);
+        Assert.Contains(fixture.Store.Audits, a => a.Code == "RDS_DISPATCH_DISABLED");
+    }
+
+    [Fact]
+    public async Task Global_dispatch_gate_closed_yields_no_dispatch_from_the_queued_worker_path()
+    {
+        var fixture = Fixture(mode: RdsExecutionMode.RdsCoreNativeOrder, dispatchEnabled: false);
+
+        var results = await fixture.Coordinator.DispatchQueuedAsync(10);
+
+        Assert.Empty(results);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+        Assert.Equal(0, fixture.ExecutionClient.CreateCount);
+    }
+
+    [Fact]
+    public async Task Global_dispatch_gate_closed_still_permits_read_only_reconciliation()
+    {
+        // Read-only telemetry and Admin diagnostics must survive a closed gate.
+        var fixture = Fixture(
+            requestStatus: TransportRequestStatus.SentToRds,
+            activeTaskStatus: TransportRequestStatus.SentToRds,
+            mode: RdsExecutionMode.RdsCoreNativeOrder,
+            dispatchEnabled: false);
+
+        await fixture.Coordinator.ReconcileAsync(10);
+
+        Assert.True(fixture.NativeClient.OrderDetailsCount > 0);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
     private static NativeTestFixture Fixture(
         TransportRequestStatus requestStatus = TransportRequestStatus.Queued,
         TransportReadinessState readinessState = TransportReadinessState.Ready,
         TransportRequestStatus? activeTaskStatus = null,
         bool cancellationRequested = false,
-        RdsExecutionMode mode = RdsExecutionMode.RdsCoreNativeOrder)
+        RdsExecutionMode mode = RdsExecutionMode.RdsCoreNativeOrder,
+        bool dispatchEnabled = true)
     {
         var executionMode = mode == RdsExecutionMode.WindTask ? "WIND_TASK" : "RDSCORE_NATIVE_ORDER";
         var context = Context(readinessState: readinessState, executionMode: executionMode);
@@ -658,11 +733,14 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         }
 
         var workflowStore = new FakeNativeWorkflowStore(store.Request);
-        var executionClient = new FakeNativeExecutionClient();
+        // The Wind client mirrors production binding (Rds:Enabled && Rds:DispatchEnabled),
+        // so closing the global gate closes it here too. Native stays fully configured
+        // in order to prove it cannot rescue a closed gate.
+        var executionClient = new FakeNativeExecutionClient(dispatchEnabled);
         var readClient = new FakeNativeReadClient();
         var reconciler = new FakeNativeWorkSiteReconciler();
         var nativeClient = new FakeNativeOrderClient(mode);
-        var settings = new RdsExecutionSettings(true, TimeSpan.FromMinutes(5), "", "");
+        var settings = new RdsExecutionSettings(dispatchEnabled, TimeSpan.FromMinutes(5), "", "");
 
         var coordinator = new RdsExecutionCoordinator(
             store,
@@ -770,10 +848,17 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             Task.CompletedTask;
         public Task MarkCancellationRequestedAsync(Guid requestId, JsonElement responsePayload, DateTimeOffset requestedAt, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-        public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-        public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, object? extraDetails, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public List<(string Action, string Code, string Message)> Audits { get; } = [];
+        public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, CancellationToken cancellationToken = default)
+        {
+            Audits.Add((action, code, message));
+            return Task.CompletedTask;
+        }
+        public Task WriteExecutionAuditAsync(Guid requestId, string action, string code, string message, Guid correlationId, object? extraDetails, CancellationToken cancellationToken = default)
+        {
+            Audits.Add((action, code, message));
+            return Task.CompletedTask;
+        }
         public Task<RdsMappedWorkSite?> FindMappedWorkSiteAsync(Guid slotId, CancellationToken cancellationToken = default) =>
             Task.FromResult<RdsMappedWorkSite?>(null);
         public Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(Guid? profileId, Guid variantId, Guid machineId, CancellationToken cancellationToken = default)
@@ -816,9 +901,9 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         public Task SwitchVariantAsync(VariantSelection selection, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class FakeNativeExecutionClient : IRdsExecutionClient
+    private sealed class FakeNativeExecutionClient(bool dispatchEnabled = true) : IRdsExecutionClient
     {
-        public bool DispatchEnabled => true;
+        public bool DispatchEnabled => dispatchEnabled;
         public int CreateCount { get; private set; }
         public Task<RdsValidationResult> ValidateTransportAsync(RdsValidateTransportRequest request, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<RdsCreateTransportResult> CreateTransportAsync(RdsCreateTransportRequest request, Guid correlationId, CancellationToken cancellationToken = default)
@@ -891,8 +976,11 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 true, true, true, 200, 0, "success", false, RdsCoreOrderDiagnostics.Empty, JsonDocument.Parse("{}").RootElement));
         }
 
+        public int OrderDetailsCount { get; private set; }
+
         public Task<RdsCoreOrderDetails> GetOrderDetailsAsync(string orderId, Guid correlationId, CancellationToken cancellationToken = default)
         {
+            OrderDetailsCount++;
             var isTransition = orderId.Contains(":map-prep:");
             var state = isTransition ? TransitionOrderState : DetailsState;
             return Task.FromResult(new RdsCoreOrderDetails(

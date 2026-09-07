@@ -228,7 +228,13 @@ public sealed class RdsExecutionWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!coordinator.IsDispatchEnabled && (!options.Enabled || !options.DispatchEnabled))
+        // The worker stays alive for read-only reconciliation even when the global
+        // dispatch gate is closed — DispatchQueuedAsync is itself gated and simply
+        // returns nothing. Only a fully disabled RDS integration that also cannot
+        // dispatch makes the worker pointless.
+        var canDispatch = coordinator.IsDispatchEnabled;
+        var canReconcile = options.Enabled;
+        if (!canDispatch && !canReconcile)
         {
             return;
         }

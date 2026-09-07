@@ -329,7 +329,10 @@ public sealed class RdsCoreNativeOrderClientTests
                 "/manualFinished",
                 "/redoFailedOrder",
                 "/dispatchable",
-                "/robotsStatus"
+                "/robotsStatus",
+                "/lock",
+                "/unlock",
+                "/switchMap"
             ],
             RdsCoreNativeOrderClient.AllowedOperations.Select(item => item.Endpoint).ToArray());
         var forbidden = new[] { "/addBlocks", "/cancelBlock", "/setLabel", "/unassignOrder", "/problemVehicle", "/setChargeOrder" };
@@ -418,6 +421,43 @@ public sealed class RdsCoreNativeOrderClientTests
         Assert.Equal("undispatchable_unignore", body.GetProperty("type").GetString());
 
         await Assert.ThrowsAsync<ArgumentException>(() => client.SetDispatchableAsync(["Sfl-Cbd15"], "invalid_type", Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Lock_and_unlock_serialize_vehicles_to_correct_endpoints()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var lockResult = await client.LockAsync(["Sfl-Cbd15"], Guid.NewGuid());
+        Assert.True(lockResult.CoreAccepted);
+        Assert.Equal("/lock", handler.Requests[0].Path);
+        Assert.Equal(HttpMethod.Post, handler.Requests[0].Method);
+        var lockBody = JsonDocument.Parse(handler.Requests[0].Body).RootElement;
+        Assert.Equal("Sfl-Cbd15", lockBody.GetProperty("vehicles")[0].GetString());
+
+        var unlockResult = await client.UnlockAsync(["Sfl-Cbd15"], Guid.NewGuid());
+        Assert.True(unlockResult.CoreAccepted);
+        Assert.Equal("/unlock", handler.Requests[1].Path);
+        Assert.Equal(HttpMethod.Post, handler.Requests[1].Method);
+        var unlockBody = JsonDocument.Parse(handler.Requests[1].Body).RootElement;
+        Assert.Equal("Sfl-Cbd15", unlockBody.GetProperty("vehicles")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Switch_map_serializes_vehicle_and_map_to_post_switchMap()
+    {
+        var handler = new RecordingHandler(_ => Json("""{"code":0,"msg":"ok"}"""));
+        var client = Client(handler);
+
+        var result = await client.SwitchMapAsync("Sfl-Cbd15", "26.7.2026_map_optimak_1", Guid.NewGuid());
+        Assert.True(result.CoreAccepted);
+        var req = handler.Single();
+        Assert.Equal(HttpMethod.Post, req.Method);
+        Assert.Equal("/switchMap", req.Path);
+        var body = JsonDocument.Parse(req.Body).RootElement;
+        Assert.Equal("Sfl-Cbd15", body.GetProperty("vehicle").GetString());
+        Assert.Equal("26.7.2026_map_optimak_1", body.GetProperty("map").GetString());
     }
 
     [Fact]

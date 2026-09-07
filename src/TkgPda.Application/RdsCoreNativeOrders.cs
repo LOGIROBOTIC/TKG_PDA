@@ -65,10 +65,11 @@ public sealed class RdsCoreNormalOrder
         string? label,
         IReadOnlyList<string>? keyRoute,
         string? keyTask,
-        int? priority)
+        int? priority,
+        string? customId = null)
     {
         TransportRequestId = transportRequestId;
-        Id = transportRequestId.ToString("D");
+        Id = customId ?? transportRequestId.ToString("D");
         ExternalId = Normalize(externalId);
         Vehicle = Normalize(vehicle);
         Group = Normalize(group);
@@ -138,6 +139,41 @@ public sealed class RdsCoreNormalOrder
 
     public static string PickupBlockId(Guid transportRequestId) => BlockId(transportRequestId, "pickup");
     public static string DropoffBlockId(Guid transportRequestId) => BlockId(transportRequestId, "dropoff");
+    public static string TransitionOrderId(Guid transportRequestId, string targetMap) =>
+        $"{transportRequestId:D}:map-prep:{targetMap.Trim()}";
+    public static string TransitionBlockId(Guid transportRequestId) =>
+        $"{transportRequestId:D}:map-prep:block";
+
+    public static RdsCoreNormalOrder CreateTransition(
+        Guid transportRequestId,
+        string targetMap,
+        RdsCoreOrderBlock transitionBlock,
+        string? vehicle = null,
+        int? priority = null)
+    {
+        if (transportRequestId == Guid.Empty)
+            throw new ArgumentException("A TransportRequest UUID is required.", nameof(transportRequestId));
+        ArgumentNullException.ThrowIfNull(transitionBlock);
+        if (string.IsNullOrWhiteSpace(targetMap))
+            throw new ArgumentException("A target map is required.", nameof(targetMap));
+
+        ValidateBlock(transitionBlock);
+        if (priority is < 0)
+            throw new ArgumentOutOfRangeException(nameof(priority), "Priority cannot be negative.");
+
+        var customId = TransitionOrderId(transportRequestId, targetMap);
+        return new(
+            transportRequestId,
+            [transitionBlock],
+            externalId: null,
+            vehicle: vehicle,
+            group: null,
+            label: "MAP_PREP",
+            keyRoute: null,
+            keyTask: null,
+            priority: priority,
+            customId: customId);
+    }
 
     private static string BlockId(Guid requestId, string suffix)
     {
@@ -344,6 +380,9 @@ public interface IRdsCoreNativeOrderClient
     Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> LockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> UnlockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreSimpleResult> SwitchMapAsync(string vehicle, string map, Guid correlationId, CancellationToken cancellationToken = default);
 }
 
 public sealed class RdsCoreNativeOrderException(string code, string message, Exception? innerException = null)

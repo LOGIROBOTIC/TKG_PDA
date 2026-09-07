@@ -107,7 +107,10 @@ public sealed class RdsCoreNativeOrderClient(
         ManualFinished,
         RedoFailedOrder,
         Dispatchable,
-        RobotsStatus
+        RobotsStatus,
+        Lock,
+        Unlock,
+        SwitchMap
     }
 
     private sealed record Spec(HttpMethod Method, string Path, bool Mutation);
@@ -128,7 +131,10 @@ public sealed class RdsCoreNativeOrderClient(
         [Operation.ManualFinished] = new(HttpMethod.Post, "/manualFinished", true),
         [Operation.RedoFailedOrder] = new(HttpMethod.Post, "/redoFailedOrder", true),
         [Operation.Dispatchable] = new(HttpMethod.Post, "/dispatchable", true),
-        [Operation.RobotsStatus] = new(HttpMethod.Get, "/robotsStatus", false)
+        [Operation.RobotsStatus] = new(HttpMethod.Get, "/robotsStatus", false),
+        [Operation.Lock] = new(HttpMethod.Post, "/lock", true),
+        [Operation.Unlock] = new(HttpMethod.Post, "/unlock", true),
+        [Operation.SwitchMap] = new(HttpMethod.Post, "/switchMap", true)
     };
 
     public static IReadOnlyList<RdsCoreNativeOrderOperationDescriptor> AllowedOperations { get; } = Registry
@@ -374,6 +380,53 @@ public sealed class RdsCoreNativeOrderClient(
             cancellationToken);
         var root = RequireSuccessfulRead(response);
         return ParseRobotTelemetry(root);
+    }
+
+    public async Task<RdsCoreSimpleResult> LockAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.Lock,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> UnlockAsync(
+        IReadOnlyList<string> vehicles,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var list = vehicles.Select(v => ValidateToken(v, "vehicle ID")).ToArray();
+        using var response = await SendAsync(
+            Operation.Unlock,
+            new { vehicles = list },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
+    }
+
+    public async Task<RdsCoreSimpleResult> SwitchMapAsync(
+        string vehicle,
+        string map,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var v = ValidateToken(vehicle, "vehicle ID");
+        var m = ValidateToken(map, "map name");
+        using var response = await SendAsync(
+            Operation.SwitchMap,
+            new { vehicle = v, map = m },
+            null,
+            correlationId,
+            cancellationToken);
+        return ParseSimpleResult(response);
     }
 
     private async Task<IReadOnlyList<RdsCoreOrderDetails>> GetOrderArrayAsync(

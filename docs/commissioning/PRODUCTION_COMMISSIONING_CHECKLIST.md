@@ -7,27 +7,28 @@ Bu checklist fiziksel robot dispatch'inden önce tamamlanacak fail-closed kapıd
 ### SOFTWARE / SIMULATOR STATUS
 
 #### SIMULATOR_ACCEPTED:
+- Simulation profile isolation (`OPTIMAK_SIM_2026` / `SIMULATION` decoupled from production)
+- Automatic effective Variant resolution from Operator context (no manual variant or map selector)
+- Automatic NavigationProfile resolution by Variant & Machine
+- Automatic required-map selection (`Map A: 26.7.2026_map_optimak`, `Map B: 26.7.2026_map_optimak_1`)
+- Automatic SwitchMap orchestration (`/lock` -> `/switchMap` -> `/unlock` -> `/robotsStatus` verification)
+- Same-map bypass (no switch or locking when robot is already on the required map)
+- Native primary execution mode (`RDSCORE_NATIVE_ORDER` as primary default)
+- WindTask fallback execution retained (mutually exclusive per request, no silent fallback)
+- Dynamic role-based endpoint resolution (`EMPTY_STORAGE`, `DROP`/`FULL_STORAGE`, machine slots; zero template location hardcoding)
+- Application-level map transition flow: preliminary navigation order `{requestId}:map-prep:{targetMap}` to configured transition station (`SM11`)
 - Container Action -> Warehouse Preparation -> RDS dispatch -> completion
-- Native RDSCore order creation
-- Native reconciliation
-- RUNNING cancellation through TKG API
-- exact /terminate with disableVehicle=false
-- queue / polling
-- telemetry
-- fallback ETA (elapsed-time cascade: 120s - elapsed = remaining, min 15s)
-- SwitchMap A <-> B via shared SM11
-- Operator authorization boundary
-- native/Wind execution isolation
-- restart/idempotency protections (idempotentReplay=true on duplicate key)
-- /manualFinished on RUNNING order (code=0, reconciliation picks up FINISHED)
-- /clearRobotAllError (code=0)
-- /dispatchable toggle (type=dispatchable / undispatchable_unignore)
-- /lock and /unlock vehicle control
-- /gotoSitePause and /gotoSiteResume
-- /setPriority on active order
-- Full RDSCore API endpoint matrix (15 endpoints verified)
+- Native RDSCore order creation & reconciliation
+- RUNNING cancellation through TKG API with exact /terminate (disableVehicle=false)
+- Telemetry & ETA fallback cascade
+- Full fail-closed matrix (unresolved profile, unresolved map, unresolved vehicle, robot offline, robot not dispatchable, blocking alarm, incompatible order, unresolved transition station, switchMap failure, post-switch localization failure)
 
-#### IMPLEMENTED_NOT_POSITIVELY_OBSERVED:
+#### IMPLEMENTED_NOT_PHYSICALLY_ACCEPTED:
+- real multi-map transition on physical factory floor
+- physical robot localization after map switch
+- real fork/binTask parameters
+- real WorkSite/Bin mapping
+- plant SAT (Site Acceptance Test)
 - positive real remaining_time (simulator always returns -1; code path verified correct)
 - redoFailedOrder on a genuine FAILED block (simulator does not produce genuine failures)
 - manualFinished on a genuine stuck/failed block (tested on RUNNING; stuck state requires physical hardware)
@@ -38,7 +39,7 @@ Bu checklist fiziksel robot dispatch'inden önce tamamlanacak fail-closed kapıd
 - real TKG Slot -> RDS WorkSite/Bin mapping
 - real binTask
 - fork height
-- pickup/drop
+- pickup/drop geometry and docking alignment
 - recognition/calibration
 - physical load handling
 - plant Wi-Fi / roaming

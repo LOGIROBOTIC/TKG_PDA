@@ -351,32 +351,6 @@ VALUES
 ON CONFLICT (device_code) DO UPDATE
 SET name = EXCLUDED.name, is_active = true;
 
--- Development Navigation Profile for SH-01-A
-INSERT INTO master.navigation_profiles (
-    machine_id, code, name, version, status,
-    base_map_name, robot_map_name, route_profile_name, stitch_profile_name,
-    config_json
-)
-SELECT
-    m.id, 'DEV-RDS-SIM', 'Development RDS Simulator', 1, 'PUBLISHED',
-    NULL, NULL, NULL, NULL,
-    '{"developmentOnly": true}'::jsonb
-FROM master.machines m WHERE m.code = 'SH-01-A'
-ON CONFLICT (machine_id, code, version) DO UPDATE
-SET status = 'PUBLISHED', config_json = '{"developmentOnly": true}'::jsonb;
-
--- Assign navigation profile as default for SH-01-A variant 1
-INSERT INTO master.variant_navigation_profile_assignments (
-    variant_id, machine_id, navigation_profile_id, is_default
-)
-SELECT
-    v.id, m.id, np.id, true
-FROM master.machines m
-JOIN master.variants v ON v.machine_id = m.id AND v.code = '1'
-JOIN master.navigation_profiles np ON np.machine_id = m.id AND np.code = 'DEV-RDS-SIM' AND np.version = 1
-WHERE m.code = 'SH-01-A'
-ON CONFLICT (variant_id, navigation_profile_id) DO UPDATE SET is_default = true;
-
 -- Permissions on SH-01-A
 INSERT INTO auth.user_machine_permissions (user_id, machine_id, can_view, can_operate, can_change_variant, can_manage_slots)
 SELECT u.id, m.id, true, true, true, false
@@ -398,6 +372,43 @@ FROM auth.users u CROSS JOIN master.machines m
 WHERE u.username = 'dev-warehouse' AND m.code = 'SH-01-A'
 ON CONFLICT (user_id, machine_id) DO UPDATE
 SET can_view = true, can_operate = true, can_change_variant = false, can_manage_slots = false;
+'@
+
+if (-not $EnableSimulationTrialMappings) {
+    $devEnvironmentSql += @'
+
+-- Development Navigation Profile for SH-01-A (Used when simulation trial overlay is disabled)
+INSERT INTO master.navigation_profiles (
+    machine_id, code, name, version, status,
+    base_map_name, robot_map_name, route_profile_name, stitch_profile_name,
+    config_json
+)
+SELECT
+    m.id, 'DEV-RDS-SIM', 'Development RDS Simulator', 1, 'PUBLISHED',
+    NULL, NULL, NULL, NULL,
+    '{"developmentOnly": true}'::jsonb
+FROM master.machines m WHERE m.code = 'SH-01-A'
+ON CONFLICT (machine_id, code, version) DO UPDATE
+SET status = 'PUBLISHED', config_json = '{"developmentOnly": true}'::jsonb;
+
+-- Clear any existing default assignment for SH-01-A variant 1
+UPDATE master.variant_navigation_profile_assignments a
+SET is_default = false
+FROM master.machines m, master.variants v
+WHERE m.code = 'SH-01-A' AND v.machine_id = m.id AND v.code = '1'
+  AND a.variant_id = v.id;
+
+-- Assign navigation profile as default for SH-01-A variant 1
+INSERT INTO master.variant_navigation_profile_assignments (
+    variant_id, machine_id, navigation_profile_id, is_default
+)
+SELECT
+    v.id, m.id, np.id, true
+FROM master.machines m
+JOIN master.variants v ON v.machine_id = m.id AND v.code = '1'
+JOIN master.navigation_profiles np ON np.machine_id = m.id AND np.code = 'DEV-RDS-SIM' AND np.version = 1
+WHERE m.code = 'SH-01-A'
+ON CONFLICT (variant_id, navigation_profile_id) DO UPDATE SET is_default = true;
 
 -- Machine runtime state for SH-01-A
 INSERT INTO ops.machine_runtime_state (
@@ -417,6 +428,10 @@ SET active_variant_id = EXCLUDED.active_variant_id,
     active_navigation_id = EXCLUDED.active_navigation_id,
     row_version = ops.machine_runtime_state.row_version + 1,
     updated_at = now();
+'@
+}
+
+$devEnvironmentSql += @'
 
 -- Initial 3 test slot states for SH-01-A default layout
 WITH candidate_slots AS (

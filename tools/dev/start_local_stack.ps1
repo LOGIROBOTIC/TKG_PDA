@@ -23,7 +23,8 @@ param(
     [string]$Password,
     [System.Security.SecureString]$SecurePassword,
     [switch]$NoOperator,
-    [switch]$NoAdmin
+    [switch]$NoAdmin,
+    [switch]$EnableSimulationTrialMappings = $true
 )
 
 $ErrorActionPreference = 'Stop'
@@ -247,16 +248,24 @@ Write-Host 'Applying migration 005 (005_layout_slot_part_mapping.sql)...' -Foreg
 & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Applying 005_layout_slot_part_mapping.sql failed with exit code $LASTEXITCODE" }
 
-Write-Host 'Applying customer master seeds (002a & 002b)...' -ForegroundColor Cyan
+Write-Host 'Applying customer master seeds (002a, 002b, 002c)...' -ForegroundColor Cyan
 $seedFiles = @(
     (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql'),
     (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql'),
-    (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql'),
-    (Join-Path $projectRoot 'db\seeds\generated\002d_simulation_rds_trial_mappings.sql')
+    (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql')
 )
 foreach ($sf in $seedFiles) {
     & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f $sf | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Applying seed failed: $sf" }
+}
+
+if ($EnableSimulationTrialMappings) {
+    Write-Host 'Applying simulation RDS trial mappings (002d - OPTIMAK_SIM_2026 overlay)...' -ForegroundColor Yellow
+    $simSeed = (Join-Path $projectRoot 'db\seeds\generated\002d_simulation_rds_trial_mappings.sql')
+    & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f $simSeed | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Applying simulation trial seed failed: $simSeed" }
+} else {
+    Write-Host 'Simulation trial mappings bypassed (production isolation active).' -ForegroundColor Gray
 }
 
 # Resolve development password

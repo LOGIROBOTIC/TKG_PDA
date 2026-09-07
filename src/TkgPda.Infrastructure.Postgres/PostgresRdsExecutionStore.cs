@@ -158,6 +158,10 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 WHERE (r.source_slot_id IS NOT NULL AND ls.id = r.source_slot_id)
                    OR (r.source_slot_id IS NULL AND template.source_slot_group_id IS NOT NULL
                        AND sgm.slot_group_id = template.source_slot_group_id AND ls.layout_id = r.layout_id)
+                   OR (r.source_slot_id IS NULL AND template.source_slot_group_id IS NULL
+                       AND ls.layout_id = r.layout_id AND ls.is_enabled AND (
+                           (tt.code = 'BRING_EMPTY' AND ls.slot_role = 'EMPTY_STORAGE')
+                       ))
                 ORDER BY CASE WHEN ls.id = r.source_slot_id THEN 0 ELSE 1 END,
                          sgm.priority, ls.display_order, ls.id
                 LIMIT 1
@@ -174,6 +178,11 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 WHERE (r.destination_slot_id IS NOT NULL AND ls.id = r.destination_slot_id)
                    OR (r.destination_slot_id IS NULL AND template.destination_slot_group_id IS NOT NULL
                        AND sgm.slot_group_id = template.destination_slot_group_id AND ls.layout_id = r.layout_id)
+                   OR (r.destination_slot_id IS NULL AND template.destination_slot_group_id IS NULL
+                       AND ls.layout_id = r.layout_id AND ls.is_enabled AND (
+                           (tt.code = 'REMOVE_FULL' AND ls.slot_role IN ('DROP', 'FULL_STORAGE'))
+                           OR (tt.code = 'REMOVE_EMPTY' AND ls.slot_role IN ('EMPTY_STORAGE', 'DROP'))
+                       ))
                 ORDER BY CASE WHEN ls.id = r.destination_slot_id THEN 0 ELSE 1 END,
                          sgm.priority, ls.display_order, ls.id
                 LIMIT 1
@@ -397,6 +406,87 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 reader.GetInt32(7), Json(reader.GetString(8)), reader.GetBoolean(9)));
         }
         return rows;
+    }
+
+    public async Task<RdsNavigationProfileSummary?> GetNavigationProfileSummaryAsync(
+        Guid? profileId,
+        Guid variantId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        string sql;
+        NpgsqlCommand command;
+        if (profileId.HasValue)
+        {
+            sql =
+                """
+                SELECT np.id, np.code, np.name, np.status, np.robot_map_name, np.config_json::text
+                FROM master.navigation_profiles np
+                WHERE np.id = @profile_id
+                """;
+            command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("profile_id", profileId.Value);
+        }
+        else
+        {
+            sql =
+                """
+                SELECT np.id, np.code, np.name, np.status, np.robot_map_name, np.config_json::text
+                FROM master.variant_navigation_profile_assignments vna
+                JOIN master.navigation_profiles np ON np.id = vna.navigation_profile_id AND np.machine_id = vna.machine_id
+                WHERE vna.variant_id = @variant_id AND vna.is_default AND np.status = 'PUBLISHED'
+                LIMIT 1
+                """;
+            command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("variant_id", variantId);
+        }
+
+        await using (command)
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            if (!await reader.ReadAsync(cancellationToken)) return null;
+
+            var id = reader.GetGuid(0);
+            var code = reader.GetString(1);
+            var name = reader.GetString(2);
+            var status = reader.GetString(3);
+            var robotMapName = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var configStr = reader.IsDBNull(5) ? "{}" : reader.GetString(5);
+            var configJson = Json(configStr);
+
+            string? switchTransition = null;
+            string? vehicle = null;
+            if (configJson.ValueKind == JsonValueKind.Object)
+            {
+                if (configJson.TryGetProperty("switchTransitionStation", out var stProp) && stProp.ValueKind == JsonValueKind.String)
+                {
+                    switchTransition = stProp.GetString();
+                }
+                else if (configJson.TryGetProperty("transitionStation", out var tsProp) && tsProp.ValueKind == JsonValueKind.String)
+                {
+                    switchTransition = tsProp.GetString();
+                }
+
+                if (configJson.TryGetProperty("vehicle", out var vProp) && vProp.ValueKind == JsonValueKind.String)
+                {
+                    vehicle = vProp.GetString();
+                }
+                else if (configJson.TryGetProperty("allowedVehicles", out var avProp) && avProp.ValueKind == JsonValueKind.Array && avProp.GetArrayLength() > 0)
+                {
+                    vehicle = avProp[0].GetString();
+                }
+            }
+
+            return new RdsNavigationProfileSummary(
+                id,
+                code,
+                name,
+                status,
+                robotMapName,
+                switchTransition,
+                vehicle,
+                configJson);
+        }
     }
 
     public async Task EnrichRemainingTimesAsync(

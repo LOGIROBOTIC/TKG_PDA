@@ -799,6 +799,23 @@ public static class ApiEndpoints
 
     private static void EnsureTransportOperationAllowed(ClaimsPrincipal principal, TransportTaskType operation)
     {
+        // REMOVE_EMPTY is internal orchestration vocabulary, not a standalone
+        // Operator action. The Operator's business actions are "Kasa Doldu"
+        // (REMOVE_FULL) and "Kasa Boş" (BRING_EMPTY); REMOVE_EMPTY exists so the
+        // Remove-All workflow can clear an OCCUPIED+EMPTY position, and the domain
+        // generates it server-side. It stays in the Domain enum and Remove-All keeps
+        // producing it — it is only barred from generic transport creation, which is
+        // the Operator business surface. This applies to every role on this route:
+        // holding more authority on a PDA does not make an internal operation
+        // directly selectable.
+        if (operation == TransportTaskType.RemoveEmpty)
+        {
+            throw new ApiException(
+                StatusCodes.Status422UnprocessableEntity,
+                "OPERATION_NOT_OPERATOR_SELECTABLE",
+                "REMOVE_EMPTY is produced by the Remove-All workflow and cannot be requested directly.");
+        }
+
         var warehouseOnly = principal.IsInRole(RoleCodes.WarehouseOperator)
             && !principal.IsInRole(RoleCodes.Admin)
             && !principal.IsInRole(RoleCodes.Supervisor)
@@ -918,9 +935,31 @@ public static class ApiEndpoints
         }
 
         var correlationId = CorrelationId(context);
-        // Routed through the Application layer so the one global mutation policy
-        // applies; motion-enabling maintenance is refused when dispatch is disabled.
-        var result = await rdsExecution.RobotMaintenanceAsync(action, vehicles, dispatchableType, correlationId, cancellationToken);
+        RdsCoreSimpleResult result;
+        try
+        {
+            // Routed through the Application layer so the one global mutation policy
+            // applies; motion-enabling maintenance is refused when dispatch is disabled.
+            result = await rdsExecution.RobotMaintenanceAsync(action, vehicles, dispatchableType, correlationId, cancellationToken);
+        }
+        catch (RdsExecutionException error)
+        {
+            // A refused attempt on a physical robot is exactly the event an audit log
+            // exists for. Previously only successful calls were recorded, so a gate
+            // rejection or an adapter failure left no trace of who tried what.
+            await WriteAuditAsync(
+                dataStore,
+                context,
+                context.User.UserId(),
+                Device(context).Id,
+                auditAction,
+                "ROBOT",
+                string.Join(',', vehicles),
+                new { vehicles, detail = auditDetail, accepted = false, rejectedCode = error.Code },
+                cancellationToken);
+            throw;
+        }
+
         await WriteAuditAsync(
             dataStore,
             context,

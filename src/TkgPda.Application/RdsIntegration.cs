@@ -471,10 +471,12 @@ public sealed class RdsIntegrationService(IRdsReadClient client, IRdsIntegration
         {
             activeTkgLocks = await store.GetActiveTkgLockFingerprintsAsync(cancellationToken);
         }
-        catch
+        catch (Exception error) when (error is not OperationCanceledException)
         {
             // A fingerprint read failure must never upgrade control confidence: with
             // no fingerprints nothing can correlate, so locks read EXTERNAL_OR_OTHER.
+            // Cancellation is deliberately excluded so a cancelled Admin poll
+            // propagates instead of being reported as a successful empty read.
             activeTkgLocks = [];
         }
 

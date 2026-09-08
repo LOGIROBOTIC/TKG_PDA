@@ -705,6 +705,112 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.Equal(0, fixture.NativeClient.SetOrderCount);
     }
 
+    // ---------------------------------------------------------------------
+    // Global mutation gate beyond the dispatch path.
+    // Rds:DispatchEnabled=false must also refuse expert and fleet-maintenance
+    // operations that START, RESUME, RE-ENABLE or ADVANCE physical work, while
+    // still permitting the safety-reducing ones.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Gate_closed_blocks_manual_finish_redo_and_priority()
+    {
+        var fixture = Fixture(
+            requestStatus: TransportRequestStatus.SentToRds,
+            activeTaskStatus: TransportRequestStatus.SentToRds,
+            dispatchEnabled: false);
+
+        var manualFinish = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+        var redo = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+        var priority = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.SetRequestPriorityAsync(RequestId, 5, Guid.NewGuid()));
+
+        Assert.Equal("RDS_DISPATCH_DISABLED", manualFinish.Code);
+        Assert.Equal("RDS_DISPATCH_DISABLED", redo.Code);
+        Assert.Equal("RDS_DISPATCH_DISABLED", priority.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+        Assert.Equal(0, fixture.NativeClient.SetPriorityCount);
+    }
+
+    [Fact]
+    public async Task Gate_closed_blocks_resume_clear_errors_and_making_a_robot_dispatchable()
+    {
+        var fixture = Fixture(dispatchEnabled: false);
+
+        foreach (var (action, type) in new (RdsRobotMaintenanceAction, string?)[]
+                 {
+                     (RdsRobotMaintenanceAction.Resume, null),
+                     (RdsRobotMaintenanceAction.ClearErrors, null),
+                     (RdsRobotMaintenanceAction.SetDispatchable, "dispatchable")
+                 })
+        {
+            var error = await Assert.ThrowsAsync<RdsExecutionException>(
+                () => fixture.Coordinator.RobotMaintenanceAsync(action, ["AGV-01"], type, Guid.NewGuid()));
+            Assert.Equal("RDS_DISPATCH_DISABLED", error.Code);
+        }
+
+        Assert.Equal(0, fixture.NativeClient.ResumeCount);
+        Assert.Equal(0, fixture.NativeClient.ClearErrorsCount);
+        Assert.Equal(0, fixture.NativeClient.DispatchableCount);
+    }
+
+    [Fact]
+    public async Task Gate_closed_still_permits_pause_and_making_a_robot_undispatchable()
+    {
+        // Safety-reducing operations stay reachable: they remove motion, not cause it.
+        var fixture = Fixture(dispatchEnabled: false);
+
+        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.Pause, ["AGV-01"], null, Guid.NewGuid());
+        await fixture.Coordinator.RobotMaintenanceAsync(
+            RdsRobotMaintenanceAction.SetDispatchable, ["AGV-01"], "undispatchable_unignore", Guid.NewGuid());
+
+        Assert.Equal(1, fixture.NativeClient.PauseCount);
+        Assert.Equal(1, fixture.NativeClient.DispatchableCount);
+    }
+
+    [Fact]
+    public async Task Gate_closed_still_permits_cancellation_because_terminate_stops_work()
+    {
+        var fixture = Fixture(
+            requestStatus: TransportRequestStatus.SentToRds,
+            activeTaskStatus: TransportRequestStatus.SentToRds,
+            dispatchEnabled: false);
+
+        await fixture.Coordinator.CancelAsync(RequestId, null, Guid.NewGuid());
+
+        Assert.Equal(1, fixture.NativeClient.TerminateCount);
+    }
+
+    [Fact]
+    public async Task Gate_open_permits_the_motion_enabling_maintenance_operations()
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+
+        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.Resume, ["AGV-01"], null, Guid.NewGuid());
+        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.ClearErrors, ["AGV-01"], null, Guid.NewGuid());
+
+        Assert.Equal(1, fixture.NativeClient.ResumeCount);
+        Assert.Equal(1, fixture.NativeClient.ClearErrorsCount);
+    }
+
+    [Fact]
+    public async Task Robot_maintenance_requires_an_explicit_non_empty_vehicle_list()
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+
+        var empty = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.Pause, [], null, Guid.NewGuid()));
+        var blank = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.Pause, ["  "], null, Guid.NewGuid()));
+
+        Assert.Equal("VEHICLES_REQUIRED", empty.Code);
+        Assert.Equal("VEHICLES_REQUIRED", blank.Code);
+        Assert.Equal(0, fixture.NativeClient.PauseCount);
+    }
+
     private static NativeTestFixture Fixture(
         TransportRequestStatus requestStatus = TransportRequestStatus.Queued,
         TransportReadinessState readinessState = TransportReadinessState.Ready,
@@ -1059,12 +1165,31 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         public Task<IReadOnlyList<RdsCoreOrderDetails>> GetOrderDetailsByExternalIdAsync(string externalId, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<RdsCoreOrderDetails> GetOrderDetailsByBlockIdAsync(string blockId, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<RdsCoreBlockDetails> GetBlockDetailsByIdAsync(string blockId, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> SetPriorityAsync(string orderId, int priority, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> ClearRobotAllErrorAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> GotoSitePauseAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> GotoSiteResumeAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        // Counted rather than throwing, so a gate test can prove nothing left the process.
+        public int SetPriorityCount { get; private set; }
+        public int ClearErrorsCount { get; private set; }
+        public int PauseCount { get; private set; }
+        public int ResumeCount { get; private set; }
+        public int ManualFinishedCount { get; private set; }
+        public int RedoCount { get; private set; }
+        public int DispatchableCount { get; private set; }
+
+        private static Task<RdsCoreSimpleResult> Ok() =>
+            Task.FromResult(new RdsCoreSimpleResult(true, true, 200, 0, "ok", JsonDocument.Parse("{}").RootElement));
+
+        public Task<RdsCoreSimpleResult> SetPriorityAsync(string orderId, int priority, Guid correlationId, CancellationToken cancellationToken = default)
+        { SetPriorityCount++; return Ok(); }
+        public Task<RdsCoreSimpleResult> ClearRobotAllErrorAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
+        { ClearErrorsCount++; return Ok(); }
+        public Task<RdsCoreSimpleResult> GotoSitePauseAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
+        { PauseCount++; return Ok(); }
+        public Task<RdsCoreSimpleResult> GotoSiteResumeAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
+        { ResumeCount++; return Ok(); }
+        public Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
+        { ManualFinishedCount++; return Ok(); }
+        public Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
+        { RedoCount++; return Ok(); }
+        public Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default)
+        { DispatchableCount++; return Ok(); }
     }
 }

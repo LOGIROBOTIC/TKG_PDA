@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using TkgPda.Application;
 using Xunit;
 
@@ -557,6 +558,38 @@ public sealed class RdsCoreNativeOrderClientTests
     private static RdsCoreNavigationBlock Navigation(string suffix, string location) => new(Block(suffix), location);
     private static string Block(string suffix) => $"{RequestId:D}:{suffix}";
     private static JsonElement Element(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    [Fact]
+    public async Task Remaining_time_provider_keys_by_the_shared_vehicle_space_identity()
+    {
+        // The ETA map must key by the same vehicle-space identifier that
+        // rds_tasks.agv_id and the mutation APIs use, so enrichment cannot miss on
+        // an identity-space mismatch. The simulator reports uuid == vehicle_id,
+        // which is exactly why the previously-inlined parser went unnoticed.
+        var handler = new RecordingHandler(_ => Json("""
+            {"report":[
+                {"uuid":"ROBOT-INTERNAL-123","vehicle_id":"AGV-01","remaining_time":42.5},
+                {"uuid":"ROBOT-INTERNAL-999","remaining_time":7.0},
+                {"uuid":"ROBOT-NEGATIVE","vehicle_id":"AGV-03","remaining_time":-1.0}
+            ]}
+            """));
+        var options = new RdsCoreExecutionOptions(true, RdsExecutionMode.RdsCoreNativeOrder, "http://127.0.0.1:18088/", 5, true);
+        options.Validate();
+        var provider = new RdsCoreRobotTelemetryProvider(
+            new Factory(handler, options.BaseAddress),
+            options,
+            NullLogger<RdsCoreRobotTelemetryProvider>.Instance);
+
+        var result = await provider.GetRobotRemainingTimesAsync();
+
+        // Vehicle-space wins when both are present.
+        Assert.Equal(42.5, result["AGV-01"]);
+        Assert.False(result.ContainsKey("ROBOT-INTERNAL-123"));
+        // uuid remains the fallback when vehicle_id is absent.
+        Assert.Equal(7.0, result["ROBOT-INTERNAL-999"]);
+        // Negative remaining_time is still not an ETA.
+        Assert.False(result.ContainsKey("AGV-03"));
+    }
 
     private static RdsCoreNativeOrderClient Client(RecordingHandler handler, RdsCoreExecutionOptions? options = null)
     {

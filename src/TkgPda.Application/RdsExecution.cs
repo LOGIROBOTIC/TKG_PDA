@@ -3,6 +3,15 @@ using TkgPda.Domain;
 
 namespace TkgPda.Application;
 
+/// <summary>Fleet-scoped robot maintenance operations exposed to Admin/Supervisor.</summary>
+public enum RdsRobotMaintenanceAction
+{
+    Pause,
+    Resume,
+    ClearErrors,
+    SetDispatchable
+}
+
 /// <summary>
 /// Outcome of an expert recovery action. <see cref="Vehicle"/> and
 /// <see cref="TaskRecordId"/> are the server-resolved targets, echoed back so the
@@ -633,11 +642,67 @@ public sealed class RdsExecutionCoordinator(
         }
     }
 
+    /// <summary>
+    /// Single enforcement point for the global physical mutation gate outside the
+    /// dispatch path. Being Admin/Supervisor-only never substitutes for this check.
+    /// </summary>
+    private void EnsureMutationAllowed(RdsMutationClass mutationClass, string operation)
+    {
+        if (!RdsMutationPolicy.IsAllowed(mutationClass, IsGlobalDispatchAllowed))
+        {
+            throw new RdsExecutionException(
+                RdsMutationPolicy.BlockedCode,
+                RdsMutationPolicy.BlockedMessage(operation));
+        }
+    }
+
+    /// <summary>
+    /// Fleet-scoped robot maintenance routed through the Application layer so it
+    /// shares the one mutation policy instead of calling the adapter directly.
+    /// An explicit, non-empty vehicle list is required; there are no broadcast
+    /// semantics. Machine scoping for Supervisor is deliberately not invented here.
+    /// </summary>
+    public async Task<RdsCoreSimpleResult> RobotMaintenanceAsync(
+        RdsRobotMaintenanceAction action,
+        IReadOnlyList<string> vehicles,
+        string? dispatchableType,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (vehicles is not { Count: > 0 } || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new RdsExecutionException("VEHICLES_REQUIRED", "At least one explicit vehicle identifier is required.");
+        }
+
+        var (mutationClass, operation) = action switch
+        {
+            RdsRobotMaintenanceAction.Pause => (RdsMutationClass.SafetyStop, "/gotoSitePause"),
+            RdsRobotMaintenanceAction.Resume => (RdsMutationClass.MotionEnabling, "/gotoSiteResume"),
+            RdsRobotMaintenanceAction.ClearErrors => (RdsMutationClass.MotionEnabling, "/clearRobotAllError"),
+            RdsRobotMaintenanceAction.SetDispatchable => (RdsMutationPolicy.ClassifyDispatchable(dispatchableType), "/dispatchable"),
+            _ => throw new RdsExecutionException("UNSUPPORTED_MAINTENANCE_ACTION", "Unsupported robot maintenance action.")
+        };
+
+        EnsureMutationAllowed(mutationClass, operation);
+        EnsureNativeExpertActionAvailable();
+
+        return action switch
+        {
+            RdsRobotMaintenanceAction.Pause => await nativeOrderClient!.GotoSitePauseAsync(vehicles, correlationId, cancellationToken),
+            RdsRobotMaintenanceAction.Resume => await nativeOrderClient!.GotoSiteResumeAsync(vehicles, correlationId, cancellationToken),
+            RdsRobotMaintenanceAction.ClearErrors => await nativeOrderClient!.ClearRobotAllErrorAsync(vehicles, correlationId, cancellationToken),
+            _ => await nativeOrderClient!.SetDispatchableAsync(vehicles, dispatchableType ?? string.Empty, correlationId, cancellationToken)
+        };
+    }
+
     public async Task<RdsExpertActionResult> ManualFinishAsync(
         Guid requestId,
         Guid correlationId,
         CancellationToken cancellationToken = default)
     {
+        // Marking the current block finished advances the robot to the next block,
+        // so this starts physical work and is gated.
+        EnsureMutationAllowed(RdsMutationClass.MotionEnabling, "/manualFinished");
         EnsureNativeExpertActionAvailable();
         var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
         var vehicle = task.AgvId!;
@@ -659,6 +724,8 @@ public sealed class RdsExecutionCoordinator(
         Guid correlationId,
         CancellationToken cancellationToken = default)
     {
+        // Re-running a failed block re-dispatches physical work.
+        EnsureMutationAllowed(RdsMutationClass.MotionEnabling, "/redoFailedOrder");
         EnsureNativeExpertActionAvailable();
         var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
         var vehicle = task.AgvId!;
@@ -696,6 +763,8 @@ public sealed class RdsExecutionCoordinator(
                 $"Priority must be between {MinRdsPriority} and {MaxRdsPriority}.");
         }
 
+        // Reordering the queue can cause work to be dispatched sooner.
+        EnsureMutationAllowed(RdsMutationClass.ExecutionMutation, "/setPriority");
         EnsureNativeExpertActionAvailable();
         var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: false, cancellationToken);
 

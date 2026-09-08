@@ -889,11 +889,10 @@ public sealed class RdsCoreRobotTelemetryProvider(
             foreach (var robot in report.EnumerateArray())
             {
                 if (robot.ValueKind != JsonValueKind.Object) continue;
-                var vehicleId = robot.TryGetProperty("vehicle_id", out var vid) && vid.ValueKind == JsonValueKind.String
-                    ? vid.GetString()
-                    : robot.TryGetProperty("uuid", out var uid) && uid.ValueKind == JsonValueKind.String
-                        ? uid.GetString()
-                        : null;
+                // Shared identity policy: the ETA map is keyed by the same
+                // vehicle-space identifier that rds_tasks.agv_id and the mutation
+                // APIs use, so enrichment cannot miss on an identity-space mismatch.
+                var vehicleId = RdsRobotIdentity.FromRobotElement(robot).MutationTarget;
                 if (string.IsNullOrWhiteSpace(vehicleId)) continue;
 
                 if (robot.TryGetProperty("remaining_time", out var rt) && rt.TryGetDouble(out var rtd) && rtd >= 0)

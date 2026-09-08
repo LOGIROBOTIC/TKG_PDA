@@ -320,6 +320,36 @@ public sealed class RdsTelemetryDomainBoundaryTests
         Assert.Equal(1, record.Alarms.Critical);
     }
 
+    [Fact]
+    public async Task Cancellation_during_lock_fingerprint_lookup_is_not_swallowed()
+    {
+        // A cancelled Admin poll must propagate, not be reported as a successful
+        // read with no fingerprints. Other failures still fail closed.
+        var robot = LockedRobot("robot_114", new RdsCoreRobotLockInfo(true, null, "TKG_LOCK_1", null, null, null, null));
+        var service = new RdsIntegrationService(
+            new StubRdsReadClient([robot]),
+            new StubRdsIntegrationStore(fingerprintFailure: new OperationCanceledException()),
+            TimeProvider.System);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.ListRobotsForAdminAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Non_cancellation_fingerprint_failure_fails_closed_without_crashing_admin()
+    {
+        var robot = LockedRobot("robot_115", new RdsCoreRobotLockInfo(true, null, "TKG_LOCK_1", null, null, null, null));
+        var service = new RdsIntegrationService(
+            new StubRdsReadClient([robot]),
+            new StubRdsIntegrationStore(fingerprintFailure: new InvalidOperationException("audit read failed")),
+            TimeProvider.System);
+
+        var record = Assert.Single(await service.ListRobotsForAdminAsync(Guid.NewGuid()));
+
+        // No fingerprints means nothing can correlate; confidence is reduced, never raised.
+        Assert.Equal("EXTERNAL_OR_OTHER", record.Control);
+    }
+
     private sealed class StubRdsReadClient(
         IReadOnlyList<RdsRobotStateSnapshot> robots,
         IReadOnlyList<RdsRobotAlarmSnapshot>? alarms = null) : IRdsReadClient
@@ -338,7 +368,9 @@ public sealed class RdsTelemetryDomainBoundaryTests
             Task.FromResult(new RdsReadResult<RdsRobotAlarmReport>(new(alarms ?? [], robots), 200, "Success", "/api/agv-report/core", correlationId, DateTimeOffset.UtcNow));
     }
 
-    private sealed class StubRdsIntegrationStore(IReadOnlyList<RdsActiveLockFingerprint>? activeTkgLocks = null) : IRdsIntegrationStore
+    private sealed class StubRdsIntegrationStore(
+        IReadOnlyList<RdsActiveLockFingerprint>? activeTkgLocks = null,
+        Exception? fingerprintFailure = null) : IRdsIntegrationStore
     {
         public Task<IReadOnlyList<RdsNavigationProfileRecord>> ListNavigationProfilesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RdsNavigationProfileRecord>>([]);
@@ -359,6 +391,8 @@ public sealed class RdsTelemetryDomainBoundaryTests
             Task.CompletedTask;
 
         public Task<IReadOnlyList<RdsActiveLockFingerprint>> GetActiveTkgLockFingerprintsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(activeTkgLocks ?? []);
+            fingerprintFailure is not null
+                ? Task.FromException<IReadOnlyList<RdsActiveLockFingerprint>>(fingerprintFailure)
+                : Task.FromResult(activeTkgLocks ?? []);
     }
 }

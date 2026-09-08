@@ -86,8 +86,12 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/rds/robots/dispatchable", SetRobotDispatchableAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
 
+        // Conservative product-policy choice: no repository or customer evidence was
+        // found that a Line/Warehouse Operator should reprioritise a transport, so
+        // priority mutation is restricted to Admin/Supervisor until one is cited.
+        // Machine authorization and auditing are unchanged.
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/priority", SetRequestPriorityAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+            .RequireAuthorization(PolicyNames.VariantManager);
 
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/manual-finish", ManualFinishRequestAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
@@ -748,7 +752,7 @@ public static class ApiEndpoints
             result.LoadState.ToDatabase(),
             result.RowVersion,
             result.WasIdempotentReplay,
-            contentSync));
+            LoadContentSyncHttpResult.From(contentSync)));
     }
 
     private static async Task<IResult> SwitchVariantAsync(
@@ -898,10 +902,12 @@ public static class ApiEndpoints
     private static async Task<IResult> RobotMaintenanceAsync(
         HttpContext context,
         IApiDataStore dataStore,
+        RdsExecutionCoordinator rdsExecution,
+        RdsRobotMaintenanceAction action,
         IReadOnlyList<string>? vehicles,
+        string? dispatchableType,
         string auditAction,
         object? auditDetail,
-        Func<IReadOnlyList<string>, Guid, Task<RdsCoreSimpleResult>> action,
         CancellationToken cancellationToken)
     {
         if (vehicles is not { Count: > 0 } || vehicles.Any(string.IsNullOrWhiteSpace))
@@ -910,7 +916,9 @@ public static class ApiEndpoints
         }
 
         var correlationId = CorrelationId(context);
-        var result = await action(vehicles, correlationId);
+        // Routed through the Application layer so the one global mutation policy
+        // applies; motion-enabling maintenance is refused when dispatch is disabled.
+        var result = await rdsExecution.RobotMaintenanceAsync(action, vehicles, dispatchableType, correlationId, cancellationToken);
         await WriteAuditAsync(
             dataStore,
             context,
@@ -928,45 +936,41 @@ public static class ApiEndpoints
         RobotVehiclesApiRequest? request,
         HttpContext context,
         IApiDataStore dataStore,
-        IRdsCoreNativeOrderClient rdsClient,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken) =>
         RobotMaintenanceAsync(
-            context, dataStore, request?.Vehicles, "RDS_ROBOT_PAUSE", null,
-            (vehicles, correlationId) => rdsClient.GotoSitePauseAsync(vehicles, correlationId, cancellationToken),
-            cancellationToken);
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.Pause,
+            request?.Vehicles, null, "RDS_ROBOT_PAUSE", null, cancellationToken);
 
     private static Task<IResult> ResumeRobotAsync(
         RobotVehiclesApiRequest? request,
         HttpContext context,
         IApiDataStore dataStore,
-        IRdsCoreNativeOrderClient rdsClient,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken) =>
         RobotMaintenanceAsync(
-            context, dataStore, request?.Vehicles, "RDS_ROBOT_RESUME", null,
-            (vehicles, correlationId) => rdsClient.GotoSiteResumeAsync(vehicles, correlationId, cancellationToken),
-            cancellationToken);
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.Resume,
+            request?.Vehicles, null, "RDS_ROBOT_RESUME", null, cancellationToken);
 
     private static Task<IResult> ClearRobotErrorsAsync(
         RobotVehiclesApiRequest? request,
         HttpContext context,
         IApiDataStore dataStore,
-        IRdsCoreNativeOrderClient rdsClient,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken) =>
         RobotMaintenanceAsync(
-            context, dataStore, request?.Vehicles, "RDS_ROBOT_CLEAR_ERRORS", null,
-            (vehicles, correlationId) => rdsClient.ClearRobotAllErrorAsync(vehicles, correlationId, cancellationToken),
-            cancellationToken);
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.ClearErrors,
+            request?.Vehicles, null, "RDS_ROBOT_CLEAR_ERRORS", null, cancellationToken);
 
     private static Task<IResult> SetRobotDispatchableAsync(
         SetDispatchableApiRequest request,
         HttpContext context,
         IApiDataStore dataStore,
-        IRdsCoreNativeOrderClient rdsClient,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken) =>
         RobotMaintenanceAsync(
-            context, dataStore, request.Vehicles, "RDS_ROBOT_SET_DISPATCHABLE", new { request.Type },
-            (vehicles, correlationId) => rdsClient.SetDispatchableAsync(vehicles, request.Type, correlationId, cancellationToken),
-            cancellationToken);
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.SetDispatchable,
+            request.Vehicles, request.Type, "RDS_ROBOT_SET_DISPATCHABLE", new { request.Type }, cancellationToken);
 
     // Expert recovery actions bind to a real TransportRequest, enforce machine
     // authorization, resolve the exact RDS-assigned target server-side (never from

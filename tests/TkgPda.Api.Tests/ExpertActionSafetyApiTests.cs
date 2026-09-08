@@ -50,7 +50,7 @@ public sealed class ExpertActionSafetyApiTests(ApiTestFixture fixture) : IClassF
     public async Task Set_priority_rejects_an_unknown_request()
     {
         await fixture.ResetAsync();
-        var identity = await fixture.SeedIdentityAsync();
+        var identity = await fixture.SeedIdentityAsync(role: RoleCodes.Supervisor);
         using var client = await fixture.LoginClientAsync(identity);
 
         var response = await client.PostAsJsonAsync(
@@ -59,6 +59,22 @@ public sealed class ExpertActionSafetyApiTests(ApiTestFixture fixture) : IClassF
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("REQUEST_NOT_FOUND", await ApiTestFixture.ErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Line_and_warehouse_operators_are_forbidden_from_changing_priority()
+    {
+        // Conservative product policy: no repository or customer evidence was found
+        // that a Line/Warehouse Operator should reprioritise a transport.
+        await fixture.ResetAsync();
+        foreach (var role in new[] { RoleCodes.LineOperator, RoleCodes.WarehouseOperator })
+        {
+            var identity = await fixture.SeedIdentityAsync(role: role);
+            using var client = await fixture.LoginClientAsync(identity);
+            var response = await client.PostAsJsonAsync(
+                $"/api/v1/transport-requests/{Guid.NewGuid()}/priority", new { priority = 5 });
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
     }
 
     [Fact]
@@ -107,7 +123,7 @@ public sealed class ExpertActionSafetyApiTests(ApiTestFixture fixture) : IClassF
         var context = await fixture.ConfigureMachineAsync();
         var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
         await fixture.SetSlotAsync(slot, "OCCUPIED", "FULL");
-        var identity = await fixture.SeedIdentityAsync();
+        var identity = await fixture.SeedIdentityAsync(role: RoleCodes.Supervisor);
         using var client = await fixture.LoginClientAsync(identity);
         var created = await CreateRemoveFullAsync(client, context, slot, "expert-priority-range");
 
@@ -119,28 +135,28 @@ public sealed class ExpertActionSafetyApiTests(ApiTestFixture fixture) : IClassF
         Assert.Equal("PRIORITY_OUT_OF_RANGE", await ApiTestFixture.ErrorCodeAsync(response));
     }
 
+    // The API test host runs with the global dispatch gate closed (Rds:DispatchEnabled
+    // defaults to false), so this doubles as end-to-end evidence that the gate refuses
+    // an execution mutation before any target resolution or RDS call happens.
     [Fact]
-    public async Task Expert_action_on_a_request_with_no_dispatched_rds_task_is_refused()
+    public async Task Expert_action_is_refused_while_the_global_dispatch_gate_is_closed()
     {
         await fixture.ResetAsync();
         var context = await fixture.ConfigureMachineAsync();
         var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
         await fixture.SetSlotAsync(slot, "OCCUPIED", "FULL");
-        var identity = await fixture.SeedIdentityAsync();
+        var identity = await fixture.SeedIdentityAsync(role: RoleCodes.Supervisor);
         using var client = await fixture.LoginClientAsync(identity);
         var created = await CreateRemoveFullAsync(client, context, slot, "expert-no-task");
 
-        // The request exists and the caller is authorized, but nothing was dispatched,
-        // so there is no authoritative RDS target to act on.
+        // The request exists and the caller is authorized, but the gate is closed, so
+        // the mutation is refused before the RDS target is even resolved.
         var response = await client.PostAsJsonAsync(
             $"/api/v1/transport-requests/{created.Id}/priority",
             new { priority = 5 });
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var code = await ApiTestFixture.ErrorCodeAsync(response);
-        Assert.True(
-            code is "RDS_TASK_NOT_FOUND" or "NATIVE_EXECUTION_UNAVAILABLE",
-            $"Expected a fail-closed expert-action refusal, got '{code}'.");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("RDS_DISPATCH_DISABLED", await ApiTestFixture.ErrorCodeAsync(response));
     }
 
     private static async Task<TransportHttpResponse> CreateRemoveFullAsync(

@@ -15,8 +15,9 @@ namespace TkgPda.Api.Tests;
 /// </summary>
 public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) : IClassFixture<ApiTestFixture>
 {
-    // Raw RDS technical identifiers that must never reach a Line/Warehouse Operator.
-    private static readonly string[] ForbiddenOperatorFields =
+    // Raw RDS technical identifiers that must never reach a Line/Warehouse Operator
+    // on the robot/queue surfaces. Robot pose (x/y/angle) belongs here.
+    private static readonly string[] ForbiddenRobotFields =
     [
         "uuid", "vehicleId", "vehicle_id", "currentMap", "current_map",
         "currentStation", "current_station", "lastStation", "last_station",
@@ -26,7 +27,22 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
         "x", "y", "angle", "isLoaded", "remainingTime", "agvId", "agv_id"
     ];
 
-    private static void AssertNoForbiddenFields(JsonElement element, string path = "$")
+    // Forbidden on the operational-context surface. Deliberately excludes x/y/width/
+    // height: those are TKG layout coordinates from master.layout_slots used to draw
+    // the PDA slot view, not robot pose.
+    private static readonly string[] ForbiddenContextFields =
+    [
+        "uuid", "vehicleId", "vehicle_id", "agvId", "agv_id",
+        "rdsWorkSite", "workSite", "work_site", "siteId", "site_id",
+        "rdsTaskRecordId", "rdsTaskLabel", "outOrderNo", "rdsStatus",
+        "currentMap", "current_map", "currentStation", "current_station",
+        "blockId", "block_id", "lockInfo", "lock_info", "lockNickName", "isLoaded"
+    ];
+
+    private static void AssertNoForbiddenFields(
+        JsonElement element,
+        IReadOnlyList<string> forbidden,
+        string path = "$")
     {
         switch (element.ValueKind)
         {
@@ -34,16 +50,16 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
                 foreach (var property in element.EnumerateObject())
                 {
                     Assert.False(
-                        ForbiddenOperatorFields.Contains(property.Name, StringComparer.OrdinalIgnoreCase),
+                        forbidden.Contains(property.Name, StringComparer.OrdinalIgnoreCase),
                         $"Operator payload leaked forbidden RDS field '{property.Name}' at {path}.");
-                    AssertNoForbiddenFields(property.Value, $"{path}.{property.Name}");
+                    AssertNoForbiddenFields(property.Value, forbidden, $"{path}.{property.Name}");
                 }
                 break;
             case JsonValueKind.Array:
                 var index = 0;
                 foreach (var item in element.EnumerateArray())
                 {
-                    AssertNoForbiddenFields(item, $"{path}[{index++}]");
+                    AssertNoForbiddenFields(item, forbidden, $"{path}[{index++}]");
                 }
                 break;
         }
@@ -82,7 +98,7 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
 
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
-        AssertNoForbiddenFields(document.RootElement);
+        AssertNoForbiddenFields(document.RootElement, ForbiddenRobotFields);
 
         // The specific values must be absent too, not merely renamed.
         Assert.DoesNotContain("ROBOT-INTERNAL-123", json, StringComparison.OrdinalIgnoreCase);
@@ -156,7 +172,118 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
 
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
-        AssertNoForbiddenFields(document.RootElement);
+        AssertNoForbiddenFields(document.RootElement, ForbiddenRobotFields);
+    }
+
+    // operational-context is the main PDA surface and is reachable by every PDA
+    // role. It previously serialized the raw AGV id, RDS task record id, task
+    // label, out-order number, numeric RDS status and the whole RdsWorkSite record
+    // (SiteId, area, group, content, AGV id, filled/locked/disabled/syncFailed),
+    // gating only TechnicalMessage. A Supervisor holding a PDA does not turn a
+    // business contract into a technical one.
+    [Fact]
+    public async Task Operational_context_is_business_safe_for_every_pda_role()
+    {
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        var slots = await fixture.LogisticsSlotsAsync(context.LayoutId, 1);
+        await fixture.SetSlotAsync(slots[0], "OCCUPIED", "FULL");
+
+        // Seed once as a line operator, then read the same context as each PDA role.
+        var creator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
+        using var creatorClient = await fixture.LoginClientAsync(creator);
+        var payload = new CreateTransportHttpRequest(
+            context.MachineId, context.VariantId, context.LayoutId,
+            null, null, null, null, "REMOVE_FULL", slots[0], null);
+        using var create = await creatorClient.SendAsync(
+            new HttpRequestMessage(HttpMethod.Post, "/api/v1/transport-requests")
+            {
+                Content = JsonContent.Create(payload),
+                Headers = { { ApiHeaders.IdempotencyKey, "ctx-boundary-seed" } },
+            });
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        Assert.NotNull(created);
+
+        await fixture.ExecuteAsync(
+            "UPDATE ops.transport_requests SET status = 'SENT_TO_RDS', updated_at = now() WHERE id = @id",
+            ("id", created.Id));
+        // The P08A- prefix is cleaned by ResetAsync, keeping the fixture idempotent.
+        var workSiteId = await fixture.ScalarAsync<Guid>(
+            """
+            INSERT INTO integration.rds_worksites (
+                rds_site_id, area, group_name, rds_type, last_filled, last_locked,
+                last_disabled, last_content, last_agv_id, last_sync_failed, last_sync_at)
+            VALUES ('P08A-LEAKSITE', 'LEAKAREA', 'LEAKGROUP', 1, 0, 0, 0,
+                    'leakcontent', 'LEAKAGV42', 0, now())
+            RETURNING id
+            """);
+        await fixture.ExecuteAsync(
+            "INSERT INTO integration.layout_slot_rds_mapping (layout_slot_id, rds_worksite_id) VALUES (@slot_id, @worksite_id)",
+            ("slot_id", slots[0]), ("worksite_id", workSiteId));
+        await fixture.ExecuteAsync(
+            """
+            INSERT INTO integration.rds_tasks (
+                transport_request_id, rds_task_record_id, rds_task_label, out_order_no,
+                agv_id, rds_status, sent_at, last_sync_at)
+            VALUES (@request_id, 'LEAKRDS77', 'LEAKLABEL', 'LEAKOUT77',
+                    'LEAKAGV42', 1000, now(), now())
+            """,
+            ("request_id", created.Id));
+
+        foreach (var role in new[] { RoleCodes.LineOperator, RoleCodes.WarehouseOperator, RoleCodes.Supervisor })
+        {
+            var reader = await fixture.SeedIdentityAsync(role: role);
+            using var client = await fixture.LoginClientAsync(reader);
+            var response = await client.GetAsync($"/api/v1/machines/{context.MachineId}/operational-context");
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
+
+            using var document = JsonDocument.Parse(json);
+            AssertNoForbiddenFields(document.RootElement, ForbiddenContextFields);
+
+            foreach (var leaked in new[]
+                     {
+                         "LEAKAGV42", "LEAKRDS77", "LEAKLABEL", "LEAKOUT77",
+                         "P08A-LEAKSITE", "LEAKAREA", "LEAKGROUP", "leakcontent"
+                     })
+            {
+                Assert.False(
+                    json.Contains(leaked, StringComparison.OrdinalIgnoreCase),
+                    $"{role} operational-context leaked '{leaked}'.");
+            }
+
+            // The business distillation the Operator genuinely needs still arrives.
+            Assert.Contains("executionReadiness", json, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task Load_state_response_does_not_expose_the_rds_worksite_site_id()
+    {
+        // The content-sync result carries the raw RDS WorkSite SiteId internally.
+        // This endpoint is Operator-reachable, so only the business status and
+        // message may cross the boundary.
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
+        await fixture.SetSlotAsync(slot, "OCCUPIED", "EMPTY");
+        var identity = await fixture.SeedIdentityAsync();
+        using var client = await fixture.LoginClientAsync(identity);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/machines/{context.MachineId}/slots/{slot}/load-state",
+            new UpdateLoadStateHttpRequest("FULL"));
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sync = document.RootElement.GetProperty("rdsContentSync");
+
+        // Structurally only status + message exist; no site identifier is serialized.
+        Assert.False(sync.TryGetProperty("siteId", out _));
+        Assert.False(sync.TryGetProperty("configuredContentValue", out _));
+        Assert.True(sync.TryGetProperty("status", out _));
+        AssertNoForbiddenFields(document.RootElement, ForbiddenContextFields);
     }
 
     [Fact]

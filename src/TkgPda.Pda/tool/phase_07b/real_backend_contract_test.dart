@@ -315,7 +315,10 @@ void main() {
 
   test('20 contract needs no direct RDS network dependency', () async {
     context = await mainClient.repository.operationalContext(machine.id);
-    expect(context.slots.any((slot) => !slot.rdsWorkSite.isMapped), isTrue);
+    expect(
+      context.slots.any((slot) => !slot.executionReadiness.rdsWorkSiteMapped),
+      isTrue,
+    );
     expect(context.activeNavigationProfileId, isNull);
   });
 }

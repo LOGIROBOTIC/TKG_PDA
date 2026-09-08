@@ -152,7 +152,13 @@ public sealed record SlotContextRecord(
     string? CurrentContainerCode,
     long RowVersion,
     DateTimeOffset? RuntimeUpdatedAt,
-    RdsWorkSiteProjectionRecord RdsWorkSite,
+    // RdsWorkSite is deliberately absent from the serialized PDA contract. The raw
+    // WorkSite SiteId, area, group, content, AGV id and filled/locked/disabled/
+    // syncFailed flags are RDS technical evidence, not business state, and they are
+    // not TKG Occupancy/Load truth. The business-safe distillation the Operator
+    // actually needs is ExecutionReadiness below; the raw record stays on
+    // SlotContextDataRecord for server-side readiness evaluation and is available
+    // to Admin through the technical RDS endpoints.
     PdaExecutionReadinessRecord ExecutionReadiness,
     IReadOnlyList<PdaAvailableActionRecord> AvailableActions,
     IReadOnlyList<PdaAvailableActionRecord> LoadStateActions);
@@ -219,13 +225,17 @@ public sealed record ActiveTransportDataRecord(
     Guid CorrelationId,
     RdsTaskDataRecord? RdsTask);
 
+/// <summary>
+/// Business execution view for the PDA. Raw RDS identifiers — taskRecordId,
+/// taskLabel, outOrderNo, AGV id and the numeric RDS status — are deliberately
+/// absent: this is a business contract served to every PDA role, and a Supervisor
+/// happening to hold a PDA does not make it a technical surface. Those values
+/// remain available to AdminWeb through the technical RDS endpoints.
+/// <see cref="State"/> is the friendly execution state derived from TKG status and
+/// refined by persisted RDS status server-side.
+/// </summary>
 public sealed record PdaExecutionProjectionRecord(
     string State,
-    string? RdsTaskRecordId,
-    string? RdsTaskLabel,
-    string? OutOrderNo,
-    string? AgvId,
-    int? RdsStatus,
     DateTimeOffset? LastSyncAt,
     string? FailureCode,
     string? FailureCategory,

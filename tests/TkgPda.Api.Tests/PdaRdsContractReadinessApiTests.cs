@@ -206,32 +206,29 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
             ("request_id", created.Id));
 
         var context = await GetContextAsync(client, machine.MachineId);
+
+        // Persisted RDS WorkSite state must still drive readiness, but only through
+        // its business distillation. The raw SiteId/area/group/content/AGV id and the
+        // filled/locked/disabled/syncFailed flags are technical RDS evidence and are
+        // no longer part of the PDA contract, not even for a Supervisor holding a PDA.
         var mapped = context.Slots.Single(slot => slot.Id == slots[0]);
-        Assert.True(mapped.RdsWorkSite.IsMapped);
-        Assert.Equal("P07A-SITE-01", mapped.RdsWorkSite.SiteId);
-        Assert.Equal("LINE-A", mapped.RdsWorkSite.Area);
-        Assert.Equal("P07A-GROUP", mapped.RdsWorkSite.GroupName);
-        Assert.Equal(7, mapped.RdsWorkSite.Type);
-        Assert.Equal(0, mapped.RdsWorkSite.Filled);
-        Assert.Equal(1, mapped.RdsWorkSite.Locked);
-        Assert.Equal(0, mapped.RdsWorkSite.Disabled);
-        Assert.Equal(1, mapped.RdsWorkSite.SyncFailed);
-        Assert.Equal("persisted-content", mapped.RdsWorkSite.Content);
-        Assert.Equal("AGV-42", mapped.RdsWorkSite.AgvId);
-        Assert.NotNull(mapped.RdsWorkSite.LastSyncAt);
+        Assert.True(mapped.ExecutionReadiness.RdsWorkSiteMapped);
+        Assert.False(mapped.ExecutionReadiness.IsExecutionReady);
+        // rds_type = 7 is not a physical transport point, which is the first
+        // readiness rule that rejects this WorkSite.
+        Assert.Equal("RDS_WORKSITE_NOT_PHYSICAL", mapped.ExecutionReadiness.ReadinessCode);
+        Assert.False(string.IsNullOrWhiteSpace(mapped.ExecutionReadiness.ReadinessMessage));
 
         var unmapped = context.Slots.Single(slot => slot.Id == slots[1]);
-        Assert.False(unmapped.RdsWorkSite.IsMapped);
-        Assert.Null(unmapped.RdsWorkSite.SiteId);
+        Assert.False(unmapped.ExecutionReadiness.RdsWorkSiteMapped);
+        Assert.False(unmapped.ExecutionReadiness.IsExecutionReady);
         Assert.Equal("RDS_WORKSITE_NOT_MAPPED", unmapped.ExecutionReadiness.ReadinessCode);
 
+        // The persisted RDS task still refines the friendly execution state, without
+        // exposing the task record id, label, out-order number, AGV id or raw status.
         var request = Assert.Single(context.ActiveTransportRequests);
         Assert.Equal("ROBOT_ASSIGNED", request.Execution.State);
-        Assert.Equal("RDS-P07A-42", request.Execution.RdsTaskRecordId);
-        Assert.Equal("PERSISTED-LABEL", request.Execution.RdsTaskLabel);
-        Assert.Equal("OUT-P07A-42", request.Execution.OutOrderNo);
-        Assert.Equal("AGV-42", request.Execution.AgvId);
-        Assert.Equal(1000, request.Execution.RdsStatus);
+        Assert.NotNull(request.Execution.LastSyncAt);
         Assert.True(request.CanCancel);
         Assert.Null(request.CancelDisabledCode);
     }

@@ -113,6 +113,18 @@ public sealed record VariantSwitchHttpRequest(
 
 public sealed record UpdateLoadStateHttpRequest(string LoadState);
 
+/// <summary>
+/// Operator-safe view of the RDS content synchronization outcome. The raw RDS
+/// WorkSite SiteId that <see cref="RdsLoadContentSyncResult"/> carries internally is
+/// deliberately not serialized: this endpoint is reachable by Line and Warehouse
+/// Operators, and the site identifier is RDS technical evidence.
+/// </summary>
+public sealed record LoadContentSyncHttpResult(string Status, string? Message)
+{
+    public static LoadContentSyncHttpResult From(RdsLoadContentSyncResult result) =>
+        new(result.Status, result.Message);
+}
+
 public sealed record UpdateLoadStateHttpResponse(
     Guid MachineId,
     Guid SlotId,
@@ -120,7 +132,7 @@ public sealed record UpdateLoadStateHttpResponse(
     string LoadState,
     long RowVersion,
     bool IdempotentReplay,
-    RdsLoadContentSyncResult RdsContentSync);
+    LoadContentSyncHttpResult RdsContentSync);
 
 public sealed record TransportHttpResponse(
     Guid Id,

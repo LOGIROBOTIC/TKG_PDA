@@ -176,8 +176,8 @@ public sealed class PdaOperationalContextPolicyTests
             Actor(KnownRoleCodes.LineOperator));
         var slot = Assert.Single(context.Slots);
 
-        Assert.False(slot.RdsWorkSite.IsMapped);
-        Assert.Null(slot.RdsWorkSite.SiteId);
+        // No raw WorkSite record reaches the PDA contract; an unmapped slot is
+        // reported honestly through readiness alone, with no invented site id.
         Assert.False(slot.ExecutionReadiness.RdsWorkSiteMapped);
         Assert.False(slot.ExecutionReadiness.IsExecutionReady);
         Assert.Equal("RDS_WORKSITE_NOT_MAPPED", slot.ExecutionReadiness.ReadinessCode);
@@ -193,7 +193,8 @@ public sealed class PdaOperationalContextPolicyTests
             Actor(KnownRoleCodes.Supervisor));
         var slot = Assert.Single(context.Slots);
 
-        Assert.Same(workSite, slot.RdsWorkSite);
+        // The persisted mapping drives readiness exactly, but the raw WorkSite
+        // record itself is not serialized to the PDA — not even for a Supervisor.
         Assert.True(slot.ExecutionReadiness.RdsWorkSiteMapped);
         Assert.True(slot.ExecutionReadiness.IsExecutionReady);
         Assert.Null(slot.ExecutionReadiness.ReadinessCode);

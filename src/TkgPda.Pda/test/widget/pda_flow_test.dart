@@ -754,11 +754,6 @@ ActiveTransportRequest _failureRequest() => ActiveTransportRequest(
   cancelDisabledMessage: 'Yürütme başladıktan sonra PDA iptali yapılamaz.',
   execution: const ExecutionProjection(
     state: 'FAILED',
-    rdsTaskRecordId: 'RDS-77',
-    rdsTaskLabel: null,
-    outOrderNo: null,
-    agvId: 'AGV-7',
-    rdsStatus: 1004,
     lastSyncAt: null,
     failureCode: 'EXECUTION_FAILED',
     failureCategory: 'EXECUTION',

@@ -91,7 +91,8 @@ public sealed class PostgresRdsReadinessTests
                 Assert.IsType<OperationalContextDataRecord>(data),
                 new PdaActorContext(userId, new HashSet<string> { KnownRoleCodes.Admin }, true));
             var slot = projected.Slots.Single(item => item.Id == logisticsSlotId);
-            Assert.Equal(syncFailed.SiteId, slot.RdsWorkSite.SiteId);
+            // Sync failure surfaces as a business readiness code, not a raw site id.
+            Assert.True(slot.ExecutionReadiness.RdsWorkSiteMapped);
             Assert.False(slot.ExecutionReadiness.IsExecutionReady);
             Assert.Equal("RDS_WORKSITE_SYNC_FAILED", slot.ExecutionReadiness.ReadinessCode);
 

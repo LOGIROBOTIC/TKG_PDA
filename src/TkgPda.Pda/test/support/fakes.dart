@@ -132,11 +132,6 @@ OperationalContext testContext({
             'cancelDisabledMessage': request.cancelDisabledMessage,
             'execution': {
               'state': request.execution.state,
-              'rdsTaskRecordId': request.execution.rdsTaskRecordId,
-              'rdsTaskLabel': request.execution.rdsTaskLabel,
-              'outOrderNo': request.execution.outOrderNo,
-              'agvId': request.execution.agvId,
-              'rdsStatus': request.execution.rdsStatus,
               'lastSyncAt': request.execution.lastSyncAt?.toIso8601String(),
               'failureCode': request.execution.failureCode,
               'failureCategory': request.execution.failureCategory,

@@ -115,7 +115,8 @@ public static class PdaOperationalContextPolicy
             slot.CurrentContainerCode,
             slot.RowVersion,
             slot.RuntimeUpdatedAt,
-            slot.RdsWorkSite,
+            // slot.RdsWorkSite stays server-side: `readiness` is its business-safe
+            // distillation and is the only part the Operator contract carries.
             readiness,
             EvaluateActions(slot, actor, canOperate, hasActiveRequest),
             EvaluateLoadStateActions(slot, actor, canOperate, hasActiveRequest));
@@ -349,13 +350,11 @@ public static class PdaExecutionProjector
     {
         ArgumentNullException.ThrowIfNull(request);
         var failure = Failure(request);
+        // Raw RDS identifiers (taskRecordId, taskLabel, outOrderNo, AGV id, numeric
+        // status) are intentionally not projected into the PDA contract; only the
+        // friendly state, freshness and business failure wording cross the boundary.
         return new PdaExecutionProjectionRecord(
             State(request),
-            request.RdsTask?.TaskRecordId,
-            request.RdsTask?.TaskLabel,
-            request.RdsTask?.OutOrderNo,
-            request.RdsTask?.AgvId,
-            request.RdsTask?.Status,
             request.RdsTask?.LastSyncAt,
             failure.Code,
             failure.Category,

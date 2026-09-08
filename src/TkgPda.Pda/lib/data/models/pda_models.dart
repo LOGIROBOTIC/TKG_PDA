@@ -414,54 +414,6 @@ class OperatorQueuePage {
   );
 }
 
-class RdsWorkSiteProjection {
-  const RdsWorkSiteProjection({
-    required this.isMapped,
-    required this.siteId,
-    required this.area,
-    required this.groupName,
-    required this.type,
-    required this.filled,
-    required this.locked,
-    required this.disabled,
-    required this.syncFailed,
-    required this.content,
-    required this.agvId,
-    required this.lastSyncAt,
-  });
-
-  final bool isMapped;
-  final String? siteId;
-  final String? area;
-  final String? groupName;
-  final int? type;
-  final int? filled;
-  final int? locked;
-  final int? disabled;
-  final int? syncFailed;
-  final String? content;
-  final String? agvId;
-  final DateTime? lastSyncAt;
-
-  bool get hasSyncProblem => syncFailed != null && syncFailed != 0;
-  bool get isDisabled => disabled != null && disabled != 0;
-  bool get isLocked => locked != null && locked != 0;
-
-  factory RdsWorkSiteProjection.fromJson(JsonMap json) => RdsWorkSiteProjection(
-    isMapped: json['isMapped'] as bool? ?? false,
-    siteId: json['siteId'] as String?,
-    area: json['area'] as String?,
-    groupName: json['groupName'] as String?,
-    type: _nullableInteger(json['type']),
-    filled: _nullableInteger(json['filled']),
-    locked: _nullableInteger(json['locked']),
-    disabled: _nullableInteger(json['disabled']),
-    syncFailed: _nullableInteger(json['syncFailed']),
-    content: json['content'] as String?,
-    agvId: json['agvId'] as String?,
-    lastSyncAt: _date(json['lastSyncAt']),
-  );
-}
 
 class ExecutionReadiness {
   const ExecutionReadiness({
@@ -527,7 +479,6 @@ class LayoutSlot {
     required this.currentContainerTypeId,
     required this.currentContainerCode,
     required this.rowVersion,
-    required this.rdsWorkSite,
     required this.executionReadiness,
     required this.availableActions,
     required this.loadStateActions,
@@ -553,7 +504,6 @@ class LayoutSlot {
   final String? currentContainerTypeId;
   final String? currentContainerCode;
   final int rowVersion;
-  final RdsWorkSiteProjection rdsWorkSite;
   final ExecutionReadiness executionReadiness;
   final List<AvailableAction> availableActions;
   final List<AvailableAction> loadStateActions;
@@ -581,7 +531,6 @@ class LayoutSlot {
     currentContainerTypeId: json['currentContainerTypeId'] as String?,
     currentContainerCode: json['currentContainerCode'] as String?,
     rowVersion: _integer(json['rowVersion']),
-    rdsWorkSite: RdsWorkSiteProjection.fromJson(_map(json['rdsWorkSite'])),
     executionReadiness: ExecutionReadiness.fromJson(
       _map(json['executionReadiness']),
     ),
@@ -686,14 +635,12 @@ class TaskTemplate {
   );
 }
 
+/// Business execution view. The API does not serialize raw RDS identifiers
+/// (taskRecordId, taskLabel, outOrderNo, AGV id, numeric status) to any PDA
+/// role, so this model has no fields for them.
 class ExecutionProjection {
   const ExecutionProjection({
     required this.state,
-    required this.rdsTaskRecordId,
-    required this.rdsTaskLabel,
-    required this.outOrderNo,
-    required this.agvId,
-    required this.rdsStatus,
     required this.lastSyncAt,
     required this.failureCode,
     required this.failureCategory,
@@ -703,11 +650,6 @@ class ExecutionProjection {
   });
 
   final String state;
-  final String? rdsTaskRecordId;
-  final String? rdsTaskLabel;
-  final String? outOrderNo;
-  final String? agvId;
-  final int? rdsStatus;
   final DateTime? lastSyncAt;
   final String? failureCode;
   final String? failureCategory;
@@ -717,11 +659,6 @@ class ExecutionProjection {
 
   factory ExecutionProjection.fromJson(JsonMap json) => ExecutionProjection(
     state: json['state'] as String? ?? 'REQUESTED',
-    rdsTaskRecordId: json['rdsTaskRecordId'] as String?,
-    rdsTaskLabel: json['rdsTaskLabel'] as String?,
-    outOrderNo: json['outOrderNo'] as String?,
-    agvId: json['agvId'] as String?,
-    rdsStatus: _nullableInteger(json['rdsStatus']),
     lastSyncAt: _date(json['lastSyncAt']),
     failureCode: json['failureCode'] as String?,
     failureCategory: json['failureCategory'] as String?,

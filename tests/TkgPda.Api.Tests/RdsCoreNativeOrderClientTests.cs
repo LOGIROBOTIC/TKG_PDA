@@ -536,7 +536,7 @@ public sealed class RdsCoreNativeOrderClientTests
         Assert.Equal("order-123", robot.CurrentOrderId);
         Assert.Equal("RUNNING", robot.CurrentOrderState);
         Assert.False(robot.ProcBusiness);
-        Assert.True(robot.IsBusinessIdle);
+        Assert.False(robot.MayBeExecutingBusinessWork);
 
         // Both documented entry shapes parse, and severity survives: the shape-A
         // error blocks, the shape-B warning does not.

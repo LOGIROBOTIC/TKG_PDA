@@ -88,12 +88,15 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         using var lineClient = await fixture.LoginClientAsync(line);
         var lineContext = await GetContextAsync(lineClient, machine.MachineId);
         AssertEnabled(lineContext, slots[0], "BRING_EMPTY");
-        AssertEnabled(lineContext, slots[1], "REMOVE_EMPTY");
         AssertEnabled(lineContext, slots[2], "REMOVE_FULL");
+        // slots[1] is OCCUPIED+EMPTY, the state REMOVE_EMPTY applies to. It is not
+        // offered to anyone: REMOVE_EMPTY is internal orchestration vocabulary that
+        // the Remove-All workflow generates, not a standalone Operator action.
+        AssertNotOffered(lineContext, slots[1], "REMOVE_EMPTY");
 
         using var supervisorClient = await fixture.LoginClientAsync(supervisor);
         var supervisorContext = await GetContextAsync(supervisorClient, machine.MachineId);
-        AssertEnabled(supervisorContext, slots[1], "REMOVE_EMPTY");
+        AssertNotOffered(supervisorContext, slots[1], "REMOVE_EMPTY");
         AssertEnabled(supervisorContext, slots[2], "REMOVE_FULL");
 
         using var adminPdaClient = await fixture.LoginClientAsync(admin);
@@ -104,7 +107,7 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         using var warehouseClient = await fixture.LoginClientAsync(warehouse);
         var warehouseContext = await GetContextAsync(warehouseClient, machine.MachineId);
         AssertEnabled(warehouseContext, slots[0], "BRING_EMPTY");
-        AssertDisabled(warehouseContext, slots[1], "REMOVE_EMPTY", "OPERATION_NOT_ALLOWED_FOR_ROLE");
+        AssertNotOffered(warehouseContext, slots[1], "REMOVE_EMPTY");
         AssertDisabled(warehouseContext, slots[2], "REMOVE_FULL", "OPERATION_NOT_ALLOWED_FOR_ROLE");
 
         var machineRegion = lineContext.Slots.Single(slot => slot.Role == "MACHINE");
@@ -247,6 +250,16 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         var action = context.Slots.Single(slot => slot.Id == slotId).AvailableActions.Single(item => item.Action == operation);
         Assert.True(action.Enabled);
         Assert.Null(action.DisabledCode);
+    }
+
+    /// <summary>
+    /// Stronger than AssertDisabled: the action is not present in the contract at
+    /// all, so it cannot be selected regardless of role or slot state.
+    /// </summary>
+    private static void AssertNotOffered(OperationalContextRecord context, Guid slotId, string operation)
+    {
+        var slot = context.Slots.Single(s => s.Id == slotId);
+        Assert.DoesNotContain(slot.AvailableActions, action => action.Action == operation);
     }
 
     private static void AssertDisabled(OperationalContextRecord context, Guid slotId, string operation, string code)

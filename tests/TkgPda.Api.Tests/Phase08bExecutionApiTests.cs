@@ -48,7 +48,10 @@ public sealed class Phase08bExecutionApiTests(ApiTestFixture fixture) : IClassFi
         var machine = await fixture.ConfigureMachineAsync();
         var slots = await fixture.LogisticsSlotsAsync(machine.LayoutId, 2);
         await fixture.SetSlotAsync(slots[0], "OCCUPIED", "EMPTY");
-        await fixture.SetSlotAsync(slots[1], "OCCUPIED", "EMPTY");
+        // slots[1] is FULL so the "busy" scaffolding below can use REMOVE_FULL, a real
+        // standalone Operator action. It previously used REMOVE_EMPTY, which is
+        // internal orchestration vocabulary and is no longer directly requestable.
+        await fixture.SetSlotAsync(slots[1], "OCCUPIED", "FULL");
 
         using var warehouseClient = await fixture.LoginClientAsync(warehouse);
         var forbidden = await warehouseClient.PutAsJsonAsync(
@@ -67,7 +70,7 @@ public sealed class Phase08bExecutionApiTests(ApiTestFixture fixture) : IClassFi
         var busyPart = await fixture.PartForSlotAsync(slots[1], "P05-P08BBUSY");
         var created = await fixture.SendTransportAsync(lineClient, new(
             machine.MachineId, machine.VariantId, machine.LayoutId, null, null, busyPart, null,
-            "REMOVE_EMPTY"), "phase08b-load-busy");
+            "REMOVE_FULL"), "phase08b-load-busy");
         created.EnsureSuccessStatusCode();
         var busy = await lineClient.PutAsJsonAsync(
             $"/api/v1/machines/{machine.MachineId}/slots/{slots[1]}/load-state",

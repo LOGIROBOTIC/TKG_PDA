@@ -642,7 +642,6 @@ class ExecutionProjection {
     required this.failureCode,
     required this.failureCategory,
     required this.operatorMessage,
-    required this.technicalMessage,
     required this.correlationId,
   });
 
@@ -651,7 +650,6 @@ class ExecutionProjection {
   final String? failureCode;
   final String? failureCategory;
   final String? operatorMessage;
-  final String? technicalMessage;
   final String correlationId;
 
   factory ExecutionProjection.fromJson(JsonMap json) => ExecutionProjection(
@@ -660,7 +658,6 @@ class ExecutionProjection {
     failureCode: json['failureCode'] as String?,
     failureCategory: json['failureCategory'] as String?,
     operatorMessage: json['operatorMessage'] as String?,
-    technicalMessage: json['technicalMessage'] as String?,
     correlationId: json['correlationId'] as String? ?? '',
   );
 }

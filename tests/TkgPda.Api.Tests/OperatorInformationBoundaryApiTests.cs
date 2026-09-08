@@ -178,8 +178,9 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
     // role. It previously serialized the raw AGV id, RDS task record id, task
     // label, out-order number, numeric RDS status and the whole RdsWorkSite record
     // (SiteId, area, group, content, AGV id, filled/locked/disabled/syncFailed),
-    // gating only TechnicalMessage. A Supervisor holding a PDA does not turn a
-    // business contract into a technical one.
+    // and it gated only TechnicalMessage, so a device-bound Supervisor or Admin still
+    // received the raw TKG FailureMessage or the raw RDS EndedReason. A Supervisor
+    // holding a PDA does not turn a business contract into a technical one.
     [Fact]
     public async Task Operational_context_is_business_safe_for_every_pda_role()
     {
@@ -225,11 +226,22 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
             """
             INSERT INTO integration.rds_tasks (
                 transport_request_id, rds_task_record_id, rds_task_label, out_order_no,
-                agv_id, rds_status, sent_at, last_sync_at)
+                agv_id, rds_status, ended_reason, sent_at, last_sync_at)
             VALUES (@request_id, 'LEAKRDS77', 'LEAKLABEL', 'LEAKOUT77',
-                    'LEAKAGV42', 1000, now(), now())
+                    'LEAKAGV42', 1000, 'SECRET-RDS-ENDED-REASON-9127', now(), now())
             """,
             ("request_id", created.Id));
+        // Raw technical failure text on both sides of the boundary: the TKG
+        // failure_message and the RDS ended_reason. Neither may reach any PDA role.
+        // A recognised failure code is set too, so the normalised business triple is
+        // genuinely produced and the assertion is not vacuous.
+        await fixture.ExecuteAsync(
+            """
+            UPDATE ops.transport_requests
+               SET failure_code = '60008', failure_message = 'SECRET-RDS-FAILURE-MESSAGE-9127'
+             WHERE id = @id
+            """,
+            ("id", created.Id));
 
         foreach (var role in new[] { RoleCodes.LineOperator, RoleCodes.WarehouseOperator, RoleCodes.Supervisor })
         {
@@ -245,7 +257,8 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
             foreach (var leaked in new[]
                      {
                          "LEAKAGV42", "LEAKRDS77", "LEAKLABEL", "LEAKOUT77",
-                         "P08A-LEAKSITE", "LEAKAREA", "LEAKGROUP", "leakcontent"
+                         "P08A-LEAKSITE", "LEAKAREA", "LEAKGROUP", "leakcontent",
+                         "SECRET-RDS-ENDED-REASON-9127", "SECRET-RDS-FAILURE-MESSAGE-9127"
                      })
             {
                 Assert.False(
@@ -253,8 +266,11 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
                     $"{role} operational-context leaked '{leaked}'.");
             }
 
-            // The business distillation the Operator genuinely needs still arrives.
+            // The business distillation the Operator genuinely needs still arrives,
+            // proving the raw text was projected away rather than simply missing.
             Assert.Contains("executionReadiness", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("WORKSITE_BUSY", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("technicalMessage", json, StringComparison.OrdinalIgnoreCase);
         }
     }
 

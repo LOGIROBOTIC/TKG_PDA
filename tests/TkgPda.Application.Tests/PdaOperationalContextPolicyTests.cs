@@ -32,11 +32,21 @@ public sealed class PdaOperationalContextPolicyTests
     }
 
     [Fact]
-    public void Occupied_empty_enables_remove_empty_for_authorized_operator()
+    public void Remove_empty_is_never_offered_as_a_selectable_action()
     {
-        var action = Action(Slot(occupancy: "OCCUPIED", load: "EMPTY"), KnownRoleCodes.Supervisor, "REMOVE_EMPTY");
+        // OCCUPIED+EMPTY is precisely the state REMOVE_EMPTY applies to, and
+        // Supervisor is the most privileged PDA role — so if it were still offered
+        // anywhere, it would be offered here. REMOVE_EMPTY is internal orchestration
+        // vocabulary that Remove-All generates server-side, not an Operator action.
+        var actions = PdaOperationalContextPolicy.EvaluateActions(
+            Slot(occupancy: "OCCUPIED", load: "EMPTY"),
+            Actor(KnownRoleCodes.Supervisor),
+            canOperate: true,
+            hasActiveRequest: false);
 
-        Assert.True(action.Enabled);
+        Assert.DoesNotContain(actions, action => action.Action == "REMOVE_EMPTY");
+        Assert.Contains(actions, action => action.Action == "REMOVE_FULL");
+        Assert.Contains(actions, action => action.Action == "BRING_EMPTY");
     }
 
     [Fact]
@@ -117,7 +127,7 @@ public sealed class PdaOperationalContextPolicyTests
                     "RDS-1", "LABEL", "OUT-1", agvId, rdsStatus, null,
                     DateTimeOffset.UtcNow, started ? DateTimeOffset.UtcNow : null, null, DateTimeOffset.UtcNow));
 
-        var projection = PdaExecutionProjector.Project(request, technicalAuthorized: false);
+        var projection = PdaExecutionProjector.Project(request);
 
         Assert.Equal(expected, projection.State);
     }
@@ -137,32 +147,52 @@ public sealed class PdaOperationalContextPolicyTests
                 "RDS-1", "LABEL", "OUT-1", "AGV-07", rdsStatus, null,
                 DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, DateTimeOffset.UtcNow));
 
-        var projection = PdaExecutionProjector.Project(request, technicalAuthorized: false);
+        var projection = PdaExecutionProjector.Project(request);
 
         Assert.Equal(expected, projection.State);
     }
 
     [Fact]
-    public void Known_failure_is_mapped_to_operator_safe_contract_and_technical_text_is_role_sensitive()
+    public void Known_failure_is_mapped_to_the_operator_safe_contract_for_every_role()
     {
-        var request = Request(TransportRequestStatus.Running, failureCode: "60008", failureMessage: "fail_lock_bin raw detail");
+        // The projection is role-independent: elevated PDA authority grants more
+        // actions, never raw RDS text. The technical detail is reachable only through
+        // AdminWeb / the audit log, keyed by CorrelationId.
+        var request = Request(
+            TransportRequestStatus.Running,
+            failureCode: "60008",
+            failureMessage: "SECRET-RDS-ENDED-REASON-9127");
 
-        var operatorView = PdaExecutionProjector.Project(request, technicalAuthorized: false);
-        var supervisorView = PdaExecutionProjector.Project(request, technicalAuthorized: true);
+        var projection = PdaExecutionProjector.Project(request);
 
-        Assert.Equal("WORKSITE_BUSY", operatorView.FailureCode);
-        Assert.Equal("WORKSITE", operatorView.FailureCategory);
-        Assert.NotNull(operatorView.OperatorMessage);
-        Assert.Null(operatorView.TechnicalMessage);
-        Assert.Equal("fail_lock_bin raw detail", supervisorView.TechnicalMessage);
+        Assert.Equal("WORKSITE_BUSY", projection.FailureCode);
+        Assert.Equal("WORKSITE", projection.FailureCategory);
+        Assert.NotNull(projection.OperatorMessage);
+        Assert.DoesNotContain("SECRET-RDS-ENDED-REASON-9127", projection.OperatorMessage!, StringComparison.Ordinal);
+        Assert.NotEqual(Guid.Empty, projection.CorrelationId);
+    }
+
+    [Fact]
+    public void Unrecognised_failure_code_does_not_fall_back_to_raw_rds_text()
+    {
+        // Failure() is an allow-list, not a blacklist: an unmapped code yields no
+        // wording at all rather than leaking whatever RDS reported.
+        var request = Request(
+            TransportRequestStatus.Running,
+            failureCode: "UNMAPPED_RDS_CODE_4242",
+            failureMessage: "SECRET-RDS-ENDED-REASON-9127");
+
+        var projection = PdaExecutionProjector.Project(request);
+
+        Assert.Null(projection.OperatorMessage);
+        Assert.Null(projection.FailureCategory);
     }
 
     [Fact]
     public void Core_traffic_warning_projects_waiting_not_failed()
     {
         var projection = PdaExecutionProjector.Project(
-            Request(TransportRequestStatus.Running, failureCode: "54002"),
-            technicalAuthorized: false);
+            Request(TransportRequestStatus.Running, failureCode: "54002"));
 
         Assert.Equal("WAITING", projection.State);
         Assert.Equal("TRAFFIC_WAITING", projection.FailureCode);

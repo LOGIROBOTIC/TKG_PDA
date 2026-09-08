@@ -236,6 +236,15 @@ public sealed record ActiveTransportDataRecord(
 /// remain available to AdminWeb through the technical RDS endpoints.
 /// <see cref="State"/> is the friendly execution state derived from TKG status and
 /// refined by persisted RDS status server-side.
+///
+/// There is deliberately no TechnicalMessage. It previously carried the raw
+/// TKG FailureMessage or the raw RDS EndedReason to a device-bound Supervisor or
+/// Admin, which handed unbounded RDS text to a business contract. Every failure
+/// now crosses the boundary only as the normalised triple below
+/// (<see cref="FailureCode"/>, <see cref="FailureCategory"/>,
+/// <see cref="OperatorMessage"/>), and <see cref="CorrelationId"/> is the key an
+/// authorised user follows into AdminWeb or the server audit log for the
+/// technical detail.
 /// </summary>
 public sealed record PdaExecutionProjectionRecord(
     string State,
@@ -243,7 +252,6 @@ public sealed record PdaExecutionProjectionRecord(
     string? FailureCode,
     string? FailureCategory,
     string? OperatorMessage,
-    string? TechnicalMessage,
     Guid CorrelationId);
 
 public sealed record ActiveTransportRequestRecord(

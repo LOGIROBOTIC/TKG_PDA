@@ -27,11 +27,17 @@ public sealed class PdaOperationalContextService(IApiDataStore store)
 
 public static class PdaOperationalContextPolicy
 {
+    /// <summary>
+    /// The actions the PDA may offer a user for a slot. REMOVE_EMPTY is deliberately
+    /// absent: it is internal orchestration vocabulary that the Remove-All workflow
+    /// generates for OCCUPIED+EMPTY positions, not a standalone Operator action. A
+    /// REMOVE_EMPTY request created that way still appears in the active-request list
+    /// and renders normally; it simply cannot be selected as a new action here.
+    /// </summary>
     private static readonly TransportTaskType[] SupportedActions =
     [
         TransportTaskType.BringEmpty,
-        TransportTaskType.RemoveFull,
-        TransportTaskType.RemoveEmpty
+        TransportTaskType.RemoveFull
     ];
 
     public static OperationalContextRecord Project(OperationalContextDataRecord data, PdaActorContext actor)
@@ -48,10 +54,11 @@ public static class PdaOperationalContextPolicy
         var slots = data.Slots
             .Select(slot => ProjectSlot(slot, actor, data.Machine.Permissions.CanOperate, busySlots.Contains(slot.Id)))
             .ToArray();
-        var technicalAuthorized = actor.IsDeviceBound
-            && (actor.Roles.Contains(KnownRoleCodes.Admin) || actor.Roles.Contains(KnownRoleCodes.Supervisor));
+        // No role-dependent technical branch: every PDA role receives the same
+        // business-safe execution projection. Elevated PDA authority grants more
+        // ACTIONS, never more RDS technical detail.
         var requests = data.ActiveTransportRequests
-            .Select(request => ProjectRequest(request, actor, data.Machine.Permissions.CanOperate, technicalAuthorized))
+            .Select(request => ProjectRequest(request, actor, data.Machine.Permissions.CanOperate))
             .ToArray();
 
         return new OperationalContextRecord(
@@ -279,8 +286,7 @@ public static class PdaOperationalContextPolicy
     private static ActiveTransportRequestRecord ProjectRequest(
         ActiveTransportDataRecord request,
         PdaActorContext actor,
-        bool canOperate,
-        bool technicalAuthorized)
+        bool canOperate)
     {
         var cancellation = EvaluateCancellation(request, actor, canOperate);
         return new ActiveTransportRequestRecord(
@@ -301,7 +307,7 @@ public static class PdaOperationalContextPolicy
             cancellation.Enabled,
             cancellation.DisabledCode,
             cancellation.DisabledMessage,
-            PdaExecutionProjector.Project(request, technicalAuthorized));
+            PdaExecutionProjector.Project(request));
     }
 
     private static PdaAvailableActionRecord EvaluateCancellation(
@@ -346,20 +352,26 @@ public static class PdaOperationalContextPolicy
 
 public static class PdaExecutionProjector
 {
-    public static PdaExecutionProjectionRecord Project(ActiveTransportDataRecord request, bool technicalAuthorized)
+    public static PdaExecutionProjectionRecord Project(ActiveTransportDataRecord request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var failure = Failure(request);
         // Raw RDS identifiers (taskRecordId, taskLabel, outOrderNo, AGV id, numeric
         // status) are intentionally not projected into the PDA contract; only the
         // friendly state, freshness and business failure wording cross the boundary.
+        //
+        // The raw TKG FailureMessage and the raw RDS EndedReason are not projected
+        // either, for any role. Failure() below is an explicit allow-list that maps a
+        // known failure code to a business code, category and operator wording; an
+        // unrecognised code yields (null, null, null) rather than falling back to raw
+        // text. A Supervisor needing the technical detail follows CorrelationId into
+        // AdminWeb or the server audit log.
         return new PdaExecutionProjectionRecord(
             State(request),
             request.RdsTask?.LastSyncAt,
             failure.Code,
             failure.Category,
             failure.OperatorMessage,
-            technicalAuthorized ? request.FailureMessage ?? request.RdsTask?.EndedReason : null,
             request.CorrelationId);
     }
 

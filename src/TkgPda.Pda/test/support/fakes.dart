@@ -136,7 +136,6 @@ OperationalContext testContext({
               'failureCode': request.execution.failureCode,
               'failureCategory': request.execution.failureCategory,
               'operatorMessage': request.execution.operatorMessage,
-              'technicalMessage': request.execution.technicalMessage,
               'correlationId': request.execution.correlationId,
             },
           },
@@ -175,7 +174,6 @@ final testActiveRequest = ActiveTransportRequest.fromJson({
     'failureCode': null,
     'failureCategory': null,
     'operatorMessage': null,
-    'technicalMessage': null,
     'correlationId': 'a0000000-0000-0000-0000-000000000001',
   },
 });

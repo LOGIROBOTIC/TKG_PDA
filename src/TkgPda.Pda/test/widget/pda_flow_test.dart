@@ -758,7 +758,6 @@ ActiveTransportRequest _failureRequest() => ActiveTransportRequest(
     failureCode: 'EXECUTION_FAILED',
     failureCategory: 'EXECUTION',
     operatorMessage: 'Robot görevi tamamlayamadı.',
-    technicalMessage: null,
     correlationId: 'failure-correlation',
   ),
 );

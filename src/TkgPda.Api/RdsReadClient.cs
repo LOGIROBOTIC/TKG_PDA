@@ -307,10 +307,7 @@ public sealed class RdsReadClient(
                     lockInfo = ReadLockInfo(rbkLock);
                 }
 
-                AppendAlarms(alarms, rbkReport, robotId, "fatals", "fatal");
-                AppendAlarms(alarms, rbkReport, robotId, "errors", "error");
-                AppendAlarms(alarms, rbkReport, robotId, "warnings", "warning");
-                AppendAlarms(alarms, rbkReport, robotId, "notices", "notice");
+                AppendAlarms(alarms, rbkReport, robotId);
             }
 
             if (lockInfo is null && robot.TryGetProperty("lock_info", out var topLock) && topLock.ValueKind == JsonValueKind.Object)
@@ -358,71 +355,28 @@ public sealed class RdsReadClient(
     }
 
     /// <summary>
-    /// SEER documents two alarm entry shapes inside the fatals/errors/warnings/notices
-    /// buckets, and both occur in practice:
-    ///
-    ///   core level   { "code": 54000, "desc": "...", "times": 1, "timestamp": ... }
-    ///   robot level  { "55001": 1634020734, "desc": "...", "times": 1 }
-    ///
-    /// In the second form the alarm code is the property KEY and its value is the
-    /// timestamp, so a parser that requires a "code" property silently drops every
-    /// robot-level alarm. Both shapes are accepted here. Severity always comes from
-    /// the bucket the entry was found in, so a notice can never be promoted to an
-    /// error. A malformed entry is skipped rather than failing the whole fleet read,
-    /// and entries that resolve to the same code within one bucket are deduplicated.
+    /// Delegates to <see cref="RdsRobotAlarmParser"/>, the single SEER alarm parser,
+    /// and attributes each entry to this robot. This method used to hold its own copy
+    /// of the bucket/shape logic; the native telemetry client held a second, different
+    /// copy that read undocumented paths and matched nothing. One implementation is
+    /// what stops them drifting apart again.
     /// </summary>
-    private static void AppendAlarms(List<RdsRobotAlarmSnapshot> alarms, JsonElement rbkReport, string robotId, string bucketName, string severity)
+    private static void AppendAlarms(List<RdsRobotAlarmSnapshot> alarms, JsonElement rbkReport, string robotId)
     {
-        if (!rbkReport.TryGetProperty(bucketName, out var bucket) || bucket.ValueKind != JsonValueKind.Array)
+        var parsed = new List<RdsParsedAlarm>();
+        RdsRobotAlarmParser.Append(parsed, rbkReport, new HashSet<string>(StringComparer.Ordinal));
+        foreach (var alarm in parsed)
         {
-            return;
-        }
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in bucket.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var code = Text(item, "code");
-            string? occurredAt = Text(item, "time");
-
-            if (string.IsNullOrEmpty(code))
-            {
-                // Dynamically keyed form: the single non-descriptive property is the
-                // alarm code and its value is the occurrence timestamp.
-                foreach (var property in item.EnumerateObject())
-                {
-                    if (KnownAlarmFields.Contains(property.Name)) continue;
-                    if (property.Value.ValueKind is not (JsonValueKind.Number or JsonValueKind.String)) continue;
-                    code = property.Name;
-                    occurredAt ??= property.Value.ValueKind == JsonValueKind.Number
-                        ? property.Value.ToString()
-                        : property.Value.GetString();
-                    break;
-                }
-            }
-
-            if (string.IsNullOrEmpty(code) || !seen.Add(code))
-            {
-                continue;
-            }
-
             alarms.Add(new RdsRobotAlarmSnapshot(
                 robotId,
-                severity,
-                code,
-                Text(item, "desc", preserveEmpty: true),
-                occurredAt ?? Text(item, "timestamp"),
-                Number(item, "times")));
+                alarm.Severity.ToString().ToLowerInvariant(),
+                alarm.Code,
+                alarm.Description,
+                alarm.OccurredAt,
+                alarm.Times));
         }
     }
 
-    /// <summary>Sibling fields of an alarm entry that are never the alarm code.</summary>
-    private static readonly HashSet<string> KnownAlarmFields =
-        new(StringComparer.OrdinalIgnoreCase) { "code", "desc", "description", "times", "time", "timestamp", "level", "severity" };
 
     // Only booleans with an unambiguous meaning are surfaced; "unlock" and
     // "dispatchable_status" are numeric codes whose semantics are not

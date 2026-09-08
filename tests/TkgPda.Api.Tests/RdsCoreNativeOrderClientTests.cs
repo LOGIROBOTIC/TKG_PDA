@@ -480,23 +480,35 @@ public sealed class RdsCoreNativeOrderClientTests
                 "model": "HELIFORK",
                 "current_map": "26.7.2026_map_optimak"
               },
+              "procBusiness": false,
               "rbk_report": {
                 "current_station": "PP80",
                 "last_station": "LM12",
                 "battery_level": 0.98,
                 "x": 2.304,
                 "y": 4.691,
-                "angle": 1.5708
+                "angle": 1.5708,
+                "fatals": [],
+                "errors": [
+                  {
+                    "code": 52201,
+                    "desc": "documented shape A entry.",
+                    "times": 1,
+                    "timestamp": 1681110452
+                  }
+                ],
+                "warnings": [
+                  {
+                    "55001": 1634020734,
+                    "desc": "documented shape B entry.",
+                    "times": 1
+                  }
+                ],
+                "notices": []
               },
               "current_order": {
                 "id": "order-123",
                 "state": "RUNNING"
-              },
-              "alarms": {
-                "fatals": [],
-                "errors": ["E102"],
-                "warnings": [],
-                "notices": []
               }
             }
           ]
@@ -523,7 +535,18 @@ public sealed class RdsCoreNativeOrderClientTests
         Assert.Equal(42.5, robot.RemainingTime);
         Assert.Equal("order-123", robot.CurrentOrderId);
         Assert.Equal("RUNNING", robot.CurrentOrderState);
-        Assert.Contains("E102", robot.Alarms);
+        Assert.False(robot.ProcBusiness);
+        Assert.True(robot.IsBusinessIdle);
+
+        // Both documented entry shapes parse, and severity survives: the shape-A
+        // error blocks, the shape-B warning does not.
+        var error = Assert.Single(robot.Alarms, alarm => alarm.Severity == RdsAlarmSeverity.Error);
+        Assert.Equal("52201", error.Code);
+        Assert.True(error.IsBlocking);
+        var warning = Assert.Single(robot.Alarms, alarm => alarm.Severity == RdsAlarmSeverity.Warning);
+        Assert.Equal("55001", warning.Code);
+        Assert.False(warning.IsBlocking);
+        Assert.True(robot.HasBlockingAlarm);
     }
 
     [Fact]

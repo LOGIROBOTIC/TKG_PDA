@@ -774,35 +774,21 @@ public sealed class RdsCoreNativeOrderClient(
             var currentOrderId = currentOrder is { } co ? Text(co, "id") : null;
             var currentOrderState = currentOrder is { } cos ? Text(cos, "state") : null;
 
-            var alarms = new List<string>();
-            if (robot.TryGetProperty("alarms", out var alarmsObj) && alarmsObj.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var kind in new[] { "fatals", "errors", "warnings", "notices" })
-                {
-                    if (alarmsObj.TryGetProperty(kind, out var arr) && arr.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in arr.EnumerateArray())
-                        {
-                            var s = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
-                            if (!string.IsNullOrWhiteSpace(s)) alarms.Add(s);
-                        }
-                    }
-                }
-            }
-            if (alarms.Count == 0 && rbk is { } rbkAlarms && rbkAlarms.TryGetProperty("alarms", out var rbkAlarmsObj) && rbkAlarmsObj.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var kind in new[] { "fatals", "errors", "warnings", "notices" })
-                {
-                    if (rbkAlarmsObj.TryGetProperty(kind, out var arr) && arr.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in arr.EnumerateArray())
-                        {
-                            var s = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
-                            if (!string.IsNullOrWhiteSpace(s)) alarms.Add(s);
-                        }
-                    }
-                }
-            }
+            // Alarms come from the one shared parser: documented buckets only
+            // (fatals/errors/warnings/notices), both entry shapes, severity kept.
+            // This block previously looked for "alarms.fatals" and
+            // "rbk_report.alarms.fatals" — paths that appear nowhere in the SEER
+            // documentation — so it matched nothing on a real payload and every
+            // robot reported zero alarms.
+            var alarms = RdsRobotAlarmParser.ParseRobot(robot);
+
+            // SEER idle test: dispatchable && !procBusiness. Absent means UNKNOWN.
+            var procBusiness = robot.ValueKind == JsonValueKind.Object
+                               && robot.TryGetProperty("procBusiness", out var pb)
+                               && pb.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? pb.ValueKind == JsonValueKind.True
+                : (bool?)null;
+
             var lockInfoObj = Object(robot, "lock_info") ?? (rbk is { } r ? Object(r, "lock_info") : null);
             RdsCoreRobotLockInfo? lockInfo = null;
             if (lockInfoObj is { } li)
@@ -836,7 +822,8 @@ public sealed class RdsCoreNativeOrderClient(
                 currentOrderState,
                 alarms,
                 lockInfo,
-                identity));
+                identity,
+                procBusiness));
         }
 
         return list;

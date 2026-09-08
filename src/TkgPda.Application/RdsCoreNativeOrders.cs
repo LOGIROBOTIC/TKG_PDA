@@ -418,16 +418,41 @@ public sealed record RdsCoreRobotTelemetry(
     double? RemainingTime,
     string? CurrentOrderId,
     string? CurrentOrderState,
-    IReadOnlyList<string> Alarms,
+    /// <summary>
+    /// Alarms with severity preserved. Do not treat a non-empty list as a fault —
+    /// use <see cref="HasBlockingAlarm"/>, because warnings and notices are not
+    /// blocking.
+    /// </summary>
+    IReadOnlyList<RdsParsedAlarm> Alarms,
     RdsCoreRobotLockInfo? LockInfo = null,
     /// <summary>Both SEER identity spaces. See <see cref="RdsRobotIdentity"/>.</summary>
-    RdsRobotIdentity? Identity = null)
+    RdsRobotIdentity? Identity = null,
+    /// <summary>
+    /// SEER <c>procBusiness</c>: whether the robot is executing a business waybill.
+    /// SEER documents idle as <c>dispatchable == true &amp;&amp; procBusiness == false</c>
+    /// (RdsCustomProjectTutorial_en.md:350, 377-378). Null means the field was absent,
+    /// which is UNKNOWN — never assume idle.
+    /// </summary>
+    bool? ProcBusiness = null)
 {
     /// <summary>
     /// Identity for target matching. Falls back to treating <see cref="VehicleId"/>
     /// as the vehicle-space identifier, which is what the reader produces.
     /// </summary>
     public RdsRobotIdentity ResolvedIdentity => Identity ?? new RdsRobotIdentity(null, VehicleId);
+
+    /// <summary>
+    /// True only for a fatal or error alarm. Warnings and notices are reported but
+    /// do not block dispatch, so a notice never behaves as a fault.
+    /// </summary>
+    public bool HasBlockingAlarm => Alarms.Any(alarm => alarm.IsBlocking);
+
+    /// <summary>
+    /// Documented SEER idle test. False when the robot is running business work AND
+    /// when <c>procBusiness</c> is absent, so an unknown business state can never
+    /// authorise an automatic recovery mutation.
+    /// </summary>
+    public bool IsBusinessIdle => ProcBusiness == false;
 }
 
 public interface IRdsCoreNativeOrderClient

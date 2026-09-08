@@ -26,7 +26,7 @@ public sealed class RdsExecutionClient(
             },
             correlationId,
             cancellationToken,
-            requireDispatch: false);
+            RdsMutationClass.ReadOnly);
         var data = Data(root);
         return new(
             Boolean(data, "validated"),
@@ -66,12 +66,15 @@ public sealed class RdsExecutionClient(
 
     public async Task<RdsStopTaskResult> StopTaskAsync(string taskRecordId, Guid correlationId, CancellationToken cancellationToken = default)
     {
+        // Safety stop: ending an existing WindTask reduces motion rather than
+        // starting it, so it stays reachable when the global dispatch gate is closed
+        // — exactly like the native /terminate path.
         var root = await PostAsync(
             "/api/stop-task",
             new { releaseSite = 1, taskRecordId },
             correlationId,
             cancellationToken,
-            requireDispatch: true);
+            RdsMutationClass.SafetyStop);
         var code = Number(root, "code") ?? 500;
         if (code != 200)
         {
@@ -97,23 +100,26 @@ public sealed class RdsExecutionClient(
     }
 
     private async Task<JsonElement> PostScriptAsync(string endpoint, object payload, Guid correlationId, CancellationToken cancellationToken) =>
-        await PostAsync(endpoint, payload, correlationId, cancellationToken, requireDispatch: true);
+        await PostAsync(endpoint, payload, correlationId, cancellationToken, RdsMutationClass.ExecutionMutation);
 
     private async Task<JsonElement> PostAsync(
         string endpoint,
         object payload,
         Guid correlationId,
         CancellationToken cancellationToken,
-        bool requireDispatch)
+        RdsMutationClass mutationClass)
     {
         if (!options.Enabled)
         {
             throw new RdsExecutionException("RDS_DISABLED", "RDS integration is disabled.");
         }
 
-        if (requireDispatch && !DispatchEnabled)
+        // One shared definition of physical permission for both execution engines.
+        if (!RdsMutationPolicy.IsAllowed(mutationClass, options.DispatchEnabled))
         {
-            throw new RdsExecutionException("RDS_DISPATCH_DISABLED", "RDS mutation is disabled.");
+            throw new RdsExecutionException(
+                RdsMutationPolicy.BlockedCode,
+                RdsMutationPolicy.BlockedMessage(endpoint));
         }
 
         try

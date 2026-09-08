@@ -918,6 +918,10 @@ public static class ApiEndpoints
     // Robot-scoped maintenance. These are fleet operations with no request context,
     // so an explicit vehicle list is legitimate — but the list must be non-empty and
     // explicit (never broadcast), Supervisor/Admin only, and every call is audited.
+    /// <summary>Logger for audit-write failures, which must never mask the real outcome.</summary>
+    private static ILogger MaintenanceLogger(HttpContext context) =>
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("TkgPda.Api.RobotMaintenance");
+
     private static async Task<IResult> RobotMaintenanceAsync(
         HttpContext context,
         IApiDataStore dataStore,
@@ -942,11 +946,49 @@ public static class ApiEndpoints
             // applies; motion-enabling maintenance is refused when dispatch is disabled.
             result = await rdsExecution.RobotMaintenanceAsync(action, vehicles, dispatchableType, correlationId, cancellationToken);
         }
-        catch (RdsExecutionException error)
+        // A refused attempt on a physical robot is exactly the event an audit log exists
+        // for. Catching only RdsExecutionException was not enough: the native adapter
+        // surfaces RdsCoreNativeOrderException, and HTTP/JSON faults can escape as
+        // themselves, so those attempts were never recorded. Cancellation is excluded —
+        // a disconnected caller is not a rejected attempt.
+        catch (Exception error) when (error is not OperationCanceledException)
         {
-            // A refused attempt on a physical robot is exactly the event an audit log
-            // exists for. Previously only successful calls were recorded, so a gate
-            // rejection or an adapter failure left no trace of who tried what.
+            var rejectedCode = error switch
+            {
+                RdsExecutionException rds => rds.Code,
+                RdsCoreNativeOrderException native => native.Code,
+                _ => error.GetType().Name
+            };
+
+            try
+            {
+                await WriteAuditAsync(
+                    dataStore,
+                    context,
+                    context.User.UserId(),
+                    Device(context).Id,
+                    auditAction,
+                    "ROBOT",
+                    string.Join(',', vehicles),
+                    new { vehicles, detail = auditDetail, accepted = false, rejectedCode },
+                    cancellationToken);
+            }
+            catch (Exception auditFailure) when (auditFailure is not OperationCanceledException)
+            {
+                // The audit write must never mask the physical-operation failure, and
+                // the mutation is never retried because of it.
+                MaintenanceLogger(context).LogError(
+                    auditFailure,
+                    "Failed to record the rejected robot maintenance attempt {AuditAction} for request {TraceIdentifier}.",
+                    auditAction,
+                    context.TraceIdentifier);
+            }
+
+            throw;
+        }
+
+        try
+        {
             await WriteAuditAsync(
                 dataStore,
                 context,
@@ -955,21 +997,21 @@ public static class ApiEndpoints
                 auditAction,
                 "ROBOT",
                 string.Join(',', vehicles),
-                new { vehicles, detail = auditDetail, accepted = false, rejectedCode = error.Code },
+                new { vehicles, detail = auditDetail, accepted = result.CoreAccepted, code = result.Code },
                 cancellationToken);
-            throw;
+        }
+        catch (Exception auditFailure) when (auditFailure is not OperationCanceledException)
+        {
+            // The physical call already happened. Turning a bookkeeping failure into an
+            // error response would invite the client to retry a mutation that may have
+            // succeeded, so the real outcome is returned and the audit gap is logged.
+            MaintenanceLogger(context).LogError(
+                auditFailure,
+                "Robot maintenance {AuditAction} succeeded but its audit row could not be written for request {TraceIdentifier}.",
+                auditAction,
+                context.TraceIdentifier);
         }
 
-        await WriteAuditAsync(
-            dataStore,
-            context,
-            context.User.UserId(),
-            Device(context).Id,
-            auditAction,
-            "ROBOT",
-            string.Join(',', vehicles),
-            new { vehicles, detail = auditDetail, accepted = result.CoreAccepted, code = result.Code },
-            cancellationToken);
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
 

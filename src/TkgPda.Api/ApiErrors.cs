@@ -104,6 +104,13 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
                 "DATABASE_UNAVAILABLE",
                 "The database is temporarily unavailable.");
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // The client disconnected. That is not a server fault: logging it as an
+            // unhandled error and writing a 500 onto an already-aborted response would
+            // corrupt error telemetry, so the cancellation propagates to Kestrel.
+            throw;
+        }
         catch (Exception error)
         {
             logger.LogError(error, "Unhandled API error for request {TraceIdentifier}.", context.TraceIdentifier);

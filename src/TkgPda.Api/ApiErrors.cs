@@ -82,6 +82,11 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
         {
             await ApiErrorWriter.WriteAsync(context, StatusCodes.Status400BadRequest, "INVALID_JSON", "The request body is not valid JSON.");
         }
+        // The single cancellation path. A client disconnect is not a server fault:
+        // it is logged at Information and the request ends without a response body,
+        // because nothing can be written to a connection the client has abandoned.
+        // An OperationCanceledException whose RequestAborted is NOT cancelled is a
+        // genuine internal fault and deliberately falls through to the 500 below.
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
             logger.LogInformation("Request {TraceIdentifier} was cancelled by the client.", context.TraceIdentifier);
@@ -103,13 +108,6 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
                 StatusCodes.Status503ServiceUnavailable,
                 "DATABASE_UNAVAILABLE",
                 "The database is temporarily unavailable.");
-        }
-        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
-        {
-            // The client disconnected. That is not a server fault: logging it as an
-            // unhandled error and writing a 500 onto an already-aborted response would
-            // corrupt error telemetry, so the cancellation propagates to Kestrel.
-            throw;
         }
         catch (Exception error)
         {

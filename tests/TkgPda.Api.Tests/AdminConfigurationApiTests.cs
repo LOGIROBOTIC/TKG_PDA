@@ -72,7 +72,7 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
         var context = await fixture.ConfigureMachineAsync();
         var transportFromAdminWeb = await adminClient.PostAsJsonAsync(
             "/api/v1/transport-requests",
-            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "BRING_EMPTY", null, Guid.NewGuid()));
+            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "BRING_EMPTY"));
         Assert.Equal(HttpStatusCode.Forbidden, transportFromAdminWeb.StatusCode);
     }
 
@@ -326,14 +326,16 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
 
         var remove = await fixture.SendTransportAsync(
             client,
-            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "REMOVE_FULL", slot, null),
+            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null,
+                await fixture.PartForSlotAsync(slot, "P05-ADMREMOVE"), null, "REMOVE_FULL"),
             "p05-warehouse-remove");
         Assert.Equal(HttpStatusCode.Forbidden, remove.StatusCode);
         Assert.Equal("OPERATION_NOT_ALLOWED_FOR_ROLE", await ApiTestFixture.ErrorCodeAsync(remove));
 
         var bring = await fixture.SendTransportAsync(
             client,
-            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "BRING_EMPTY", null, slot),
+            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null,
+                await fixture.PartForSlotAsync(slot, "P05-ADMBRING"), null, "BRING_EMPTY"),
             "p05-warehouse-bring");
         Assert.Equal(HttpStatusCode.Created, bring.StatusCode);
         var created = await bring.Content.ReadFromJsonAsync<TransportHttpResponse>();
@@ -579,7 +581,8 @@ public sealed class AdminConfigurationApiTests(ApiTestFixture fixture) : IClassF
 
         var active = await fixture.SendTransportAsync(
             oper,
-            new CreateTransportHttpRequest(machine.Id, variant.Id, layout.Id, null, null, null, null, "BRING_EMPTY", null, slot),
+            new CreateTransportHttpRequest(machine.Id, variant.Id, layout.Id, null, null,
+                await fixture.PartForSlotAsync(slot, "P05-ADMACTIVE", variant.Id), null, "BRING_EMPTY"),
             "p05-active-publish");
         Assert.Equal(HttpStatusCode.Created, active.StatusCode);
 

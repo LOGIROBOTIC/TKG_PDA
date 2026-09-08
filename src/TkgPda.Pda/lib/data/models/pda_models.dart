@@ -611,7 +611,6 @@ class TaskTemplate {
     required this.variantId,
     required this.productGroupId,
     required this.operation,
-    required this.rdsTaskLabel,
     required this.rdsTaskLabelConfigured,
     required this.priority,
   });
@@ -620,7 +619,6 @@ class TaskTemplate {
   final String variantId;
   final String? productGroupId;
   final String operation;
-  final String? rdsTaskLabel;
   final bool rdsTaskLabelConfigured;
   final int priority;
 
@@ -629,7 +627,6 @@ class TaskTemplate {
     variantId: json['variantId'] as String,
     productGroupId: json['productGroupId'] as String?,
     operation: json['operation'] as String? ?? '',
-    rdsTaskLabel: json['rdsTaskLabel'] as String?,
     rdsTaskLabelConfigured: json['rdsTaskLabelConfigured'] as bool? ?? false,
     priority: _integer(json['priority']),
   );

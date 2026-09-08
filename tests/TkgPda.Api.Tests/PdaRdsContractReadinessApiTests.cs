@@ -65,7 +65,8 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         Assert.Equal("BRING_EMPTY", template.Operation);
         Assert.Null(template.SourceSlotGroupId);
         Assert.Null(template.DestinationSlotGroupId);
-        Assert.Null(template.RdsTaskLabel);
+        // The raw label is no longer part of the PDA contract; only the readiness
+        // signal derived from it crosses the boundary.
         Assert.False(template.RdsTaskLabelConfigured);
     }
 
@@ -133,7 +134,7 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         var slot = (await fixture.LogisticsSlotsAsync(machine.LayoutId, 1)).Single();
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         using var ownerClient = await fixture.LoginClientAsync(owner);
-        var createdResponse = await fixture.SendTransportAsync(ownerClient, Bring(machine, slot), "p07a-active-owner");
+        var createdResponse = await fixture.SendTransportAsync(ownerClient, Bring(machine, await fixture.PartForSlotAsync(slot, "P05-PDARDS1")), "p07a-active-owner");
         createdResponse.EnsureSuccessStatusCode();
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         Assert.NotNull(created);
@@ -175,7 +176,7 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         await fixture.SetSlotAsync(slots[0], "VACANT", "UNKNOWN");
         await fixture.SetSlotAsync(slots[1], "OCCUPIED", "EMPTY");
         using var client = await fixture.LoginClientAsync(identity);
-        var createdResponse = await fixture.SendTransportAsync(client, Bring(machine, slots[0]), "p07a-rds-projection");
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(machine, await fixture.PartForSlotAsync(slots[0], "P05-PDARDS2")), "p07a-rds-projection");
         createdResponse.EnsureSuccessStatusCode();
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         Assert.NotNull(created);
@@ -255,15 +256,13 @@ public sealed class PdaRdsContractReadinessApiTests(ApiTestFixture fixture) : IC
         Assert.Equal(code, action.DisabledCode);
     }
 
-    private static CreateTransportHttpRequest Bring(LayoutContext context, Guid destination) => new(
+    private static CreateTransportHttpRequest Bring(LayoutContext context, Guid partId) => new(
         context.MachineId,
         context.VariantId,
         context.LayoutId,
         null,
         null,
+        partId,
         null,
-        null,
-        "BRING_EMPTY",
-        null,
-        destination);
+        "BRING_EMPTY");
 }

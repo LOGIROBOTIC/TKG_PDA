@@ -189,7 +189,10 @@ public sealed record PdaTaskTemplateRecord(
     string Operation,
     Guid? SourceSlotGroupId,
     Guid? DestinationSlotGroupId,
-    string? RdsTaskLabel,
+    // The raw RDS task label is deliberately absent from the PDA contract: it is
+    // RDS technical configuration and belongs to Admin diagnostics. The Operator
+    // only needs to know whether a label is configured, which is the readiness
+    // signal below. The label itself stays server-side for dispatch.
     bool RdsTaskLabelConfigured,
     int Priority);
 

@@ -341,8 +341,9 @@ public static class ApiEndpoints
             request.PartId,
             request.ContainerTypeId,
             operation,
-            request.SourceSlotId,
-            request.DestinationSlotId,
+            // Physical positions are resolved by the domain, never supplied by a caller.
+            null,
+            null,
             request.Priority,
             request.RequiresPreparation);
         var result = await workflow.CreateAsync(command, cancellationToken);
@@ -579,8 +580,9 @@ public static class ApiEndpoints
                 item.PartId,
                 item.ContainerTypeId,
                 operation,
-                item.SourceSlotId,
-                item.DestinationSlotId,
+                // Physical positions are resolved by the domain, never supplied.
+                null,
+                null,
                 item.Priority,
                 item.RequiresPreparation));
         }

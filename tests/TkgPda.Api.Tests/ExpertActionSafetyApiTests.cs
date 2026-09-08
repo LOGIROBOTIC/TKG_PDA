@@ -159,23 +159,23 @@ public sealed class ExpertActionSafetyApiTests(ApiTestFixture fixture) : IClassF
         Assert.Equal("RDS_DISPATCH_DISABLED", await ApiTestFixture.ErrorCodeAsync(response));
     }
 
-    private static async Task<TransportHttpResponse> CreateRemoveFullAsync(
+    private async Task<TransportHttpResponse> CreateRemoveFullAsync(
         HttpClient client,
         LayoutContext context,
         Guid source,
         string idempotencyKey)
     {
+        // The contract has no source slot; the part identifies the position.
+        var partId = await fixture.PartForSlotAsync(source, $"P05-EXPERT-{idempotencyKey}");
         var payload = new CreateTransportHttpRequest(
             context.MachineId,
             context.VariantId,
             context.LayoutId,
             null,
             null,
+            partId,
             null,
-            null,
-            "REMOVE_FULL",
-            source,
-            null);
+            "REMOVE_FULL");
         var response = await client.SendAsync(
             new HttpRequestMessage(HttpMethod.Post, "/api/v1/transport-requests")
             {

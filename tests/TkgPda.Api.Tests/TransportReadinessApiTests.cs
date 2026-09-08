@@ -20,7 +20,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
 
-        var response = await fixture.SendTransportAsync(client, Bring(context, slot), "readiness-omitted");
+        var response = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP1")), "readiness-omitted");
         var created = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -38,7 +38,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
 
-        var response = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: false), "readiness-false");
+        var response = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP2"), requiresPreparation: false), "readiness-false");
         var created = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
         Assert.Equal("NOT_REQUIRED", created!.ReadinessState);
@@ -54,7 +54,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
 
-        var response = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: true), "readiness-true");
+        var response = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP3"), requiresPreparation: true), "readiness-true");
         var created = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
         Assert.Equal("WAITING_PREPARATION", created!.ReadinessState);
@@ -70,7 +70,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
-        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: true), "mark-ready-http");
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP4"), requiresPreparation: true), "mark-ready-http");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
         using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
@@ -103,7 +103,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         var lineOperator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
         using var client = await fixture.LoginClientAsync(lineOperator);
-        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: true), "line-operator-ready-denied");
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP5"), requiresPreparation: true), "line-operator-ready-denied");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
         var response = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/ready", null);
@@ -121,7 +121,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         var lineOperator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
         using var creatorClient = await fixture.LoginClientAsync(lineOperator);
-        var createdResponse = await fixture.SendTransportAsync(creatorClient, Bring(context, slot, requiresPreparation: true), "warehouse-operator-ready");
+        var createdResponse = await fixture.SendTransportAsync(creatorClient, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP6"), requiresPreparation: true), "warehouse-operator-ready");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
         using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
@@ -142,7 +142,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         var lineOperator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
         using var creatorClient = await fixture.LoginClientAsync(lineOperator);
-        var createdResponse = await fixture.SendTransportAsync(creatorClient, Bring(context, slot, requiresPreparation: true), "supervisor-ready");
+        var createdResponse = await fixture.SendTransportAsync(creatorClient, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP7"), requiresPreparation: true), "supervisor-ready");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var supervisor = await fixture.SeedIdentityAsync(role: RoleCodes.Supervisor);
         using var supervisorClient = await fixture.LoginClientAsync(supervisor);
@@ -163,7 +163,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
-        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot), "not-required-ready-http");
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP8")), "not-required-ready-http");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var warehouseOperator = await fixture.SeedIdentityAsync(role: RoleCodes.WarehouseOperator);
         using var warehouseClient = await fixture.LoginClientAsync(warehouseOperator);
@@ -183,7 +183,7 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
-        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slot, requiresPreparation: true), "terminal-ready-http");
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP9"), requiresPreparation: true), "terminal-ready-http");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var cancelled = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/cancel", null);
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
@@ -213,8 +213,8 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
                 "batch-mixed-readiness",
                 context.MachineId,
                 [
-                    BatchItem(context, slots[0], "batch-readiness-waiting", requiresPreparation: true),
-                    BatchItem(context, slots[1], "batch-readiness-not-required", requiresPreparation: false)
+                    BatchItem(context, await fixture.PartForSlotAsync(slots[0], "P05-BRW"), "batch-readiness-waiting", requiresPreparation: true),
+                    BatchItem(context, await fixture.PartForSlotAsync(slots[1], "P05-BRNR"), "batch-readiness-not-required", requiresPreparation: false)
                 ]));
         var batch = await response.Content.ReadFromJsonAsync<TransportBatchHttpResponse>();
 
@@ -241,32 +241,32 @@ public sealed class TransportReadinessApiTests(ApiTestFixture fixture) : IClassF
                 "batch-mixed-readiness-invalid",
                 context.MachineId,
                 [
-                    BatchItem(context, slots[0], "batch-atomic-waiting", requiresPreparation: true),
-                    BatchItem(context, slots[1], "batch-atomic-invalid", requiresPreparation: false)
+                    BatchItem(context, await fixture.PartForSlotAsync(slots[0], "P05-BAW"), "batch-atomic-waiting", requiresPreparation: true),
+                    BatchItem(context, await fixture.PartForSlotAsync(slots[1], "P05-BAI"), "batch-atomic-invalid", requiresPreparation: false)
                 ]));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("SLOT_STATE_MISMATCH", await ApiTestFixture.ErrorCodeAsync(response));
+        // Backend slot resolution rejects the invalid child because no slot in the
+        // required state is eligible for its part; the batch is still refused atomically.
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", await ApiTestFixture.ErrorCodeAsync(response));
         Assert.Equal(0L, await fixture.ScalarAsync<long>("SELECT count(*) FROM ops.transport_batches"));
         Assert.Equal(0L, await fixture.ScalarAsync<long>("SELECT count(*) FROM ops.transport_requests"));
     }
 
-    private static CreateTransportHttpRequest Bring(LayoutContext context, Guid destination, bool? requiresPreparation = null) =>
+    private static CreateTransportHttpRequest Bring(LayoutContext context, Guid partId, bool? requiresPreparation = null) =>
         requiresPreparation is null
-            ? new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "BRING_EMPTY", null, destination)
-            : new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "BRING_EMPTY", null, destination, RequiresPreparation: requiresPreparation.Value);
+            ? new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, partId, null, "BRING_EMPTY")
+            : new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, partId, null, "BRING_EMPTY", RequiresPreparation: requiresPreparation.Value);
 
-    private static CreateTransportBatchItemHttpRequest BatchItem(LayoutContext context, Guid destination, string idempotencyKey, bool requiresPreparation) => new(
+    private static CreateTransportBatchItemHttpRequest BatchItem(LayoutContext context, Guid partId, string idempotencyKey, bool requiresPreparation) => new(
         idempotencyKey,
         context.MachineId,
         context.VariantId,
         context.LayoutId,
         null,
         null,
-        null,
+        partId,
         null,
         "BRING_EMPTY",
-        null,
-        destination,
         RequiresPreparation: requiresPreparation);
 }

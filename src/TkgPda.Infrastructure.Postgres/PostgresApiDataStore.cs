@@ -710,7 +710,8 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                 reader.GetString(4),
                 NullableGuid(reader, 5),
                 NullableGuid(reader, 6),
-                label,
+                // The label is read only to derive the readiness flag; it is not
+                // carried into the PDA contract.
                 !string.IsNullOrWhiteSpace(label),
                 reader.GetInt32(8)));
         }

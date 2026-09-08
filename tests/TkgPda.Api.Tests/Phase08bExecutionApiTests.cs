@@ -64,9 +64,10 @@ public sealed class Phase08bExecutionApiTests(ApiTestFixture fixture) : IClassFi
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
         Assert.Equal("LOAD_STATE_NOT_SELECTABLE", await ApiTestFixture.ErrorCodeAsync(unknown));
 
+        var busyPart = await fixture.PartForSlotAsync(slots[1], "P05-P08BBUSY");
         var created = await fixture.SendTransportAsync(lineClient, new(
-            machine.MachineId, machine.VariantId, machine.LayoutId, null, null, null, null,
-            "REMOVE_EMPTY", slots[1], null), "phase08b-load-busy");
+            machine.MachineId, machine.VariantId, machine.LayoutId, null, null, busyPart, null,
+            "REMOVE_EMPTY"), "phase08b-load-busy");
         created.EnsureSuccessStatusCode();
         var busy = await lineClient.PutAsJsonAsync(
             $"/api/v1/machines/{machine.MachineId}/slots/{slots[1]}/load-state",
@@ -110,9 +111,10 @@ public sealed class Phase08bExecutionApiTests(ApiTestFixture fixture) : IClassFi
         var slotId = Assert.Single(await fixture.LogisticsSlotsAsync(machine.LayoutId, 1));
         await fixture.SetSlotAsync(slotId, "VACANT", "UNKNOWN");
         using var operatorClient = await fixture.LoginClientAsync(identity);
+        var callbackPart = await fixture.PartForSlotAsync(slotId, "P05-P08BCB");
         var createdResponse = await fixture.SendTransportAsync(operatorClient, new(
-            machine.MachineId, machine.VariantId, machine.LayoutId, null, null, null, null,
-            "BRING_EMPTY", null, slotId), "phase08b-callback-done");
+            machine.MachineId, machine.VariantId, machine.LayoutId, null, null, callbackPart, null,
+            "BRING_EMPTY"), "phase08b-callback-done");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         Assert.NotNull(created);
         await fixture.ExecuteAsync("UPDATE ops.transport_requests SET status = 'SENT_TO_RDS' WHERE id = @id", ("id", created.Id));

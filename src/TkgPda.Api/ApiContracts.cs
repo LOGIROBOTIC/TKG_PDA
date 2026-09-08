@@ -29,8 +29,13 @@ public sealed record CreateTransportHttpRequest(
     Guid? PartId,
     Guid? ContainerTypeId,
     string Operation,
-    Guid? SourceSlotId,
-    Guid? DestinationSlotId,
+    // SourceSlotId / DestinationSlotId are deliberately absent from the Operator
+    // request contract. A normal Operator expresses business intent
+    // (machine -> part -> operation); the backend resolves the physical machine-side
+    // slot from master.layout_slot_parts and allocates the EMPTY_STORAGE buffer with
+    // FOR UPDATE ... SKIP LOCKED. Accepting these fields let an API caller choose
+    // physical routing even though the PDA always sent null. The resolved values are
+    // still returned on the response so the client can show what was chosen.
     int Priority = 100,
     bool RequiresPreparation = false);
 
@@ -44,8 +49,13 @@ public sealed record CreateTransportBatchItemHttpRequest(
     Guid? PartId,
     Guid? ContainerTypeId,
     string Operation,
-    Guid? SourceSlotId,
-    Guid? DestinationSlotId,
+    // SourceSlotId / DestinationSlotId are deliberately absent from the Operator
+    // request contract. A normal Operator expresses business intent
+    // (machine -> part -> operation); the backend resolves the physical machine-side
+    // slot from master.layout_slot_parts and allocates the EMPTY_STORAGE buffer with
+    // FOR UPDATE ... SKIP LOCKED. Accepting these fields let an API caller choose
+    // physical routing even though the PDA always sent null. The resolved values are
+    // still returned on the response so the client can show what was chosen.
     int Priority = 100,
     bool RequiresPreparation = false);
 

@@ -148,17 +148,16 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
         var identity = await fixture.SeedIdentityAsync();
         using var client = await fixture.LoginClientAsync(identity);
 
+        var queuePart = await fixture.PartForSlotAsync(slot, "P05-QUEUEPART");
         var payload = new CreateTransportHttpRequest(
             context.MachineId,
             context.VariantId,
             context.LayoutId,
             null,
             null,
+            queuePart,
             null,
-            null,
-            "REMOVE_FULL",
-            slot,
-            null);
+            "REMOVE_FULL");
         using var create = await client.SendAsync(
             new HttpRequestMessage(HttpMethod.Post, "/api/v1/transport-requests")
             {
@@ -192,9 +191,10 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
         // Seed once as a line operator, then read the same context as each PDA role.
         var creator = await fixture.SeedIdentityAsync(role: RoleCodes.LineOperator);
         using var creatorClient = await fixture.LoginClientAsync(creator);
+        var seedPart = await fixture.PartForSlotAsync(slots[0], "P05-CTXSEED");
         var payload = new CreateTransportHttpRequest(
             context.MachineId, context.VariantId, context.LayoutId,
-            null, null, null, null, "REMOVE_FULL", slots[0], null);
+            null, null, seedPart, null, "REMOVE_FULL");
         using var create = await creatorClient.SendAsync(
             new HttpRequestMessage(HttpMethod.Post, "/api/v1/transport-requests")
             {
@@ -256,6 +256,90 @@ public sealed class OperatorInformationBoundaryApiTests(ApiTestFixture fixture) 
             // The business distillation the Operator genuinely needs still arrives.
             Assert.Contains("executionReadiness", json, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public async Task Operational_context_never_exposes_the_configured_rds_task_label()
+    {
+        // A real, non-null RDS task label must not reach any PDA role. Only the
+        // derived "is a label configured" readiness signal crosses the boundary.
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        await fixture.ExecuteAsync(
+            """
+            INSERT INTO master.task_templates (variant_id, task_type_id, rds_task_label, priority, is_active, config_json)
+            SELECT @variant_id, tt.id, 'SECRET-RDS-TASK-LABEL', 10, true, '{"testScope":"P07A"}'::jsonb
+            FROM master.task_types tt WHERE tt.code = 'BRING_EMPTY'
+            """,
+            ("variant_id", context.VariantId));
+
+        foreach (var role in new[] { RoleCodes.LineOperator, RoleCodes.WarehouseOperator, RoleCodes.Supervisor })
+        {
+            var identity = await fixture.SeedIdentityAsync(role: role);
+            using var client = await fixture.LoginClientAsync(identity);
+            var response = await client.GetAsync($"/api/v1/machines/{context.MachineId}/operational-context");
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
+
+            Assert.False(
+                json.Contains("SECRET-RDS-TASK-LABEL", StringComparison.OrdinalIgnoreCase),
+                $"{role} operational-context leaked the RDS task label.");
+            Assert.DoesNotContain("\"rdsTaskLabel\"", json, StringComparison.OrdinalIgnoreCase);
+            // The business readiness signal derived from it still arrives.
+            Assert.Contains("rdsTaskLabelConfigured", json, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task Operator_cannot_choose_physical_routing_by_injecting_slot_ids()
+    {
+        // A normal Operator expresses business intent; the backend resolves the
+        // physical position. Even a hand-crafted body naming a real slot must not
+        // control routing — the fields are not part of the contract at all.
+        await fixture.ResetAsync();
+        var context = await fixture.ConfigureMachineAsync();
+        var slots = await fixture.LogisticsSlotsAsync(context.LayoutId, 2);
+        var intendedSlot = slots[0];
+        var injectedSlot = slots[1];
+        await fixture.SetSlotAsync(intendedSlot, "VACANT", "UNKNOWN");
+        await fixture.SetSlotAsync(injectedSlot, "VACANT", "UNKNOWN");
+        var part = await fixture.PartForSlotAsync(intendedSlot, "P05-INJECTPART");
+
+        var identity = await fixture.SeedIdentityAsync();
+        using var client = await fixture.LoginClientAsync(identity);
+
+        // Raw JSON carrying the forbidden fields alongside the legitimate ones.
+        var body = $$"""
+            {
+              "machineId": "{{context.MachineId}}",
+              "variantId": "{{context.VariantId}}",
+              "layoutId": "{{context.LayoutId}}",
+              "partId": "{{part}}",
+              "operation": "BRING_EMPTY",
+              "sourceSlotId": "{{injectedSlot}}",
+              "destinationSlotId": "{{injectedSlot}}",
+              "priority": 100
+            }
+            """;
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/transport-requests")
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+            Headers = { { ApiHeaders.IdempotencyKey, "slot-injection" } },
+        };
+        var response = await client.SendAsync(request);
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"create failed {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+
+        var created = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
+        Assert.NotNull(created);
+
+        // Routing came from the part mapping, not from the injected slot.
+        Assert.Equal(intendedSlot, created.DestinationSlotId);
+        Assert.NotEqual(injectedSlot, created.DestinationSlotId);
+        Assert.NotEqual(injectedSlot, created.SourceSlotId);
+        // The auto-allocated EMPTY_STORAGE buffer is a backend choice too.
+        Assert.NotNull(created.SourceSlotId);
     }
 
     [Fact]

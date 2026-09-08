@@ -597,6 +597,200 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     private static RdsCoreRobotLockInfo TkgLock() =>
         new(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
 
+    // ---------------------------------------------------------------------
+    // Ownership is not safety. An earlier round exempted this request's own main
+    // order and its own MAP_PREP order from the active-order check, so automatic
+    // recovery could release a lock while the very map preparation the lock exists
+    // for was still running. SEER documents no order state that is provably safe to
+    // unlock beneath, so ANY active order blocks.
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("RUNNING")]
+    [InlineData("SUSPENDED")]
+    [InlineData("WAITING")]
+    public async Task Lock_recovery_is_blocked_by_this_requests_own_active_main_order(string orderState)
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        // The robot is running THIS request's own order.
+        fixture.NativeClient.RobotCurrentOrderId = RequestId.ToString("D");
+        fixture.NativeClient.RobotCurrentOrderState = orderState;
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Theory]
+    [InlineData("RUNNING")]
+    [InlineData("SUSPENDED")]
+    public async Task Lock_recovery_is_blocked_by_this_requests_own_active_map_prep_order(string orderState)
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        // A MAP_PREP order still in progress is the most dangerous exemption of all:
+        // the map preparation this lock was taken for has not finished.
+        fixture.NativeClient.RobotCurrentOrderId =
+            RdsCoreNormalOrder.TransitionOrderId(RequestId, "26.7.2026_map_optimak_1");
+        fixture.NativeClient.RobotCurrentOrderState = orderState;
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_continues_when_the_robots_own_order_is_terminal()
+    {
+        // A terminal own order is not active, so it does not block: this proves the
+        // rule above rejects ACTIVE execution rather than merely "any order id".
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        fixture.NativeClient.RobotCurrentOrderId = RequestId.ToString("D");
+        fixture.NativeClient.RobotCurrentOrderState = "FINISHED";
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.Equal(1, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_does_not_treat_procBusiness_false_as_proof_of_idle()
+    {
+        // procBusiness=false is a NECESSARY condition, never sufficient. With an
+        // active order present, SEER reporting "no user order" must not unlock.
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        fixture.NativeClient.RobotProcBusiness = false;
+        fixture.NativeClient.RobotCurrentOrderId = "SOME-ACTIVE-ORDER";
+        fixture.NativeClient.RobotCurrentOrderState = "RUNNING";
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    // ---------------------------------------------------------------------
+    // Robot-scoped distributed lease. Deterministic: contention is created by
+    // holding a lease across an awaited TaskCompletionSource, never by sleeping.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Expert_mutation_cannot_run_while_another_operation_holds_the_robot_lease()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        // Another TKG operation is already inside the critical section for this robot.
+        await using var holder = fixture.Store.RobotLeases.TryAcquire("Sfl-Cbd15");
+        Assert.NotNull(holder);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("ROBOT_BUSY", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task Two_aliases_of_the_same_robot_take_the_same_lease()
+    {
+        // The recorded identity is the uuid while telemetry reports the vehicle_id.
+        // If these produced two lease keys, two operations could enter the critical
+        // section for one physical robot.
+        var fixture = ExpertFixture(
+            RdsCoreKnownOrderState.Failed,
+            robotCurrentOrderId: null,
+            recordedAgvId: "hu-test-1",
+            robotIdentity: new RdsRobotIdentity("hu-test-1", "AMB-01"));
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        // Hold the lease under the OTHER alias before the expert action runs.
+        await using var holder = fixture.Store.RobotLeases.TryAcquire("AMB-01");
+        Assert.NotNull(holder);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("ROBOT_BUSY", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task A_lease_on_a_different_robot_does_not_block()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        await using var unrelated = fixture.Store.RobotLeases.TryAcquire("SOME-OTHER-ROBOT");
+        Assert.NotNull(unrelated);
+
+        var result = await fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+        Assert.Equal(1, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task The_robot_lease_is_released_after_a_successful_mutation()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        await fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid());
+
+        Assert.Equal(0, fixture.Store.RobotLeases.HeldCount);
+    }
+
+    [Fact]
+    public async Task The_robot_lease_is_released_when_the_adapter_throws()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RedoError = new RdsCoreNativeOrderException("RDSCORE_UNAVAILABLE", "core down");
+
+        await Assert.ThrowsAsync<RdsCoreNativeOrderException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal(0, fixture.Store.RobotLeases.HeldCount);
+    }
+
+    [Fact]
+    public async Task The_robot_lease_is_released_when_the_caller_cancels()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RedoError = new OperationCanceledException();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal(0, fixture.Store.RobotLeases.HeldCount);
+    }
+
+    [Fact]
+    public async Task A_safety_stop_is_not_blocked_by_a_held_robot_lease()
+    {
+        // Pause is SAFETY_STOP: it reduces motion. Making it queue behind a
+        // motion-enabling lease would delay a stop, which is the wrong direction.
+        var fixture = Fixture();
+        await using var holder = fixture.Store.RobotLeases.TryAcquire("Sfl-Cbd15");
+        Assert.NotNull(holder);
+
+        var result = await fixture.Coordinator.RobotMaintenanceAsync(
+            RdsRobotMaintenanceAction.Pause, ["Sfl-Cbd15"], null, Guid.NewGuid());
+
+        Assert.True(result.CoreAccepted);
+    }
+
     [Fact]
     public async Task Lock_recovery_is_blocked_when_the_robot_runs_an_incompatible_order()
     {
@@ -947,10 +1141,35 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
 
     private static string OrderIdOf(NativeTestFixture fixture) => fixture.Store.TaskProjection!.TaskRecordId;
 
-    [Fact]
-    public async Task Manual_finish_is_allowed_when_the_robot_is_currently_running_that_order()
+    // SEER (docx 4.3, /manualFinished): "Yalnız mevcut order hata durumundayken veya
+    // AGV hata raporluyorken çalışır." — only while the current order is in an error
+    // state or the AGV is reporting an error. RUNNING/WAITING/SUSPENDED on their own
+    // are NOT permission; an earlier round accepted them, which asked RDSCore to
+    // advance a block that was executing normally.
+
+    [Theory]
+    [InlineData(RdsCoreKnownOrderState.Running)]
+    [InlineData(RdsCoreKnownOrderState.Waiting)]
+    [InlineData(RdsCoreKnownOrderState.Suspended)]
+    public async Task Manual_finish_is_blocked_without_the_documented_error_condition(RdsCoreKnownOrderState state)
     {
-        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        var fixture = ExpertFixture(state, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RobotIsError = false;
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_STATE_INCOMPATIBLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Theory]
+    [InlineData(RdsCoreKnownOrderState.Failed)]
+    [InlineData(RdsCoreKnownOrderState.Error)]
+    public async Task Manual_finish_is_allowed_when_the_order_is_in_an_error_state(RdsCoreKnownOrderState state)
+    {
+        var fixture = ExpertFixture(state, robotCurrentOrderId: null);
         fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
 
         var result = await fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid());
@@ -960,11 +1179,55 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     }
 
     [Fact]
+    public async Task Manual_finish_is_allowed_when_the_robot_itself_reports_an_error()
+    {
+        // The documented precondition is a disjunction: an order that is merely RUNNING
+        // still qualifies when the AGV is the thing reporting the error.
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RobotIsError = true;
+
+        var result = await fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+        Assert.Equal(1, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Manual_finish_accepts_a_blocking_alarm_as_the_robot_error_condition()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RobotAlarms.Add(
+            new RdsParsedAlarm("52201", RdsAlarmSeverity.Error, "blocking", null, 1));
+
+        var result = await fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+    }
+
+    [Fact]
+    public async Task Manual_finish_does_not_treat_a_notice_as_a_robot_error_condition()
+    {
+        // Severity matters: a notice is not "the AGV is reporting an error".
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RobotAlarms.Add(
+            new RdsParsedAlarm("57001", RdsAlarmSeverity.Notice, "param system error", null, 1));
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_STATE_INCOMPATIBLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
     public async Task Manual_finish_is_blocked_when_the_robot_now_runs_a_different_order()
     {
         // The historical agv_id still names this robot, but it has moved on, so
         // finishing "the current block" would advance an unrelated order.
-        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, "SOME-OTHER-ORDER");
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, "SOME-OTHER-ORDER");
 
         var error = await Assert.ThrowsAsync<RdsExecutionException>(
             () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
@@ -976,7 +1239,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     [Fact]
     public async Task Manual_finish_is_blocked_when_no_robot_reports_the_order()
     {
-        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
 
         var error = await Assert.ThrowsAsync<RdsExecutionException>(
             () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
@@ -1001,14 +1264,17 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     [Fact]
     public async Task Manual_finish_is_blocked_when_a_different_robot_executes_the_order()
     {
-        // Telemetry reports the order running on a robot that does not correspond to
-        // the one recorded for this request, in either identity space.
+        // The recorded robot is present and identifiable, but a DIFFERENT robot in the
+        // fleet is the one actually executing the order.
         var fixture = ExpertFixture(
-            RdsCoreKnownOrderState.Running,
+            RdsCoreKnownOrderState.Failed,
             robotCurrentOrderId: null,
-            recordedAgvId: "RECORDED-ROBOT-1",
-            robotIdentity: new RdsRobotIdentity("uuid-of-other", "OTHER-ROBOT-9"));
-        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+            recordedAgvId: "Sfl-Cbd15");
+        fixture.NativeClient.RobotCurrentOrderId = null;
+        fixture.NativeClient.ExtraRobot = new RdsCoreRobotTelemetry(
+            "OTHER-ROBOT-9", "OTHER-ROBOT-9", "map", "st", null, 1, true, false, false, 90.0,
+            0, 0, 0, null, OrderIdOf(fixture), null, [], null,
+            new RdsRobotIdentity("uuid-of-other", "OTHER-ROBOT-9"), false);
 
         var error = await Assert.ThrowsAsync<RdsExecutionException>(
             () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
@@ -1024,7 +1290,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         // dispatch vehicle_id. Same robot, so it must be allowed — and the mutation
         // must target the vehicle-space identifier.
         var fixture = ExpertFixture(
-            RdsCoreKnownOrderState.Running,
+            RdsCoreKnownOrderState.Failed,
             robotCurrentOrderId: null,
             recordedAgvId: "hu-test-1",
             robotIdentity: new RdsRobotIdentity("hu-test-1", "AMB-01"));
@@ -1049,11 +1315,18 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.Equal(1, fixture.NativeClient.RedoCount);
     }
 
-    [Fact]
-    public async Task Redo_is_blocked_when_the_order_has_not_failed()
+    // SEER (docx 3.18, /redoFailedOrder): "Yalnız order durumu FAILED iken etkilidir;
+    // diğer durumlarda komut yok sayılır." FAILED only. Error is a DIFFERENT documented
+    // state ("parametre hatası nedeniyle yürütülemez") and an earlier round wrongly
+    // treated the two as equivalent.
+    [Theory]
+    [InlineData(RdsCoreKnownOrderState.Error)]
+    [InlineData(RdsCoreKnownOrderState.Running)]
+    [InlineData(RdsCoreKnownOrderState.Suspended)]
+    [InlineData(RdsCoreKnownOrderState.Finished)]
+    public async Task Redo_is_blocked_for_every_state_other_than_failed(RdsCoreKnownOrderState state)
     {
-        // Re-running an order that is merely running would duplicate physical work.
-        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        var fixture = ExpertFixture(state, robotCurrentOrderId: null);
         fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
 
         var error = await Assert.ThrowsAsync<RdsExecutionException>(
@@ -1167,11 +1440,16 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     {
         var fixture = Fixture(dispatchEnabled: true);
 
-        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.Resume, ["AGV-01"], null, Guid.NewGuid());
-        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.ClearErrors, ["AGV-01"], null, Guid.NewGuid());
+        // The robot must be identifiable in current telemetry: these are
+        // motion-enabling actions and they take the robot-scoped lease, which cannot
+        // be keyed on a robot RDSCore does not report.
+        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.Resume, ["Sfl-Cbd15"], null, Guid.NewGuid());
+        await fixture.Coordinator.RobotMaintenanceAsync(RdsRobotMaintenanceAction.ClearErrors, ["Sfl-Cbd15"], null, Guid.NewGuid());
 
         Assert.Equal(1, fixture.NativeClient.ResumeCount);
         Assert.Equal(1, fixture.NativeClient.ClearErrorsCount);
+        // And both released their leases.
+        Assert.Equal(0, fixture.Store.RobotLeases.HeldCount);
     }
 
     [Fact]
@@ -1316,6 +1594,18 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             Task.FromResult<IReadOnlyList<Guid>>([]);
         public Task<IRdsExecutionLease?> TryAcquireRequestLeaseAsync(Guid requestId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IRdsExecutionLease?>(LeaseAvailable ? new FakeNativeExecutionLease() : null);
+
+        /// <summary>
+        /// Models the PostgreSQL session advisory lock: exclusive per key, released on
+        /// dispose. Held keys are shared across every store instance created from the
+        /// same registry so two coordinators can contend exactly as two TKG processes
+        /// would. Also records which keys were requested, so a test can prove that two
+        /// identity aliases of one robot resolve to the SAME key.
+        /// </summary>
+        public RobotLeaseRegistry RobotLeases { get; set; } = new();
+
+        public Task<IRdsExecutionLease?> TryAcquireRobotLeaseAsync(string robotLeaseKey, CancellationToken cancellationToken = default) =>
+            Task.FromResult(RobotLeases.TryAcquire(robotLeaseKey));
         public Task<RdsDispatchContext?> GetDispatchContextAsync(Guid requestId, CancellationToken cancellationToken = default) =>
             Task.FromResult<RdsDispatchContext?>(Context with { Request = Request });
         public Task<TransportRequestSnapshot?> FindRequestAsync(Guid requestId, CancellationToken cancellationToken = default) =>
@@ -1445,6 +1735,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
 
         public bool? RobotProcBusiness { get; set; } = false;
         public string? RobotCurrentOrderId { get; set; } = null;
+        public string? RobotCurrentOrderState { get; set; } = null;
+        public Exception? RedoError { get; set; }
         public bool KeepOldMapOnSwitch { get; set; } = false;
         public bool AlarmAfterSwitch { get; set; } = false;
 
@@ -1452,6 +1744,9 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
 
         /// <summary>Lets a test report a uuid that differs from the vehicle id.</summary>
         public RdsRobotIdentity? RobotIdentity { get; set; }
+
+        /// <summary>A second robot in the fleet, for cases needing two distinct robots.</summary>
+        public RdsCoreRobotTelemetry? ExtraRobot { get; set; }
 
         public RdsCoreKnownOrderState DetailsState { get; set; } = RdsCoreKnownOrderState.Waiting;
         public RdsCoreKnownOrderState TransitionOrderState { get; set; } = RdsCoreKnownOrderState.Unknown;
@@ -1497,12 +1792,13 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 95.0,
                 0, 0, 0, null,
                 RobotCurrentOrderId,
-                null,
+                RobotCurrentOrderState,
                 RobotAlarms,
                 RobotLockInfo,
                 RobotIdentity,
                 RobotProcBusiness);
-            return Task.FromResult<IReadOnlyList<RdsCoreRobotTelemetry>>([telemetry]);
+            IReadOnlyList<RdsCoreRobotTelemetry> all = ExtraRobot is null ? [telemetry] : [telemetry, ExtraRobot];
+            return Task.FromResult(all);
         }
 
         public Task<RdsCoreSimpleResult> LockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
@@ -1573,8 +1869,56 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         public Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
         { ManualFinishedCount++; return Ok(); }
         public Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
-        { RedoCount++; return Ok(); }
+        { RedoCount++; if (RedoError is not null) throw RedoError; return Ok(); }
         public Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default)
         { DispatchableCount++; return Ok(); }
+    }
+
+    /// <summary>
+    /// Deterministic stand-in for the distributed robot lease. No sleeps: a test drives
+    /// contention by holding a lease across an awaited barrier.
+    /// </summary>
+    public sealed class RobotLeaseRegistry
+    {
+        private readonly HashSet<string> held = new(StringComparer.Ordinal);
+        private readonly object gate = new();
+
+        public List<string> RequestedKeys { get; } = [];
+
+        public IRdsExecutionLease? TryAcquire(string key)
+        {
+            lock (gate)
+            {
+                RequestedKeys.Add(key);
+                if (string.IsNullOrWhiteSpace(key)) return null;
+                var normalized = key.Trim().ToLowerInvariant();
+                if (!held.Add(normalized)) return null;
+                return new Handle(this, normalized);
+            }
+        }
+
+        public bool IsHeld(string key)
+        {
+            lock (gate) return held.Contains(key.Trim().ToLowerInvariant());
+        }
+
+        public int HeldCount
+        {
+            get { lock (gate) return held.Count; }
+        }
+
+        private void Release(string normalized)
+        {
+            lock (gate) held.Remove(normalized);
+        }
+
+        private sealed class Handle(RobotLeaseRegistry owner, string key) : IRdsExecutionLease
+        {
+            public ValueTask DisposeAsync()
+            {
+                owner.Release(key);
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 }

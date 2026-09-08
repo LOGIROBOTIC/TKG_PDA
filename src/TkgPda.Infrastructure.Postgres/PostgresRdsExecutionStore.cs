@@ -103,10 +103,63 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                 connection);
             command.Parameters.AddWithValue("key", $"tkg:rds:{requestId:D}");
             var acquired = (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
-            return acquired ? new PostgresRdsExecutionLease(connection, requestId) : null;
+            if (acquired)
+            {
+                return new PostgresRdsExecutionLease(connection, requestId);
+            }
+
+            // A contended lease previously returned null without disposing, so the
+            // connection was never returned to the pool.
+            await connection.DisposeAsync();
+            return null;
         }
         catch
         {
+            await connection.DisposeAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Robot-scoped sibling of <see cref="TryAcquireRequestLeaseAsync"/>, using the
+    /// same proven primitive: a SESSION-level advisory lock held on a dedicated
+    /// connection for the whole critical section, so the lock outlives any transaction
+    /// inside it and is still held while the RDS call is made. A transaction-scoped
+    /// advisory lock would be released at commit, before the mutation.
+    ///
+    /// The key string carries its own namespace prefix ("tkg:robot:" rather than
+    /// "tkg:rds:"), so a robot key can never collide with a request key even if a
+    /// robot were somehow named like a GUID.
+    /// </summary>
+    public async Task<IRdsExecutionLease?> TryAcquireRobotLeaseAsync(string robotLeaseKey, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(robotLeaseKey))
+        {
+            // Fail closed: an unidentifiable robot must not silently proceed unlocked.
+            return null;
+        }
+
+        var key = $"tkg:robot:{robotLeaseKey.Trim().ToLowerInvariant()}";
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = new NpgsqlCommand(
+                "SELECT pg_try_advisory_lock(hashtextextended(@key, 0))",
+                connection);
+            command.Parameters.AddWithValue("key", key);
+            var acquired = (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
+            if (acquired)
+            {
+                return new PostgresRdsAdvisoryLease(connection, key);
+            }
+
+            await connection.DisposeAsync();
+            return null;
+        }
+        catch
+        {
+            // Includes cancellation: the connection is returned to the pool without a
+            // dangling session lock.
             await connection.DisposeAsync();
             throw;
         }
@@ -677,6 +730,35 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
 
     private static void AddNullableText(NpgsqlCommand command, string name, string? value) =>
         command.Parameters.AddWithValue(name, (object?)value ?? DBNull.Value);
+
+    /// <summary>
+    /// Session advisory lease over a pre-computed key string. Release and connection
+    /// disposal both happen on dispose, with disposal in a finally so a failed unlock
+    /// still returns the connection; dropping the session would release the lock
+    /// anyway, so the lock cannot outlive the connection either way.
+    /// </summary>
+    private sealed class PostgresRdsAdvisoryLease(NpgsqlConnection connection, string key) : IRdsExecutionLease
+    {
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await using var command = new NpgsqlCommand(
+                    "SELECT pg_advisory_unlock(hashtextextended(@key, 0))",
+                    connection);
+                command.Parameters.AddWithValue("key", key);
+                await command.ExecuteScalarAsync();
+            }
+            catch
+            {
+                // Disposing the connection ends the session, which releases the lock.
+            }
+            finally
+            {
+                await connection.DisposeAsync();
+            }
+        }
+    }
 
     private sealed class PostgresRdsExecutionLease(NpgsqlConnection connection, Guid requestId) : IRdsExecutionLease
     {

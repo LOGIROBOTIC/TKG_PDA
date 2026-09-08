@@ -448,11 +448,26 @@ public sealed record RdsCoreRobotTelemetry(
     public bool HasBlockingAlarm => Alarms.Any(alarm => alarm.IsBlocking);
 
     /// <summary>
-    /// Documented SEER idle test. False when the robot is running business work AND
-    /// when <c>procBusiness</c> is absent, so an unknown business state can never
-    /// authorise an automatic recovery mutation.
+    /// True unless SEER positively reports that no user-submitted order is running.
+    ///
+    /// DOCUMENTATION AMBIGUITY — read this before using it as an idle test. The DOCX
+    /// field table defines <c>procBusiness</c> only as "Kullanıcı tarafından gönderilen
+    /// order'ı yürütüyor mu" (is it executing a user-submitted order), and
+    /// RdsCustomProjectTutorial_en.md:350 gives idle as the CONJUNCTION
+    /// <c>dispatchable == true &amp;&amp; procBusiness == false</c>. Neither states that
+    /// <c>procBusiness == false</c> ALONE means idle, and the conjunction is unusable
+    /// as written during lock recovery because holding a lock is itself a reason for
+    /// <c>dispatchable</c> to be false. SEER documents no caller-owned-lock recovery
+    /// predicate at all.
+    ///
+    /// So this property is deliberately named for what it can prove — the absence of a
+    /// positive "no user order" report — and is used only as ONE necessary negative
+    /// condition. It is never treated as sufficient proof of idle: the actual evidence
+    /// that nothing is executing comes from the order-state checks alongside it.
+    /// True for <c>procBusiness == true</c> and also for null/absent, so an unknown
+    /// business state fails closed.
     /// </summary>
-    public bool IsBusinessIdle => ProcBusiness == false;
+    public bool MayBeExecutingBusinessWork => ProcBusiness != false;
 }
 
 public interface IRdsCoreNativeOrderClient

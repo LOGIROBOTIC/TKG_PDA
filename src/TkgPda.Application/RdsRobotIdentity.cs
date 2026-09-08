@@ -42,6 +42,25 @@ public sealed record RdsRobotIdentity(string? Uuid, string? VehicleId)
     public bool HasValue => MutationTarget is not null;
 
     /// <summary>
+    /// The key under which TKG serialises its OWN operations against one physical
+    /// robot. This is a TKG concept, not a SEER one, and it is deliberately separate
+    /// from <see cref="MutationTarget"/> and <see cref="DiscoveryKey"/> even though it
+    /// currently resolves the same way as the former: those two answer "what does this
+    /// SEER endpoint want?", while this one answers "which distributed lease covers
+    /// this robot?". Keeping it distinct means a future endpoint-contract change cannot
+    /// silently split the lease domain.
+    ///
+    /// The one hard requirement is that two aliases of the SAME robot must never
+    /// produce two different leases. Every caller must therefore resolve the identity
+    /// from telemetry first (see
+    /// <see cref="ResolveRobotLeaseKeyAsync"/> on the coordinator), so that a caller
+    /// holding only a uuid and a caller holding only a vehicle_id both arrive at the
+    /// same value. Null when neither space is populated, which callers must treat as
+    /// fail-closed for a safety-critical mutation rather than as "no lock needed".
+    /// </summary>
+    public string? RobotLeaseKey => Normalize(VehicleId) ?? Normalize(Uuid);
+
+    /// <summary>
     /// True when <paramref name="candidate"/> names this robot in EITHER identity
     /// space. Correlation inputs — audit lock fingerprints, task-template
     /// <c>vehicle</c> values, navigation profiles — may have been recorded in

@@ -36,17 +36,35 @@ public sealed record RdsParsedAlarm(
 /// "robot has a blocking alarm" gate could not fire. Having one parser is what stops
 /// the two from drifting apart again.
 ///
-/// ENVELOPES (both documented, buckets are direct properties, always plural):
-///   core level  — siblings of "report" on the response root
-///                 (RdsScriptMethods_en.md:1040-1058)
-///   robot level — inside each report[] entry's "rbk_report"
-///                 (RdsScriptMethods_en.md:1135-1136, 1166, 1195)
+/// ENVELOPES. Buckets are always plural (fatals/errors/warnings/notices) and appear
+/// BOTH directly on a status object AND nested under an "alarms" wrapper. The single
+/// documented /robotsStatus response carries both forms at once, so neither may be
+/// dropped in favour of the other:
+///
+///   root, wrapped     alarms.{fatals,errors,warnings,notices}
+///                     SEER_RDSCore_HTTP_API_Turkce_Ceviri_Tam.docx (extracted L4052)
+///   root, direct      {fatals,errors,warnings,notices} as siblings of "alarms"
+///                     same response, extracted L4079; RdsScriptMethods_en.md:1040-1058
+///   robot, wrapped    report[].rbk_report.alarms.{...}
+///                     docx extracted L4236 and L4427; the documented query path
+///                     GET /robotsStatus?paths=report.rbk_report.alarms,report.vehicle_id
+///                     (docx extracted L3593) returns exactly this shape
+///   robot, direct     report[].rbk_report.{fatals,errors,...}
+///                     RdsScriptMethods_en.md:1135-1136, 1166, 1195
+///
+/// A wrapped bucket may be JSON null rather than an empty array (docx L4443:
+/// "alarms":{"errors":null,"fatals":null,"notices":null,"warnings":null}), which is
+/// simply "no alarms" and must not throw.
+///
+/// A previous round concluded the "alarms" wrapper was undocumented because grep over
+/// the Markdown files under RDS DÖKÜMANLARI/ found no hit. That was a search error,
+/// not evidence: the authoritative DOCX in the repository root documents it plainly.
 ///
 /// ENTRY SHAPES (both documented, both occur):
 ///   A explicit code     { "code": 52201, "desc": "...", "times": 1, "timestamp": ... }
-///                       (RdsScriptMethods_en.md:890-901)
+///                       docx L4054-4058; RdsScriptMethods_en.md:890-901
 ///   B dynamically keyed { "55001": 1634020734, "desc": "...", "times": 1 }
-///                       (RdsScriptMethods_en.md:1044-1056, 1195-1200)
+///                       docx L4079-4083; RdsScriptMethods_en.md:1044-1056, 1195-1200
 ///   In shape B the alarm code is the property NAME and its value is the occurrence
 ///   timestamp, so a parser requiring a "code" property silently drops every entry.
 ///
@@ -68,7 +86,8 @@ public static class RdsRobotAlarmParser
         { "code", "desc", "description", "times", "time", "timestamp", "level", "severity" };
 
     /// <summary>
-    /// Parses every documented bucket found directly on <paramref name="container"/>.
+    /// Parses every documented bucket on <paramref name="container"/>, both the direct
+    /// form and the "alarms" wrapper, because a single documented response carries both.
     /// Entries are deduplicated on (severity, code) across repeated calls, so the same
     /// alarm appearing in two envelopes is reported once. A malformed entry is skipped
     /// individually — it never discards the rest of the bucket or the robot snapshot.
@@ -79,6 +98,18 @@ public static class RdsRobotAlarmParser
         ArgumentNullException.ThrowIfNull(seen);
         if (container.ValueKind != JsonValueKind.Object) return;
 
+        AppendBuckets(into, container, seen);
+
+        // The wrapped form. Not an alternative to the direct form — the documented
+        // /robotsStatus response has "alarms" and the bare buckets side by side.
+        if (container.TryGetProperty("alarms", out var wrapper) && wrapper.ValueKind == JsonValueKind.Object)
+        {
+            AppendBuckets(into, wrapper, seen);
+        }
+    }
+
+    private static void AppendBuckets(List<RdsParsedAlarm> into, JsonElement container, HashSet<string> seen)
+    {
         foreach (var (bucketName, severity) in Buckets)
         {
             if (!container.TryGetProperty(bucketName, out var bucket) || bucket.ValueKind != JsonValueKind.Array)

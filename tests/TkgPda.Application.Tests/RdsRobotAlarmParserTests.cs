@@ -5,11 +5,18 @@ using Xunit;
 namespace TkgPda.Application.Tests;
 
 /// <summary>
-/// Fixtures here are copied from the shapes in RDS DÖKÜMANLARI/RdsScriptMethods/
-/// RdsScriptMethods_en.md rather than invented, because the native telemetry parser
-/// previously read "alarms.fatals" and "rbk_report.alarms.fatals" — paths that appear
-/// nowhere in the SEER documentation — and its unit test used a matching invented
-/// payload, so both agreed with each other and neither agreed with the robot.
+/// Fixtures here are copied from real documented payloads rather than invented, in
+/// two sources: RDS DÖKÜMANLARI/RdsScriptMethods/RdsScriptMethods_en.md for the bare
+/// buckets, and SEER_RDSCore_HTTP_API_Turkce_Ceviri_Tam.docx for the "alarms" wrapper.
+///
+/// Both parser bugs this file guards against came from trusting a narrow search
+/// instead of the documentation. First the native telemetry parser read
+/// "alarms.fatals" while its unit test used a matching invented payload, so parser and
+/// test agreed with each other and neither agreed with the robot. Then the correction
+/// over-swung: a grep across only the Markdown files found no "alarms" wrapper, so it
+/// was declared undocumented and dropped — while the authoritative DOCX documents it
+/// plainly, and the documented /robotsStatus response in fact carries the wrapper and
+/// the bare buckets side by side.
 ///
 /// Every assertion checks the extracted code AND the preserved severity. Asserting
 /// only "some alarm was found" is what allowed a notice to behave like a fatal.
@@ -181,6 +188,164 @@ public sealed class RdsRobotAlarmParserTests
     public void Empty_absent_or_unusable_buckets_yield_no_alarms(string json)
     {
         Assert.Empty(ParseRobot(json));
+    }
+
+    // ------------------------------------------------------------------
+    // The "alarms" WRAPPER, from the authoritative DOCX
+    // (SEER_RDSCore_HTTP_API_Turkce_Ceviri_Tam.docx). A previous round declared this
+    // undocumented after grepping only the Markdown files — a search error. The
+    // documented /robotsStatus response carries the wrapper AND the bare buckets at
+    // the same time, so both must parse.
+    // ------------------------------------------------------------------
+
+    // A — root "alarms" wrapper, shape A, fatal.
+    [Fact]
+    public void Root_alarms_wrapper_parses_fatal_with_shape_a()
+    {
+        var alarms = ParseContainer(
+            """
+            {
+              "alarms": {
+                "errors": [],
+                "fatals": [{ "code": 52101, "desc": "2000-1, have no charge point in map.", "times": 1, "timestamp": 1635409588 }],
+                "notices": [],
+                "warnings": []
+              }
+            }
+            """);
+
+        var alarm = Assert.Single(alarms);
+        Assert.Equal("52101", alarm.Code);
+        Assert.Equal(RdsAlarmSeverity.Fatal, alarm.Severity);
+        Assert.True(alarm.IsBlocking);
+    }
+
+    // B — root "alarms" wrapper, shape B, error.
+    [Fact]
+    public void Root_alarms_wrapper_parses_error_with_shape_b()
+    {
+        var alarms = ParseContainer(
+            """
+            { "alarms": { "errors": [{ "52101": 1631943095, "desc": "no charge point.", "times": 1 }] } }
+            """);
+
+        var alarm = Assert.Single(alarms);
+        Assert.Equal("52101", alarm.Code);
+        Assert.Equal(RdsAlarmSeverity.Error, alarm.Severity);
+        Assert.True(alarm.IsBlocking);
+        Assert.Equal("1631943095", alarm.OccurredAt);
+    }
+
+    // C/D — wrapper warning and notice must stay non-blocking.
+    [Theory]
+    [InlineData("warnings", RdsAlarmSeverity.Warning)]
+    [InlineData("notices", RdsAlarmSeverity.Notice)]
+    public void Root_alarms_wrapper_keeps_non_blocking_severities(string bucket, RdsAlarmSeverity expected)
+    {
+        var alarms = ParseContainer(
+            $$"""
+            { "alarms": { "{{bucket}}": [{ "code": 55001, "desc": "dispatching state.", "times": 1, "timestamp": 1635391533 }] } }
+            """);
+
+        var alarm = Assert.Single(alarms);
+        Assert.Equal(expected, alarm.Severity);
+        Assert.False(alarm.IsBlocking);
+    }
+
+    // E-H — report[].rbk_report.alarms, the exact shape the documented query
+    // GET /robotsStatus?paths=report.rbk_report.alarms,report.vehicle_id returns.
+    [Theory]
+    [InlineData("fatals", RdsAlarmSeverity.Fatal, true)]
+    [InlineData("errors", RdsAlarmSeverity.Error, true)]
+    [InlineData("warnings", RdsAlarmSeverity.Warning, false)]
+    [InlineData("notices", RdsAlarmSeverity.Notice, false)]
+    public void Rbk_report_alarms_wrapper_parses_every_severity(string bucket, RdsAlarmSeverity expected, bool blocking)
+    {
+        var alarms = ParseRobot(
+            $$"""
+            {
+              "rbk_report": {
+                "alarms": { "{{bucket}}": [{ "code": 57001, "desc": "param system error", "times": 1, "timestamp": 1635391520 }] }
+              },
+              "vehicle_id": "RD-TEST-2"
+            }
+            """);
+
+        var alarm = Assert.Single(alarms);
+        Assert.Equal("57001", alarm.Code);
+        Assert.Equal(expected, alarm.Severity);
+        Assert.Equal(blocking, alarm.IsBlocking);
+    }
+
+    // K — the documented null-bucket form must be "no alarms", not a throw.
+    [Fact]
+    public void Rbk_report_alarms_wrapper_tolerates_null_buckets()
+    {
+        var alarms = ParseRobot(
+            """
+            {
+              "rbk_report": { "alarms": { "errors": null, "fatals": null, "notices": null, "warnings": null } },
+              "vehicle_id": "sim_02"
+            }
+            """);
+
+        Assert.Empty(alarms);
+    }
+
+    // I — the wrapper and the bare buckets coexist in the documented response, and a
+    // real payload must yield BOTH, never one silently replacing the other.
+    [Fact]
+    public void Wrapper_and_direct_buckets_coexist_exactly_as_documented()
+    {
+        var alarms = ParseContainer(
+            """
+            {
+              "alarms": {
+                "errors": [{ "code": 52101, "desc": "wrapped shape A", "times": 1, "timestamp": 1635409588 }],
+                "fatals": [], "notices": [], "warnings": []
+              },
+              "errors": [{ "52103": 1631943027, "desc": "direct shape B", "times": 1 }]
+            }
+            """);
+
+        Assert.Equal(2, alarms.Count);
+        Assert.Contains(alarms, a => a.Code == "52101" && a.Severity == RdsAlarmSeverity.Error);
+        Assert.Contains(alarms, a => a.Code == "52103" && a.Severity == RdsAlarmSeverity.Error);
+    }
+
+    // J — a malformed sibling inside the wrapper must not discard the valid fatal.
+    [Fact]
+    public void A_malformed_entry_in_the_wrapper_does_not_discard_a_valid_fatal()
+    {
+        var alarms = ParseRobot(
+            """
+            {
+              "rbk_report": {
+                "alarms": {
+                  "fatals": ["not-an-object", null, { "desc": "no code" }, { "code": 52101, "desc": "real", "times": 1 }]
+                }
+              }
+            }
+            """);
+
+        var alarm = Assert.Single(alarms);
+        Assert.Equal("52101", alarm.Code);
+        Assert.True(alarm.IsBlocking);
+    }
+
+    // M — the same alarm reported in both the wrapper and the direct bucket is one alarm.
+    [Fact]
+    public void A_duplicate_across_wrapper_and_direct_bucket_is_reported_once()
+    {
+        var alarms = ParseContainer(
+            """
+            {
+              "alarms": { "errors": [{ "code": 52101, "desc": "d", "times": 1 }] },
+              "errors": [{ "code": 52101, "desc": "d", "times": 1 }]
+            }
+            """);
+
+        Assert.Single(alarms);
     }
 
     [Fact]

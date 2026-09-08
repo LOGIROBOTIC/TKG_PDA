@@ -494,7 +494,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         fixture.NativeClient.CurrentRobotStation = "SM11";
         fixture.NativeClient.TransitionOrderState = RdsCoreKnownOrderState.Finished;
         fixture.NativeClient.RobotIsError = true;
-        fixture.NativeClient.RobotAlarms.Add("BLOCKING_SENSOR_FAULT");
+        fixture.NativeClient.RobotAlarms.Add(new RdsParsedAlarm("52201", RdsAlarmSeverity.Error, "blocking sensor fault", null, 1));
         fixture.Store.NavigationProfileSummary = new(
             Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
 
@@ -572,6 +572,125 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.False(result.Dispatched);
         Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
         Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    // ---------------------------------------------------------------------
+    // Correlation proves the lock is OURS. It does not prove that releasing it is
+    // SAFE right now. The blocking-alarm and incompatible-order checks used to run
+    // AFTER the recovery /unlock had already been issued, and procBusiness was never
+    // consulted at all. Every one of these cases must reach UnlockCount == 0.
+    // ---------------------------------------------------------------------
+
+    /// <summary>A correlated lock on an idle, quiet robot: recovery is allowed.</summary>
+    private static void ArrangeCorrelatedRecovery(NativeTestFixture fixture, RdsCoreRobotLockInfo lockInfo)
+    {
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = lockInfo;
+        fixture.NativeClient.RobotProcBusiness = false;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(
+            true, "Sfl-Cbd15", "26.7.2026_map_optimak_1", lockInfo);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+    }
+
+    private static RdsCoreRobotLockInfo TkgLock() =>
+        new(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_robot_runs_an_incompatible_order()
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        // Fingerprint, robot and map all correlate, but the robot is actively running
+        // somebody else's order. Unlocking underneath it is unsafe.
+        fixture.NativeClient.RobotCurrentOrderId = "SOME-OTHER-ACTIVE-ORDER";
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_robot_has_a_blocking_alarm()
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        fixture.NativeClient.RobotAlarms.Add(
+            new RdsParsedAlarm("52201", RdsAlarmSeverity.Error, "blocking fault", null, 1));
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_robot_is_executing_business_work()
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        // SEER documents idle as dispatchable && !procBusiness. procBusiness == true
+        // means the robot is running a business waybill.
+        fixture.NativeClient.RobotProcBusiness = true;
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_fails_closed_when_business_state_is_unknown()
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        // procBusiness absent from telemetry: UNKNOWN, never assumed idle.
+        fixture.NativeClient.RobotProcBusiness = null;
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_live_fingerprint_is_external()
+    {
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        // The robot is locked, but by somebody else: a different host, session and
+        // acquisition time. The recorded TKG fingerprint cannot correlate with it.
+        fixture.NativeClient.RobotLockInfo =
+            new RdsCoreRobotLockInfo(true, "192.168.9.9", "ENGINEER-LAPTOP", 61111, "1699999999", 255, "external");
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_still_succeeds_on_a_correlated_idle_robot()
+    {
+        // The counterpart to the blocked cases: with every safety condition met the
+        // unlock happens exactly once and dispatch proceeds. Without this the tests
+        // above could pass simply because recovery never runs.
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.True(result.Dispatched);
+        Assert.Equal(1, fixture.NativeClient.UnlockCount);
     }
 
     [Fact]
@@ -802,6 +921,174 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
     // operations that START, RESUME, RE-ENABLE or ADVANCE physical work, while
     // still permitting the safety-reducing ones.
     // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
+    // manualFinished / redoFailedOrder are VEHICLE-scoped: they act on whatever the
+    // named robot is doing right now. A historical integration.rds_tasks.agv_id is
+    // therefore not authority for them. Every blocked case below must reach a zero
+    // call count on the adapter.
+    // ---------------------------------------------------------------------
+
+    private static NativeTestFixture ExpertFixture(
+        RdsCoreKnownOrderState orderState,
+        string? robotCurrentOrderId,
+        string recordedAgvId = "Sfl-Cbd15",
+        RdsRobotIdentity? robotIdentity = null)
+    {
+        var fixture = Fixture(
+            requestStatus: TransportRequestStatus.SentToRds,
+            activeTaskStatus: TransportRequestStatus.SentToRds);
+        fixture.Store.TaskProjection = fixture.Store.TaskProjection! with { AgvId = recordedAgvId };
+        fixture.NativeClient.DetailsState = orderState;
+        fixture.NativeClient.RobotCurrentOrderId = robotCurrentOrderId;
+        fixture.NativeClient.RobotIdentity = robotIdentity;
+        return fixture;
+    }
+
+    private static string OrderIdOf(NativeTestFixture fixture) => fixture.Store.TaskProjection!.TaskRecordId;
+
+    [Fact]
+    public async Task Manual_finish_is_allowed_when_the_robot_is_currently_running_that_order()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var result = await fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+        Assert.Equal(1, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Manual_finish_is_blocked_when_the_robot_now_runs_a_different_order()
+    {
+        // The historical agv_id still names this robot, but it has moved on, so
+        // finishing "the current block" would advance an unrelated order.
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, "SOME-OTHER-ORDER");
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_NOT_CURRENTLY_EXECUTING", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Manual_finish_is_blocked_when_no_robot_reports_the_order()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_NOT_CURRENTLY_EXECUTING", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Manual_finish_is_blocked_when_the_order_is_terminal()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Finished, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_STATE_INCOMPATIBLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Manual_finish_is_blocked_when_a_different_robot_executes_the_order()
+    {
+        // Telemetry reports the order running on a robot that does not correspond to
+        // the one recorded for this request, in either identity space.
+        var fixture = ExpertFixture(
+            RdsCoreKnownOrderState.Running,
+            robotCurrentOrderId: null,
+            recordedAgvId: "RECORDED-ROBOT-1",
+            robotIdentity: new RdsRobotIdentity("uuid-of-other", "OTHER-ROBOT-9"));
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ROBOT_MISMATCH", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Manual_finish_corroborates_across_identity_spaces()
+    {
+        // The recorded agv_id is the internal uuid while telemetry reports the
+        // dispatch vehicle_id. Same robot, so it must be allowed — and the mutation
+        // must target the vehicle-space identifier.
+        var fixture = ExpertFixture(
+            RdsCoreKnownOrderState.Running,
+            robotCurrentOrderId: null,
+            recordedAgvId: "hu-test-1",
+            robotIdentity: new RdsRobotIdentity("hu-test-1", "AMB-01"));
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var result = await fixture.Coordinator.ManualFinishAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+        Assert.Equal("AMB-01", result.Vehicle);
+        Assert.Equal(1, fixture.NativeClient.ManualFinishedCount);
+    }
+
+    [Fact]
+    public async Task Redo_is_allowed_only_for_a_currently_failed_order()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var result = await fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+        Assert.Equal(1, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task Redo_is_blocked_when_the_order_has_not_failed()
+    {
+        // Re-running an order that is merely running would duplicate physical work.
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Running, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_STATE_INCOMPATIBLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task Redo_is_blocked_when_the_robot_now_runs_a_different_order()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, "SOME-OTHER-ORDER");
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ORDER_NOT_CURRENTLY_EXECUTING", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task Expert_actions_are_blocked_when_current_rds_evidence_cannot_be_read()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.RobotsStatusError =
+            new RdsCoreNativeOrderException("RDSCORE_UNAVAILABLE", "core down");
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_CURRENT_STATE_UNAVAILABLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
 
     [Fact]
     public async Task Gate_closed_blocks_manual_finish_redo_and_priority()
@@ -1154,7 +1441,9 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         public int RobotConnectionStatus { get; set; } = 1;
         public bool RobotDispatchable { get; set; } = true;
         public bool RobotIsError { get; set; } = false;
-        public List<string> RobotAlarms { get; set; } = [];
+        public List<RdsParsedAlarm> RobotAlarms { get; set; } = [];
+
+        public bool? RobotProcBusiness { get; set; } = false;
         public string? RobotCurrentOrderId { get; set; } = null;
         public bool KeepOldMapOnSwitch { get; set; } = false;
         public bool AlarmAfterSwitch { get; set; } = false;
@@ -1211,7 +1500,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 null,
                 RobotAlarms,
                 RobotLockInfo,
-                RobotIdentity);
+                RobotIdentity,
+                RobotProcBusiness);
             return Task.FromResult<IReadOnlyList<RdsCoreRobotTelemetry>>([telemetry]);
         }
 
@@ -1245,7 +1535,7 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
             if (AlarmAfterSwitch)
             {
                 RobotIsError = true;
-                RobotAlarms.Add("LOCALIZATION_LOST");
+                RobotAlarms.Add(new RdsParsedAlarm("52102", RdsAlarmSeverity.Error, "localization lost", null, 1));
             }
             return Task.FromResult(new RdsCoreSimpleResult(true, true, 200, 0, "ok", JsonDocument.Parse("{}").RootElement));
         }

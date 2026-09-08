@@ -636,6 +636,103 @@ public sealed class RdsExecutionCoordinator(
         return (request, task);
     }
 
+    /// <summary>
+    /// Live corroboration for a vehicle-scoped expert mutation.
+    ///
+    /// <c>/manualFinished</c> and <c>/redoFailedOrder</c> act on whatever the named
+    /// robot is doing RIGHT NOW. <see cref="ResolveExpertTargetAsync"/> proves only
+    /// historical facts — a TransportRequest, a persisted integration.rds_tasks row
+    /// and the agv_id recorded at dispatch time — and a historical mapping is not
+    /// authority for a physical mutation. If the robot has since moved on, acting on
+    /// the recorded agv_id advances or re-runs an unrelated order.
+    ///
+    /// So the vehicle is re-derived from CURRENT telemetry: the order identity comes
+    /// from the persisted task (never the caller), the order must currently be in one
+    /// of <paramref name="allowedStates"/>, and exactly one robot must currently be
+    /// executing that order. Matching uses <see cref="RdsRobotIdentity"/>, so a
+    /// recorded uuid still corroborates telemetry reporting a vehicle_id. Missing,
+    /// ambiguous or contradictory evidence fails closed.
+    /// </summary>
+    private async Task<(RdsTaskProjection Task, string Vehicle)> ResolveCurrentExecutionTargetAsync(
+        Guid requestId,
+        IReadOnlyCollection<RdsCoreKnownOrderState> allowedStates,
+        string operation,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
+
+        RdsCoreOrderDetails details;
+        try
+        {
+            details = await nativeOrderClient!.GetOrderDetailsAsync(task.TaskRecordId, correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException error)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                $"Current RDS state for order '{task.TaskRecordId}' could not be read, so {operation} is refused.",
+                error);
+        }
+
+        if (!allowedStates.Contains(details.State.Known))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ORDER_STATE_INCOMPATIBLE",
+                $"Order '{task.TaskRecordId}' is {details.State.Known.ToString().ToUpperInvariant()}, which is not a legal state for {operation}.");
+        }
+
+        IReadOnlyList<RdsCoreRobotTelemetry> robots;
+        try
+        {
+            robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException error)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                $"Current robot telemetry could not be read, so {operation} is refused.",
+                error);
+        }
+
+        // The robot that is executing THIS order right now — not the one that was
+        // assigned when the order was dispatched.
+        var executing = robots
+            .Where(robot => !string.IsNullOrWhiteSpace(robot.CurrentOrderId)
+                            && string.Equals(robot.CurrentOrderId, task.TaskRecordId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (executing.Length != 1)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ORDER_NOT_CURRENTLY_EXECUTING",
+                executing.Length == 0
+                    ? $"No robot is currently executing order '{task.TaskRecordId}', so {operation} is refused."
+                    : $"Order '{task.TaskRecordId}' is reported by more than one robot, so {operation} is refused.");
+        }
+
+        var robotNow = executing[0];
+
+        // The recorded assignment must still agree with live telemetry, compared
+        // across identity spaces rather than by raw string equality.
+        if (!robotNow.ResolvedIdentity.Matches(task.AgvId))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ROBOT_MISMATCH",
+                $"Order '{task.TaskRecordId}' is currently executing on a different robot than the one recorded for this request, so {operation} is refused.");
+        }
+
+        var vehicle = robotNow.ResolvedIdentity.MutationTarget;
+        if (string.IsNullOrWhiteSpace(vehicle))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ROBOT_MISMATCH",
+                $"The robot executing order '{task.TaskRecordId}' reports no usable vehicle identity, so {operation} is refused.");
+        }
+
+        return (task, vehicle);
+    }
+
     private void EnsureNativeExpertActionAvailable()
     {
         if (nativeOrderClient is null || !IsNativeMode)
@@ -708,15 +805,21 @@ public sealed class RdsExecutionCoordinator(
         // so this starts physical work and is gated.
         EnsureMutationAllowed(RdsMutationClass.MotionEnabling, "/manualFinished");
         EnsureNativeExpertActionAvailable();
-        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
-        var vehicle = task.AgvId!;
+        // Advancing the current block only makes sense while the order is actually
+        // under way. A terminal order has no current block to finish.
+        var (task, vehicle) = await ResolveCurrentExecutionTargetAsync(
+            requestId,
+            [RdsCoreKnownOrderState.Running, RdsCoreKnownOrderState.Suspended, RdsCoreKnownOrderState.Waiting],
+            "manual finish",
+            correlationId,
+            cancellationToken);
 
         var result = await nativeOrderClient!.ManualFinishedAsync([vehicle], correlationId, cancellationToken);
         await store.WriteExecutionAuditAsync(
             requestId,
             "RDS_EXPERT_MANUAL_FINISH",
             result.CoreAccepted ? "ACCEPTED" : "REJECTED",
-            $"Manual finish targeted the RDS-assigned vehicle '{vehicle}' for task '{task.TaskRecordId}'.",
+            $"Manual finish targeted vehicle '{vehicle}', corroborated as currently executing order '{task.TaskRecordId}'.",
             correlationId,
             cancellationToken);
 
@@ -731,15 +834,21 @@ public sealed class RdsExecutionCoordinator(
         // Re-running a failed block re-dispatches physical work.
         EnsureMutationAllowed(RdsMutationClass.MotionEnabling, "/redoFailedOrder");
         EnsureNativeExpertActionAvailable();
-        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
-        var vehicle = task.AgvId!;
+        // Redo re-runs a FAILED order. Requiring that state is the whole safety
+        // argument: re-running an order that is merely running would duplicate work.
+        var (task, vehicle) = await ResolveCurrentExecutionTargetAsync(
+            requestId,
+            [RdsCoreKnownOrderState.Failed, RdsCoreKnownOrderState.Error],
+            "redo failed order",
+            correlationId,
+            cancellationToken);
 
         var result = await nativeOrderClient!.RedoFailedOrderAsync([vehicle], correlationId, cancellationToken);
         await store.WriteExecutionAuditAsync(
             requestId,
             "RDS_EXPERT_REDO_FAILED",
             result.CoreAccepted ? "ACCEPTED" : "REJECTED",
-            $"Redo failed order targeted the RDS-assigned vehicle '{vehicle}' for task '{task.TaskRecordId}'.",
+            $"Redo failed order targeted vehicle '{vehicle}', corroborated as currently executing failed order '{task.TaskRecordId}'.",
             correlationId,
             cancellationToken);
 
@@ -950,6 +1059,10 @@ public sealed class RdsExecutionCoordinator(
         var recordedMapMatches = !string.IsNullOrWhiteSpace(lockSnapshot?.TargetMap)
                                  && string.Equals(lockSnapshot!.TargetMap!.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase);
 
+        // Needed by the recovery eligibility check below as well as by the normal
+        // transition flow, so it is resolved before either uses it.
+        var mapPrepOrderId = RdsCoreNormalOrder.TransitionOrderId(requestId, requiredMap);
+
         var isLockCorrelated = hasUnreleasedLock
                                && recordedVehicleMatches
                                && recordedMapMatches
@@ -974,13 +1087,67 @@ public sealed class RdsExecutionCoordinator(
             }
             else
             {
-                // Robot is still locked, not dispatchable, or lock_info is unavailable
-                // Only perform automatic recovery /unlock when:
-                // 1. TKG has an unreleased map-prep lock record
-                // 2. Robot is currently locked
-                // 3. Current lock_info can be correlated with the lock_info captured by TKG
-                // 4. Current map / orchestration state makes unlock safe (current_map == requiredMap)
-                if (isLockCorrelated && string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+                // Robot is still locked, not dispatchable, or lock_info is unavailable.
+                //
+                // Automatic /unlock is a physical mutation on a robot TKG believes it
+                // left locked. Correlation proves the lock is OURS; it does not prove
+                // that releasing it right now is SAFE. Ownership and safety are
+                // separate questions and both must be answered BEFORE the adapter
+                // call — previously the blocking-alarm and incompatible-order checks
+                // sat further down this method and so ran only AFTER the unlock had
+                // already been issued.
+                //
+                // Every condition is evaluated here, and the adapter call is last:
+                //   A recovery record exists for this request      hasUnreleasedLock
+                //   B the record names this robot                  recordedVehicleMatches
+                //   C the record targets the map being prepared    recordedMapMatches
+                //   D the robot currently reports itself locked    robotReportsLocked
+                //   E the live lock fingerprint correlates         CorrelatesWith
+                //   F the robot is on the required map now         currentMapMatches
+                //   G no incompatible order is active              !hasIncompatibleOrder
+                //   H no blocking (fatal/error) alarm              !HasBlockingAlarm
+                //   I business state is documented-idle            IsBusinessIdle
+                // A/B/C/E are folded into isLockCorrelated above.
+                var currentMapMatches = string.Equals(
+                    robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase);
+                var robotReportsLocked = robot.LockInfo?.Locked == true;
+                // An order belonging to this request or to its own map-prep transition
+                // is not "incompatible" — anything else the robot is actively running is.
+                var hasIncompatibleOrder = IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState)
+                    && !string.Equals(robot.CurrentOrderId, taskRecordId, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase);
+                // SEER documents idle as `dispatchable == true && procBusiness == false`
+                // (RdsCustomProjectTutorial_en.md:350). IsBusinessIdle is false both when
+                // the robot is running business work and when procBusiness is absent, so
+                // an unknown business state fails closed rather than authorising a
+                // physical unlock.
+                var recoveryEligible = isLockCorrelated
+                    && currentMapMatches
+                    && robotReportsLocked
+                    && !hasIncompatibleOrder
+                    && !robot.HasBlockingAlarm
+                    && robot.IsBusinessIdle;
+
+                if (!recoveryEligible && isLockCorrelated)
+                {
+                    // The lock is ours but the runtime state forbids touching it now.
+                    // Recorded so a commissioning engineer can see why recovery stalled.
+                    var blockingReason = !currentMapMatches ? "MAP_MISMATCH"
+                        : !robotReportsLocked ? "ROBOT_NOT_LOCKED"
+                        : hasIncompatibleOrder ? "INCOMPATIBLE_ACTIVE_ORDER"
+                        : robot.HasBlockingAlarm ? "BLOCKING_ALARM"
+                        : robot.ProcBusiness is null ? "BUSINESS_STATE_UNKNOWN"
+                        : "BUSINESS_BUSY";
+                    await store.WriteExecutionAuditAsync(
+                        requestId,
+                        "MAP_PREP_BLOCKED",
+                        "LOCK_RECOVERY_UNSAFE",
+                        $"Correlated map-switch lock on '{vehicle}' was not automatically released: {blockingReason}.",
+                        correlationId,
+                        cancellationToken: cancellationToken);
+                }
+
+                if (recoveryEligible)
                 {
                     var unlockRecovery = await nativeOrderClient.UnlockAsync([vehicle], correlationId, cancellationToken);
                     if (unlockRecovery.CoreAccepted)
@@ -1006,13 +1173,14 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, taskRecordId, false, false, "ROBOT_NOT_DISPATCHABLE", $"Robot '{vehicle}' is not dispatchable.");
         }
 
-        if (robot.IsError || robot.Alarms.Count > 0)
+        // Only fatal/error alarms block dispatch. A warning or a notice is reported
+        // but is not a fault, so it must not strand a healthy robot.
+        if (robot.IsError || robot.HasBlockingAlarm)
         {
             await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_HAS_BLOCKING_ALARM", $"Robot '{vehicle}' has blocking errors/alarms.", correlationId, cancellationToken);
             return new(requestId, taskRecordId, false, false, "ROBOT_HAS_BLOCKING_ALARM", $"Robot '{vehicle}' has blocking errors/alarms.");
         }
 
-        var mapPrepOrderId = RdsCoreNormalOrder.TransitionOrderId(requestId, requiredMap);
         if (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState)
             && !string.Equals(robot.CurrentOrderId, taskRecordId, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
@@ -1092,7 +1260,9 @@ public sealed class RdsExecutionCoordinator(
                 || robot.ConnectionStatus != 1
                 || !robot.Dispatchable
                 || robot.IsError
-                || robot.Alarms.Count > 0
+                // Fatal/error only: a standing notice must not permanently prevent a
+                // legitimate map switch.
+                || robot.HasBlockingAlarm
                 || (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState) && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
                 || !string.Equals(robot.CurrentStation?.Trim(), transitionStation, StringComparison.OrdinalIgnoreCase))
             {
@@ -1193,7 +1363,7 @@ public sealed class RdsExecutionCoordinator(
                 return new(requestId, taskRecordId, false, false, "SWITCHMAP_VERIFICATION_FAILED", "Robot did not switch to the required map.");
             }
 
-            if (robot.IsError || robot.Alarms.Count > 0)
+            if (robot.IsError || robot.HasBlockingAlarm)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_ALARM", "Robot has alarms following map switch.", correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "POST_SWITCH_ALARM", "Robot has alarms following map switch.");

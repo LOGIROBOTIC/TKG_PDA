@@ -67,6 +67,14 @@ public sealed record RdsOptions(
             throw new InvalidOperationException("Enabled RDS integration requires an absolute HTTP(S) BaseUrl without embedded credentials.");
         }
 
+        // Transport security is independent of dispatch permission: a read-only
+        // deployment still must not send plaintext HTTP to a non-loopback host.
+        // This check therefore runs before the dispatch-only validation below.
+        // Loopback stays permitted so the local simulator keeps working.
+        if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback && !AllowInsecureRemoteHttp)
+        {
+            throw new InvalidOperationException("RDS refuses insecure non-loopback HTTP unless the explicit unsafe-development override is enabled.");
+        }
 
         if (!DispatchEnabled)
         {
@@ -83,11 +91,6 @@ public sealed record RdsOptions(
             || !string.IsNullOrEmpty(callbackUri.UserInfo))
         {
             throw new InvalidOperationException("RDS dispatch requires an absolute callback HTTP(S) URL without embedded credentials.");
-        }
-
-        if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback && !AllowInsecureRemoteHttp)
-        {
-            throw new InvalidOperationException("RDS dispatch refuses insecure non-loopback HTTP unless the explicit unsafe-development override is enabled.");
         }
 
         if (callbackUri.Scheme == Uri.UriSchemeHttp && !callbackUri.IsLoopback && !AllowInsecureRemoteHttp)
@@ -354,6 +357,20 @@ public sealed class RdsReadClient(
         return new(new RdsRobotAlarmReport(alarms, robots), code, message, RobotAlarmsEndpoint, correlationId, readAt);
     }
 
+    /// <summary>
+    /// SEER documents two alarm entry shapes inside the fatals/errors/warnings/notices
+    /// buckets, and both occur in practice:
+    ///
+    ///   core level   { "code": 54000, "desc": "...", "times": 1, "timestamp": ... }
+    ///   robot level  { "55001": 1634020734, "desc": "...", "times": 1 }
+    ///
+    /// In the second form the alarm code is the property KEY and its value is the
+    /// timestamp, so a parser that requires a "code" property silently drops every
+    /// robot-level alarm. Both shapes are accepted here. Severity always comes from
+    /// the bucket the entry was found in, so a notice can never be promoted to an
+    /// error. A malformed entry is skipped rather than failing the whole fleet read,
+    /// and entries that resolve to the same code within one bucket are deduplicated.
+    /// </summary>
     private static void AppendAlarms(List<RdsRobotAlarmSnapshot> alarms, JsonElement rbkReport, string robotId, string bucketName, string severity)
     {
         if (!rbkReport.TryGetProperty(bucketName, out var bucket) || bucket.ValueKind != JsonValueKind.Array)
@@ -361,6 +378,7 @@ public sealed class RdsReadClient(
             return;
         }
 
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in bucket.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object)
@@ -369,7 +387,25 @@ public sealed class RdsReadClient(
             }
 
             var code = Text(item, "code");
+            string? occurredAt = Text(item, "time");
+
             if (string.IsNullOrEmpty(code))
+            {
+                // Dynamically keyed form: the single non-descriptive property is the
+                // alarm code and its value is the occurrence timestamp.
+                foreach (var property in item.EnumerateObject())
+                {
+                    if (KnownAlarmFields.Contains(property.Name)) continue;
+                    if (property.Value.ValueKind is not (JsonValueKind.Number or JsonValueKind.String)) continue;
+                    code = property.Name;
+                    occurredAt ??= property.Value.ValueKind == JsonValueKind.Number
+                        ? property.Value.ToString()
+                        : property.Value.GetString();
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(code) || !seen.Add(code))
             {
                 continue;
             }
@@ -379,10 +415,14 @@ public sealed class RdsReadClient(
                 severity,
                 code,
                 Text(item, "desc", preserveEmpty: true),
-                Text(item, "time"),
+                occurredAt ?? Text(item, "timestamp"),
                 Number(item, "times")));
         }
     }
+
+    /// <summary>Sibling fields of an alarm entry that are never the alarm code.</summary>
+    private static readonly HashSet<string> KnownAlarmFields =
+        new(StringComparer.OrdinalIgnoreCase) { "code", "desc", "description", "times", "time", "timestamp", "level", "severity" };
 
     // Only booleans with an unambiguous meaning are surfaced; "unlock" and
     // "dispatchable_status" are numeric codes whose semantics are not

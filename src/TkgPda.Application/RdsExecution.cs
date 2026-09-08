@@ -579,9 +579,13 @@ public sealed class RdsExecutionCoordinator(
                     await store.EnrichRemainingTimesAsync(remainingTimes, cancellationToken);
                 }
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Best-effort enrichment; ETA falls back to elapsed-time estimate.
+                // Cancellation propagates: a shutdown must not be reported as a
+                // completed reconciliation cycle. RDS clients already translate
+                // request timeouts into RdsReadException/RdsCoreNativeOrderException,
+                // so an OperationCanceledException here is always caller cancellation.
             }
         }
     }
@@ -914,8 +918,10 @@ public sealed class RdsExecutionCoordinator(
         {
             robots = await nativeOrderClient!.GetRobotsStatusAsync(correlationId, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Cancellation is never a robot fault: a shutdown must not be recorded
+            // as ROBOT_OFFLINE against a healthy robot.
             await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_OFFLINE", $"Failed to query robot telemetry: {ex.Message}", correlationId, cancellationToken);
             return new(requestId, taskRecordId, false, false, "ROBOT_OFFLINE", "RDSCore robot status query failed.");
         }
@@ -931,7 +937,22 @@ public sealed class RdsExecutionCoordinator(
         var hasUnreleasedLock = lockSnapshot?.HasUnreleasedLock == true;
         var capturedLockInfo = lockSnapshot?.CapturedLockInfo;
         var isRobotLocked = robot.LockInfo?.Locked == true;
+
+        // Defence in depth: the store already filters the record by vehicle, but the
+        // returned record is revalidated here against the CURRENT preparation context
+        // before it can authorise an automatic /unlock. The recorded robot is matched
+        // through the shared identity so a uuid is never compared against a
+        // vehicle_id, and the recorded target map must be the map being prepared now.
+        // A record missing either value cannot be trusted and is treated as
+        // uncorrelated.
+        var recordedVehicleMatches = !string.IsNullOrWhiteSpace(lockSnapshot?.Vehicle)
+                                     && robot.ResolvedIdentity.Matches(lockSnapshot!.Vehicle);
+        var recordedMapMatches = !string.IsNullOrWhiteSpace(lockSnapshot?.TargetMap)
+                                 && string.Equals(lockSnapshot!.TargetMap!.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase);
+
         var isLockCorrelated = hasUnreleasedLock
+                               && recordedVehicleMatches
+                               && recordedMapMatches
                                && capturedLockInfo is not null
                                && robot.LockInfo is not null
                                && capturedLockInfo.CorrelatesWith(robot.LockInfo);
@@ -1025,9 +1046,12 @@ public sealed class RdsExecutionCoordinator(
                 {
                     prepDetails = await nativeOrderClient.GetOrderDetailsAsync(mapPrepOrderId, correlationId, cancellationToken);
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // Order not yet found or query failed
+                    // Order not yet found or query failed. Cancellation propagates:
+                    // the branch below decides whether to dispatch a *physical*
+                    // transition navigation, so a cancelled caller must never fall
+                    // through to a motion-enabling SetOrder.
                 }
 
                 if (prepDetails?.State.Known is RdsCoreKnownOrderState.Running or RdsCoreKnownOrderState.Created or RdsCoreKnownOrderState.Waiting or RdsCoreKnownOrderState.ToBeDispatched)
@@ -1057,7 +1081,7 @@ public sealed class RdsExecutionCoordinator(
             {
                 robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCH_TRANSITION_NOT_CONFIRMED", $"Failed to query robot status for transition arrival verification: {ex.Message}", correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "SWITCH_TRANSITION_NOT_CONFIRMED", "Failed to query robot status for transition arrival verification.");
@@ -1081,7 +1105,7 @@ public sealed class RdsExecutionCoordinator(
             {
                 lockResult = await nativeOrderClient.LockAsync([vehicle], correlationId, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "LOCK_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "LOCK_FAILED", ex.Message);
@@ -1101,9 +1125,11 @@ public sealed class RdsExecutionCoordinator(
                 var postLockRobot = postLockRobots.FirstOrDefault(r => r.ResolvedIdentity.Matches(vehicle));
                 activeLockInfo = postLockRobot?.LockInfo;
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Telemetry capture failure does not block switchMap attempt, but leaves lock uncorrelatable on crash
+                // Telemetry capture failure does not block switchMap attempt, but leaves lock uncorrelatable on crash.
+                // Cancellation propagates instead: SwitchMap below is a physical
+                // mutation, so a cancelled caller must not continue into it.
             }
 
             await store.WriteExecutionAuditAsync(
@@ -1120,7 +1146,7 @@ public sealed class RdsExecutionCoordinator(
             {
                 switchResult = await nativeOrderClient.SwitchMapAsync(vehicle, requiredMap, correlationId, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "SWITCHMAP_FAILED", ex.Message);
@@ -1137,7 +1163,11 @@ public sealed class RdsExecutionCoordinator(
                 }
                 catch
                 {
-                    // If unlock throws or fails, MAP_PREP_LOCK_RELEASED is not written, enabling safe recovery on restart
+                    // If unlock throws or fails, MAP_PREP_LOCK_RELEASED is not written, enabling safe recovery on restart.
+                    // This one deliberately swallows cancellation too: throwing out of a
+                    // finally block would replace the real SWITCHMAP_FAILED cause, and
+                    // swallowing is the fail-safe direction here — the lock stays recorded
+                    // as unreleased, so recovery blocks rather than assuming it was freed.
                 }
             }
 
@@ -1151,7 +1181,7 @@ public sealed class RdsExecutionCoordinator(
             {
                 robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_TELEMETRY_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "POST_SWITCH_TELEMETRY_FAILED", ex.Message);

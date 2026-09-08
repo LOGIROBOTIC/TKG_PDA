@@ -590,6 +590,10 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         string vehicle,
         CancellationToken cancellationToken = default)
     {
+        // The vehicle argument is part of the filter, not decoration: a lock record
+        // only describes this recovery context if it was recorded for the robot now
+        // being prepared. The application layer revalidates vehicle and target map
+        // again before any automatic /unlock (defence in depth).
         const string sql =
             """
             SELECT after_json
@@ -597,6 +601,7 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
             WHERE entity_type = 'TRANSPORT_REQUEST'
               AND entity_id = @request_id
               AND action = 'MAP_PREP_LOCK_ACQUIRED'
+              AND lower(coalesce(after_json ->> 'vehicle', after_json ->> 'Vehicle', '')) = lower(@vehicle)
               AND NOT EXISTS (
                   SELECT 1 FROM audit.audit_logs
                   WHERE entity_type = 'TRANSPORT_REQUEST'
@@ -609,6 +614,7 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("request_id", requestId.ToString());
+        command.Parameters.AddWithValue("vehicle", (vehicle ?? string.Empty).Trim());
         var result = await command.ExecuteScalarAsync(cancellationToken);
         if (result is null or DBNull)
             return null;

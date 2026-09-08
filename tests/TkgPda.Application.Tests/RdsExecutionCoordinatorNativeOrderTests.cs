@@ -546,6 +546,97 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.Equal(1, fixture.NativeClient.SetOrderCount);
     }
 
+    // ---------------------------------------------------------------------
+    // Automatic /unlock recovery must revalidate the recorded lock context, not
+    // just the fingerprint: the record has to belong to THIS robot and THIS target
+    // map. Previously the store took a vehicle argument it never used in the query
+    // and the coordinator ignored the record's Vehicle/TargetMap entirely.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_record_names_a_different_robot()
+    {
+        var fixture = Fixture();
+        var lockInfo = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = lockInfo;
+        // Same fingerprint, but the record was written for another robot.
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "OTHER-ROBOT-99", "26.7.2026_map_optimak_1", lockInfo);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_record_targets_a_different_map()
+    {
+        var fixture = Fixture();
+        var lockInfo = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = lockInfo;
+        // Right robot and fingerprint, but the record was written for another map.
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "Sfl-Cbd15", "some_other_map", lockInfo);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("MAP_SWITCH_LOCK_RECOVERY_REQUIRED", result.Code);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_is_blocked_when_the_record_has_no_robot_identity()
+    {
+        var fixture = Fixture();
+        var lockInfo = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = lockInfo;
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, null, null, lockInfo);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    [Fact]
+    public async Task Lock_recovery_matches_the_recorded_robot_across_identity_spaces()
+    {
+        // The audit row may have recorded the internal uuid while telemetry reports
+        // the dispatch vehicle id. Correlation must still succeed — and must not be
+        // done by naive string equality.
+        var fixture = Fixture();
+        var lockInfo = new RdsCoreRobotLockInfo(true, "10.0.0.1", "TKG-NATIVE", 5000, "1634023715", 2, "ok");
+        fixture.NativeClient.CurrentRobotMap = "26.7.2026_map_optimak_1";
+        fixture.NativeClient.RobotDispatchable = false;
+        fixture.NativeClient.RobotLockInfo = lockInfo;
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("ROBOT-INTERNAL-123", "Sfl-Cbd15");
+        fixture.Store.MapSwitchLockSnapshot = new RdsMapSwitchLockSnapshot(true, "ROBOT-INTERNAL-123", "26.7.2026_map_optimak_1", lockInfo);
+        fixture.Store.NavigationProfileSummary = new(
+            Guid.NewGuid(), "DEV-MAP-B", "DEV-MAP-B", "ACTIVE", "26.7.2026_map_optimak_1", "SM11", "Sfl-Cbd15", JsonDocument.Parse("{}").RootElement);
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.True(result.Dispatched);
+        Assert.Equal(1, fixture.NativeClient.UnlockCount);
+    }
+
     [Fact]
     public async Task Crash_race_B_TKG_historical_unreleased_audit_exists_but_current_lock_info_differs_never_unlocks()
     {
@@ -1070,6 +1161,9 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
 
         public RdsCoreRobotLockInfo? RobotLockInfo { get; set; }
 
+        /// <summary>Lets a test report a uuid that differs from the vehicle id.</summary>
+        public RdsRobotIdentity? RobotIdentity { get; set; }
+
         public RdsCoreKnownOrderState DetailsState { get; set; } = RdsCoreKnownOrderState.Waiting;
         public RdsCoreKnownOrderState TransitionOrderState { get; set; } = RdsCoreKnownOrderState.Unknown;
 
@@ -1116,7 +1210,8 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 RobotCurrentOrderId,
                 null,
                 RobotAlarms,
-                RobotLockInfo);
+                RobotLockInfo,
+                RobotIdentity);
             return Task.FromResult<IReadOnlyList<RdsCoreRobotTelemetry>>([telemetry]);
         }
 

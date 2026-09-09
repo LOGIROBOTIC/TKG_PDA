@@ -14,7 +14,20 @@ class MachineListScreen extends StatelessWidget {
     animation: controller,
     builder: (context, _) => Scaffold(
       appBar: AppBar(
-        title: const Text('Makine Seçimi'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Makine Seçimi'),
+            if (controller.user case final user?)
+              Text(
+                '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
+                key: const Key('operator-user-banner'),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             key: const Key('open-operator-queue'),
@@ -38,7 +51,7 @@ class MachineListScreen extends StatelessWidget {
           ),
           TextButton.icon(
             key: const Key('logout-button'),
-            onPressed: controller.logout,
+            onPressed: controller.isMutationInFlight ? null : controller.logout,
             icon: const Icon(Icons.logout, color: Colors.white),
             label: const Text('Çıkış', style: TextStyle(color: Colors.white)),
           ),

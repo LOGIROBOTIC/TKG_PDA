@@ -16,17 +16,38 @@ class OperatorQueueScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           key: const Key('leave-operator-queue'),
+          tooltip: 'Geri / İşlem',
           onPressed: controller.leaveTasks,
           icon: const Icon(Icons.arrow_back),
         ),
-        title: const Text('Görevler'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Görevler'),
+            if (controller.user case final user?)
+              Text(
+                '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
+                key: const Key('operator-user-banner'),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             key: const Key('refresh-operator-queue'),
+            tooltip: 'Yenile',
             onPressed: controller.operatorQueueLoading
                 ? null
                 : controller.loadOperatorQueue,
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            key: const Key('logout-button'),
+            tooltip: 'Çıkış',
+            onPressed: controller.isMutationInFlight ? null : controller.logout,
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),
@@ -89,6 +110,29 @@ class _RobotCard extends StatelessWidget {
     final battery = robot.batteryLevel;
     // Unavailable battery telemetry shows as unknown, never as a 0% reading.
     final batteryLabel = battery == null ? '—' : '${(battery * 100).toInt()}%';
+    final isLowBattery = battery != null && battery < 0.20;
+
+    final (String connectivityLabel, Color statusColor, Color statusBg, Color statusFg) =
+        switch (robot.online) {
+      true => (
+        'Çevrimiçi',
+        Colors.green.shade700,
+        theme.colorScheme.primaryContainer,
+        theme.colorScheme.onPrimaryContainer,
+      ),
+      false => (
+        'Çevrimdışı',
+        theme.colorScheme.error,
+        theme.colorScheme.errorContainer,
+        theme.colorScheme.onErrorContainer,
+      ),
+      null => (
+        'Durum alınamadı',
+        Colors.grey.shade600,
+        theme.colorScheme.surfaceContainerHighest,
+        theme.colorScheme.onSurfaceVariant,
+      ),
+    };
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -104,7 +148,7 @@ class _RobotCard extends StatelessWidget {
           children: [
             Icon(
               Icons.precision_manufacturing,
-              color: robot.isConnected ? Colors.green.shade700 : Colors.grey,
+              color: statusColor,
               size: 20,
             ),
             const SizedBox(width: 8),
@@ -116,29 +160,65 @@ class _RobotCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: robot.isConnected
-                    ? theme.colorScheme.primaryContainer
-                    : theme.colorScheme.errorContainer,
+                color: statusBg,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                robot.isConnected ? 'Çevrimiçi' : 'Çevrimdışı',
-                style: theme.textTheme.labelSmall,
+                connectivityLabel,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: statusFg,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
+                color: isLowBattery
+                    ? theme.colorScheme.errorContainer
+                    : theme.colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.battery_std, size: 14),
+                  Icon(
+                    isLowBattery ? Icons.battery_alert : Icons.battery_std,
+                    size: 14,
+                    color: isLowBattery ? theme.colorScheme.error : null,
+                  ),
                   const SizedBox(width: 2),
-                  Text(batteryLabel, style: theme.textTheme.labelSmall),
+                  Text(
+                    batteryLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: isLowBattery ? theme.colorScheme.error : null,
+                      fontWeight: isLowBattery ? FontWeight.bold : null,
+                    ),
+                  ),
+                  if (battery != null) ...[
+                    const SizedBox(width: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: SizedBox(
+                        width: 24,
+                        height: 6,
+                        child: LinearProgressIndicator(
+                          value: battery.clamp(0.0, 1.0),
+                          backgroundColor: isLowBattery
+                              ? theme.colorScheme.error.withValues(alpha: 0.2)
+                              : theme.colorScheme.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isLowBattery
+                                ? theme.colorScheme.error
+                                : (battery < 0.50
+                                    ? Colors.amber.shade700
+                                    : Colors.green.shade700),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

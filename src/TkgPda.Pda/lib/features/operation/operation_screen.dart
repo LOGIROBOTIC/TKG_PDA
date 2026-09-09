@@ -23,17 +23,32 @@ class OperationScreen extends StatelessWidget {
           onPressed: controller.busy ? null : controller.leaveMachine,
           icon: const Icon(Icons.arrow_back),
         ),
-        title: Text(
-          controller.selectedMachine == null
-              ? 'Parça ve İşlem'
-              : controller.batchMode
-              ? '${controller.selectedMachine!.code} · '
-                    '${controller.batchCart.length} Parça Seçili'
-              : '${controller.selectedMachine!.code} · Parça ve İşlem',
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              controller.selectedMachine == null
+                  ? 'Parça ve İşlem'
+                  : controller.batchMode
+                  ? '${controller.selectedMachine!.code} · '
+                        '${controller.batchCart.length} Parça Seçili'
+                  : '${controller.selectedMachine!.code} · Parça ve İşlem',
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (controller.user case final user?)
+              Text(
+                '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
+                key: const Key('operator-user-banner'),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
         ),
         actions: [
           IconButton(
             key: const Key('enter-batch-selection'),
+            visualDensity: VisualDensity.compact,
             tooltip: controller.batchMode
                 ? 'Toplu Seçim Modunu Kapat'
                 : 'Birden Fazla Parça / Toplu Mod',
@@ -51,16 +66,25 @@ class OperationScreen extends StatelessWidget {
           ),
           IconButton(
             key: const Key('open-operator-queue-from-machine'),
+            visualDensity: VisualDensity.compact,
             tooltip: 'Görevler',
             onPressed: controller.busy ? null : controller.enterTasks,
             icon: const Icon(Icons.format_list_numbered),
           ),
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: 'Güncelle',
             onPressed: controller.busy
                 ? null
                 : () => controller.refreshContext(showBusy: true),
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            key: const Key('logout-button'),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Çıkış',
+            onPressed: controller.isMutationInFlight ? null : controller.logout,
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),

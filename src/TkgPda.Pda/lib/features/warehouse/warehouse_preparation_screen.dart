@@ -21,13 +21,26 @@ class WarehousePreparationScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           key: const Key('leave-warehouse-preparation'),
-          tooltip: 'Makine listesi',
+          tooltip: 'Geri / İşlem',
           onPressed: controller.busy
               ? null
               : controller.leaveWarehousePreparation,
           icon: const Icon(Icons.arrow_back),
         ),
-        title: const Text('Depo Hazırlık'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Depo Hazırlık'),
+            if (controller.user case final user?)
+              Text(
+                '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
+                key: const Key('operator-user-banner'),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Yenile',
@@ -35,6 +48,12 @@ class WarehousePreparationScreen extends StatelessWidget {
                 ? null
                 : controller.loadWarehousePreparationRequests,
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            key: const Key('logout-button'),
+            tooltip: 'Çıkış',
+            onPressed: controller.isMutationInFlight ? null : controller.logout,
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),
@@ -148,6 +167,7 @@ class _RequestCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _InfoRow('Parça', knownOr(request.partCode)),
+            _InfoRow('Kasa Tipi', request.containerTypeCode ?? '—'),
             if (request.sourceSlotDisplayName != null)
               _InfoRow(
                 'Kaynak',
@@ -165,19 +185,44 @@ class _RequestCard extends StatelessWidget {
                 ),
               ),
             _InfoRow('Talep No', '#${request.requestNo}'),
+            _InfoRow('Bekleme', _formatWaitDuration(request.createdAt)),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                key: Key('warehouse-ready-${request.requestId}'),
-                onPressed: marking ? null : () => _confirmReady(context),
-                icon: marking
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_circle_outline),
-                label: const Text('Hazır'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    key: Key('warehouse-ready-${request.requestId}'),
+                    onPressed: (marking || !controller.mutationGate.canMutate)
+                        ? null
+                        : () => _confirmReady(context),
+                    icon: marking
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_circle_outline),
+                    label: const Text('Hazır'),
+                  ),
+                  if (!controller.mutationGate.canMutate)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        controller.mutationGate.reason ==
+                                MutationGateReason.offline
+                            ? 'Bağlantı yok'
+                            : (controller.mutationGate.reason ==
+                                    MutationGateReason.mutationPending
+                                ? 'İşlem devam ediyor'
+                                : 'İşlem uygun değil'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -222,17 +267,38 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 2),
-    child: Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+            ),
           ),
-          TextSpan(text: value),
-        ],
-      ),
+        ),
+        Expanded(
+          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+      ],
     ),
   );
+}
+
+String _formatWaitDuration(DateTime createdAt) {
+  final diff = DateTime.now().difference(createdAt.toLocal());
+  if (diff.isNegative || diff.inMinutes < 1) {
+    return 'Az önce';
+  }
+  if (diff.inHours < 1) {
+    return '${diff.inMinutes} dk. önce';
+  }
+  if (diff.inDays < 1) {
+    final remainingMins = diff.inMinutes % 60;
+    return '${diff.inHours} sa. ${remainingMins > 0 ? '$remainingMins dk. ' : ''}önce';
+  }
+  return '${diff.inDays} gün önce';
 }

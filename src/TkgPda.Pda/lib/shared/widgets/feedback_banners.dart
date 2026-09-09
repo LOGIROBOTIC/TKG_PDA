@@ -147,3 +147,52 @@ class NoticeBanner extends StatelessWidget {
     child: Text(message, style: const TextStyle(fontWeight: FontWeight.w700)),
   );
 }
+
+class OperatorUserBanner extends StatelessWidget {
+  const OperatorUserBanner({required this.user, super.key});
+
+  final AuthenticatedUser? user;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = user;
+    if (current == null) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final displayName = current.fullName.trim().isNotEmpty
+        ? current.fullName
+        : current.username;
+    final sicil = current.employeeNo != null &&
+            current.employeeNo!.trim().isNotEmpty
+        ? current.employeeNo!
+        : '—';
+
+    return Container(
+      key: const Key('operator-user-banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+      child: Row(
+        children: [
+          Icon(
+            Icons.person_outline,
+            size: 16,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$displayName (Sicil: $sicil)',
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

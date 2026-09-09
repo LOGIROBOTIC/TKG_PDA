@@ -176,6 +176,7 @@ void main() {
             etaSeconds: 90,
             etaState: 'AVAILABLE',
             requestId: testRequestId,
+            canCancel: true,
           ),
         ],
       );
@@ -226,6 +227,7 @@ void main() {
             etaSeconds: null,
             etaState: 'UNAVAILABLE',
             requestId: testRequestId,
+            canCancel: true,
           ),
         ],
       );

@@ -295,7 +295,8 @@ public sealed record OperatorQueueItemRecord(
     // its own transport. The raw RDS AGV identifier was previously carried here and
     // has been removed: the Operator queue is a business view, and hiding the value
     // in the widget layer did not stop the API from serializing it.
-    Guid? RequestId = null);
+    Guid? RequestId = null,
+    bool CanCancel = false);
 
 public sealed record OperatorQueuePageRecord(
     bool Terminal,

@@ -258,7 +258,7 @@ class _QueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final canCancel = !controller.operatorQueueTerminal &&
         item.requestId != null &&
-        _isCancelable(item.state);
+        item.canCancel;
     return Card(
       child: ListTile(
         leading: CircleAvatar(child: Text('${item.queuePosition}')),
@@ -297,7 +297,7 @@ class _QueueCard extends StatelessWidget {
                 key: Key('cancel-queue-${item.requestId}'),
                 icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
                 tooltip: 'Görevi İptal Et',
-                onPressed: controller.mutationEnabled && !controller.busy
+                onPressed: controller.mutationGate.canMutate
                     ? () => _confirmCancel(context)
                     : null,
               ),
@@ -307,11 +307,6 @@ class _QueueCard extends StatelessWidget {
       ),
     );
   }
-
-  bool _isCancelable(String state) => switch (state) {
-    'WAITING_PREPARATION' || 'REQUESTED' || 'QUEUED' || 'ROBOT_ASSIGNED' || 'IN_PROGRESS' => true,
-    _ => false,
-  };
 
   Future<void> _confirmCancel(BuildContext context) async {
     final confirmed = await showDialog<bool>(

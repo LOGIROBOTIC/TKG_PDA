@@ -52,13 +52,13 @@ class ContainerPositionPanel extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                height: 154,
+                height: 124,
                 child: ListView.separated(
                   key: const Key('container-position-list'),
                   scrollDirection: Axis.horizontal,
@@ -74,21 +74,88 @@ class ContainerPositionPanel extends StatelessWidget {
                 ),
               ),
               if (!controller.isConfiguringBatchItem) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  key: const Key('remove-all-containers'),
-                  onPressed:
-                      controller.mutationEnabled &&
-                          !controller.removeAllSubmitting
-                      ? controller.removeAllContainers
-                      : null,
-                  icon: controller.removeAllSubmitting
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        )
-                      : const Icon(Icons.clear_all),
-                  label: const Text('Tüm Kasaları Kaldır'),
+                const SizedBox(height: 4),
+                Card(
+                  elevation: 0,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.45),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 14,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Varyant Kasa Yönetimi (${controller.context?.activeVariantCode ?? 'Aktif Varyant'})'
+                                '${positions.isNotEmpty ? ' · ${positions.length} Kasa' : ''}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (!controller.mutationGate.canMutate)
+                              Text(
+                                controller.mutationGate.message ??
+                                    'İşlem kilitli',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        OutlinedButton.icon(
+                          key: const Key('remove-all-containers'),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          onPressed:
+                              controller.mutationGate.canMutate &&
+                                  !controller.removeAllSubmitting
+                              ? controller.removeAllContainers
+                              : null,
+                          icon: controller.removeAllSubmitting
+                              ? const SizedBox.square(
+                                  dimension: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.clear_all, size: 15),
+                          label: const Text(
+                            'Tüm Kasaları Kaldır',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -106,56 +173,63 @@ class _PositionCard extends StatelessWidget {
   final ContainerPosition position;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: EdgeInsets.zero,
-    child: Padding(
-      padding: const EdgeInsets.all(9),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  position.label,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-              _StateBadge(position: position),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Row(
+  Widget build(BuildContext context) {
+    final totalPositions = controller.containerPositions.length;
+    final positionLabel = totalPositions > 1
+        ? '${position.label} (${position.positionNumber} / $totalPositions)'
+        : position.label;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
                 Expanded(
-                  child: _BusinessActionButton(
-                    controller: controller,
-                    position: position,
-                    action: 'FULL',
-                    label: '${position.positionNumber}. Kasa Doldu',
-                    availability: position.fullAction,
-                    icon: Icons.inventory,
+                  child: Text(
+                    positionLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _BusinessActionButton(
-                    controller: controller,
-                    position: position,
-                    action: 'EMPTY',
-                    label: '${position.positionNumber}. Kasa Boş',
-                    availability: position.emptyAction,
-                    icon: Icons.move_to_inbox_outlined,
-                  ),
-                ),
+                _StateBadge(position: position),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _BusinessActionButton(
+                      controller: controller,
+                      position: position,
+                      action: 'FULL',
+                      label: '${position.positionNumber}. Kasa Doldu',
+                      availability: position.fullAction,
+                      icon: Icons.inventory,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _BusinessActionButton(
+                      controller: controller,
+                      position: position,
+                      action: 'EMPTY',
+                      label: '${position.positionNumber}. Kasa Boş',
+                      availability: position.emptyAction,
+                      icon: Icons.move_to_inbox_outlined,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _BusinessActionButton extends StatelessWidget {
@@ -182,21 +256,23 @@ class _BusinessActionButton extends StatelessWidget {
       action,
     );
     final enabled =
-        availability.enabled && controller.mutationEnabled && !submitting;
+        availability.enabled &&
+        controller.mutationGate.canMutate &&
+        !submitting;
+
+    final disabledReason = !controller.mutationGate.canMutate
+        ? (controller.mutationGate.message ?? 'İşlem kilitli')
+        : (!availability.enabled
+            ? (availability.disabledMessage ?? 'Bu kasa için işlem uygun değil')
+            : null);
+
     return Tooltip(
       key: Key('container-${position.positionNumber}-$action'),
-      message: enabled ? label : availability.disabledMessage ?? label,
+      message: enabled ? label : (disabledReason ?? label),
       child: ElevatedButton(
         // The key names the LOGICAL business action, which under WP-33 is
         // (machine, variant/layout, part, logical container number, action) — so the
-        // container number has to be part of it. Without it every container card
-        // rendered the same key and a finder matched N widgets on any machine with
-        // more than one container position; the widget-test fixture happens to have
-        // exactly one, so only the real browser run caught it.
-        //
-        // positionNumber is the logical container ordinal already shown to the
-        // operator as "1. Kasa", not a physical slot id, WorkSite, RDS point or
-        // database UUID, so the Operator surface stays business-safe.
+        // container number has to be part of it.
         key: Key(
           action == 'FULL'
               ? 'direct-action-REMOVE_FULL-${position.positionNumber}'
@@ -206,7 +282,7 @@ class _BusinessActionButton extends StatelessWidget {
             ? () => controller.submitContainerAction(position, action)
             : null,
         style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         ),
         child: submitting
             ? const Column(
@@ -226,15 +302,32 @@ class _BusinessActionButton extends StatelessWidget {
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 22),
-                  const SizedBox(height: 3),
+                  Icon(icon, size: enabled ? 22 : 18),
+                  const SizedBox(height: 2),
                   Text(
                     label,
-                    maxLines: 2,
+                    maxLines: 1,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: enabled ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   ),
+                  if (!enabled && disabledReason != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      disabledReason,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ],
               ),
       ),

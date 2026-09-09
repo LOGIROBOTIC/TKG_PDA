@@ -882,6 +882,7 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
             var part = string.IsNullOrWhiteSpace(description)
                 ? partCode ?? "Parça bilgisi yok"
                 : $"{partCode} · {description}";
+            var canCancel = !query.Terminal && TransportStateMachine.CanCancelBeforeExecution(status);
 
             rows.Add(new OperatorQueueItemRecord(
                 queuePosition,
@@ -893,7 +894,8 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
                 state,
                 etaProjection.Seconds,
                 etaProjection.State,
-                requestId));
+                requestId,
+                canCancel));
         }
 
         var hasMore = rows.Count > query.Limit;

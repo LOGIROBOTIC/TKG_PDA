@@ -108,6 +108,8 @@ class AppController extends ChangeNotifier {
   TransportCommand? _ambiguousCommand;
   ContainerPosition? _ambiguousContainerPosition;
   String? _ambiguousContainerAction;
+  PendingOperation? _activePendingOperation;
+  PendingOperation? _ambiguousPendingOperation;
 
   // WP-03B: part-first selection state (machine-level, independent of the
   // currently active variant until a compatible variant is resolved).
@@ -177,15 +179,66 @@ class AppController extends ChangeNotifier {
   ApiProblem? get problem => _problem;
   String? get notice => _notice;
   String? get submittingOperation => _submittingOperation;
+  PendingOperation? get activePendingOperation => _activePendingOperation;
+  PendingOperation? get ambiguousPendingOperation => _ambiguousPendingOperation;
+
   bool get hasAmbiguousSubmission =>
       _submission.hasAmbiguousRequest ||
+      _ambiguousPendingOperation != null ||
       _ambiguousContainerPosition != null ||
       _removeAllAmbiguous;
-  bool get mutationEnabled =>
-      !_offline &&
-      !_busy &&
-      !_resumeValidationPending &&
-      _session.isAuthenticated;
+
+  /// Authoritative check for any safety or business mutation currently in flight.
+  /// Used to lock context changes and prevent state contamination.
+  bool get isMutationInFlight =>
+      _busy ||
+      _submittingOperation != null ||
+      _submittingContainerActions.isNotEmpty ||
+      _removeAllSubmitting ||
+      _warehouseMarkingReady.isNotEmpty ||
+      _batchSubmission.inFlight ||
+      _submission.inFlight ||
+      _activePendingOperation != null;
+
+  /// Central client-side mutation gate. Unified defense-in-depth policy
+  /// ensuring mutations are executed only under valid, non-conflicting states.
+  MutationGate get mutationGate {
+    if (_offline) {
+      return const MutationGate(
+        canMutate: false,
+        reason: MutationGateReason.offline,
+        message: 'Bağlantı yok',
+      );
+    }
+    if (isMutationInFlight) {
+      return const MutationGate(
+        canMutate: false,
+        reason: MutationGateReason.mutationPending,
+        message: 'İşlem devam ediyor',
+      );
+    }
+    if (!_session.isAuthenticated || _deviceCode == null) {
+      return const MutationGate(
+        canMutate: false,
+        reason: MutationGateReason.unauthenticated,
+        message: 'Oturum geçersiz',
+      );
+    }
+    if (_resumeValidationPending) {
+      return const MutationGate(
+        canMutate: false,
+        reason: MutationGateReason.resumePending,
+        message: 'Durum doğrulanıyor',
+      );
+    }
+    return const MutationGate(
+      canMutate: true,
+      reason: MutationGateReason.ready,
+      message: null,
+    );
+  }
+
+  bool get mutationEnabled => mutationGate.canMutate;
   bool get pollingActive => _pollTimer?.isActive ?? false;
   bool get resumeValidationPending => _resumeValidationPending;
   RobotAlarmSummary? get robotAlarmSummary => _robotAlarmSummary;
@@ -282,6 +335,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> beginDeviceCodeChange() async {
+    if (isMutationInFlight) {
+      _notice = 'İşlem devam ederken cihaz kodu değiştirilemez.';
+      notifyListeners();
+      return;
+    }
     _session.clear();
     _clearOperationalState();
     _submission.clear();
@@ -319,6 +377,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    if (isMutationInFlight) {
+      _notice = 'İşlem devam ederken oturum kapatılamaz.';
+      notifyListeners();
+      return;
+    }
     _session.clear();
     _clearOperationalState();
     _submission.clear();
@@ -363,6 +426,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> selectMachine(MachineSummary machine) async {
+    if (isMutationInFlight) {
+      _notice = 'İşlem devam ederken makine değiştirilemez.';
+      notifyListeners();
+      return;
+    }
     _selectedMachine = machine;
     _context = null;
     _resetPartFirstState();
@@ -372,6 +440,11 @@ class AppController extends ChangeNotifier {
   }
 
   void leaveMachine() {
+    if (isMutationInFlight) {
+      _notice = 'İşlem devam ederken sayfadan ayrılınamaz.';
+      notifyListeners();
+      return;
+    }
     _stopPolling();
     _selectedMachine = null;
     _context = null;
@@ -491,6 +564,11 @@ class AppController extends ChangeNotifier {
   /// visible below as alternatives the operator may switch to afterwards —
   /// no second "use the main part" confirmation step.
   Future<void> selectMainPartOption(MachineMainPartOption option) async {
+    if (isMutationInFlight) {
+      _notice = 'İşlem devam ederken parça değiştirilemez.';
+      notifyListeners();
+      return;
+    }
     _selectedMainPart = option;
     _selectedEffectivePart = null;
     _compatibleVariants = null;
@@ -506,6 +584,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> selectEffectivePart(EffectivePartSelection selection) async {
+    if (isMutationInFlight) {
+      _notice = 'İşlem devam ederken parça değiştirilemez.';
+      notifyListeners();
+      return;
+    }
     final generation = ++_partResolutionGeneration;
     _selectedEffectivePart = selection;
     _compatibleVariants = null;
@@ -739,7 +822,7 @@ class AppController extends ChangeNotifier {
   /// Kept separate from the line-operator part-selection flow: this stage
   /// never touches machine selection or part-first state, and vice versa.
   Future<void> enterWarehousePreparation() async {
-    if (!canAccessWarehousePreparation) return;
+    if (!canAccessWarehousePreparation || isMutationInFlight) return;
     _stage = AppStage.warehousePreparation;
     _clearFeedback();
     notifyListeners();
@@ -747,6 +830,7 @@ class AppController extends ChangeNotifier {
   }
 
   void leaveWarehousePreparation() {
+    if (isMutationInFlight) return;
     _stage = AppStage.machines;
     _warehouseRequests = const [];
     _warehouseError = null;
@@ -778,7 +862,9 @@ class AppController extends ChangeNotifier {
   /// too since it is no longer WAITING_PREPARATION). On failure the item
   /// stays exactly as it was so the operator can retry.
   Future<void> markPreparationReady(String requestId) async {
-    if (_warehouseMarkingReady.contains(requestId)) return;
+    if (!mutationGate.canMutate || _warehouseMarkingReady.contains(requestId)) {
+      return;
+    }
     _warehouseMarkingReady.add(requestId);
     _clearFeedback();
     notifyListeners();
@@ -1045,7 +1131,7 @@ class AppController extends ChangeNotifier {
 
     final submissionId = '${position.positionNumber}:$action';
     if (_submittingContainerActions.contains(submissionId) ||
-        !mutationEnabled) {
+        !mutationGate.canMutate) {
       return;
     }
     final material =
@@ -1054,6 +1140,22 @@ class AppController extends ChangeNotifier {
       material,
       () => 'container-action:${_cartIdFactory.v4()}',
     );
+    final pending = PendingOperation(
+      machineId: current.machine.id,
+      machineCode: current.machine.code,
+      variantId: variantId,
+      variantCode: current.activeVariantCode,
+      layoutId: layoutId,
+      productGroupId: variant.productGroupId,
+      partId: part.partId,
+      partCode: part.partCode,
+      logicalContainerNumber: position.positionNumber,
+      operation: action,
+      idempotencyKey: key,
+      startedAt: DateTime.now(),
+      navigationProfileId: current.activeNavigationProfileId,
+    );
+    _activePendingOperation = pending;
     _submittingContainerActions.add(submissionId);
     _submittingOperation = action;
     _clearFeedback();
@@ -1071,6 +1173,8 @@ class AppController extends ChangeNotifier {
         idempotencyKey: key,
       );
       _containerActionKeys.remove(material);
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = null;
       _ambiguousContainerPosition = null;
       _ambiguousContainerAction = null;
       _notice = result.idempotentReplay
@@ -1078,16 +1182,20 @@ class AppController extends ChangeNotifier {
           : '${position.label} talebi oluşturuldu.';
       await refreshContext();
     } on AmbiguousMutationException {
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = pending;
       _ambiguousContainerPosition = position;
       _ambiguousContainerAction = action;
       _offline = true;
       _notice =
           'Gönderim sonucu belirsiz. Aynı kasa işlemi aynı anahtarla yeniden denenecek.';
     } on ApiProblem catch (problem) {
+      _activePendingOperation = null;
       _containerActionKeys.remove(material);
       if (problem.shouldRefetch) await refreshContext();
       _problem = problem;
     } finally {
+      _activePendingOperation = null;
       _submittingContainerActions.remove(submissionId);
       _submittingOperation = null;
       notifyListeners();
@@ -1102,10 +1210,25 @@ class AppController extends ChangeNotifier {
         variantId == null ||
         layoutId == null ||
         _removeAllSubmitting ||
-        !mutationEnabled) {
+        !mutationGate.canMutate) {
       return;
     }
     final key = _removeAllKey ??= 'remove-all:${_cartIdFactory.v4()}';
+    final pending = PendingOperation(
+      machineId: current.machine.id,
+      machineCode: current.machine.code,
+      variantId: variantId,
+      variantCode: current.activeVariantCode,
+      layoutId: layoutId,
+      productGroupId: null,
+      partId: '',
+      logicalContainerNumber: null,
+      operation: 'REMOVE_ALL',
+      idempotencyKey: key,
+      startedAt: DateTime.now(),
+      navigationProfileId: current.activeNavigationProfileId,
+    );
+    _activePendingOperation = pending;
     _removeAllSubmitting = true;
     _clearFeedback();
     notifyListeners();
@@ -1117,6 +1240,8 @@ class AppController extends ChangeNotifier {
         navigationProfileId: current.activeNavigationProfileId,
         idempotencyKey: key,
       );
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = null;
       _removeAllKey = null;
       _removeAllAmbiguous = false;
       _notice = result.idempotentReplay
@@ -1124,23 +1249,27 @@ class AppController extends ChangeNotifier {
           : '${result.itemCount} kasa için kaldırma talebi oluşturuldu.';
       await refreshContext();
     } on AmbiguousMutationException {
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = pending;
       _removeAllAmbiguous = true;
       _offline = true;
       _notice =
           'Tüm kasaları kaldırma sonucunun ulaştığı doğrulanamadı. Aynı istek yeniden denenebilir.';
     } on ApiProblem catch (problem) {
+      _activePendingOperation = null;
       _removeAllKey = null;
       _removeAllAmbiguous = false;
       if (problem.shouldRefetch) await refreshContext();
       _problem = problem;
     } finally {
+      _activePendingOperation = null;
       _removeAllSubmitting = false;
       notifyListeners();
     }
   }
 
   Future<void> enterTasks() async {
-    if (!_session.isAuthenticated) return;
+    if (!_session.isAuthenticated || isMutationInFlight) return;
     _stage = AppStage.tasks;
     _operatorQueueTerminal = false;
     _clearFeedback();
@@ -1149,6 +1278,7 @@ class AppController extends ChangeNotifier {
   }
 
   void leaveTasks() {
+    if (isMutationInFlight) return;
     _stopQueuePolling();
     _stage = AppStage.machines;
     _operatorQueue = null;
@@ -1218,7 +1348,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> cancelQueueItem(String requestId) async {
-    if (!mutationEnabled || _busy) {
+    if (!mutationGate.canMutate) {
       return;
     }
     _setBusy(true);
@@ -1302,7 +1432,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> setRequestPriority(String requestId, int priority) async {
-    if (!mutationEnabled) return;
+    if (!mutationGate.canMutate) return;
     _setBusy(true);
     try {
       await _repository.setRequestPriority(requestId, priority);
@@ -1444,6 +1574,11 @@ class AppController extends ChangeNotifier {
       await removeAllContainers();
       return null;
     }
+    if (_ambiguousPendingOperation case final pending?) {
+      _offline = false;
+      await _retryPendingOperation(pending);
+      return null;
+    }
     if (_ambiguousContainerPosition case final position?) {
       final action = _ambiguousContainerAction;
       if (action != null) {
@@ -1460,8 +1595,54 @@ class AppController extends ChangeNotifier {
     return submitTransport(command);
   }
 
+  Future<void> _retryPendingOperation(PendingOperation pending) async {
+    _activePendingOperation = pending;
+    final submissionId = '${pending.logicalContainerNumber}:${pending.operation}';
+    _submittingContainerActions.add(submissionId);
+    _submittingOperation = pending.operation;
+    _clearFeedback();
+    notifyListeners();
+    try {
+      final result = await _repository.createContainerAction(
+        machineId: pending.machineId,
+        variantId: pending.variantId,
+        layoutId: pending.layoutId,
+        navigationProfileId: pending.navigationProfileId,
+        productGroupId: pending.productGroupId ?? '',
+        partId: pending.partId,
+        positionNumber: pending.logicalContainerNumber ?? 1,
+        action: pending.operation,
+        idempotencyKey: pending.idempotencyKey,
+      );
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = null;
+      _ambiguousContainerPosition = null;
+      _ambiguousContainerAction = null;
+      _notice = result.idempotentReplay
+          ? 'Mevcut kasa talebi doğrulandı.'
+          : '${pending.logicalContainerNumber ?? 1}. Kasa talebi oluşturuldu.';
+      await refreshContext();
+    } on AmbiguousMutationException {
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = pending;
+      _offline = true;
+      _notice =
+          'Gönderim sonucu belirsiz. Aynı kasa işlemi aynı anahtarla yeniden denenecek.';
+    } on ApiProblem catch (problem) {
+      _activePendingOperation = null;
+      _ambiguousPendingOperation = null;
+      if (problem.shouldRefetch) await refreshContext();
+      _problem = problem;
+    } finally {
+      _activePendingOperation = null;
+      _submittingContainerActions.remove(submissionId);
+      _submittingOperation = null;
+      notifyListeners();
+    }
+  }
+
   Future<void> cancelTransport(ActiveTransportRequest request) async {
-    if (!request.canCancel || !mutationEnabled) {
+    if (!request.canCancel || !mutationGate.canMutate) {
       return;
     }
     _setBusy(true);
@@ -1580,6 +1761,8 @@ class AppController extends ChangeNotifier {
     _operatorQueueTerminal = false;
     _containerBatchKey = null;
     _containerBatchAmbiguous = false;
+    _activePendingOperation = null;
+    _ambiguousPendingOperation = null;
   }
 
   void _clearFeedback() {

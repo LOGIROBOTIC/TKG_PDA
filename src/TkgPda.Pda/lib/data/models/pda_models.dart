@@ -358,6 +358,7 @@ class OperatorQueueItem {
     required this.etaSeconds,
     required this.etaState,
     this.requestId,
+    this.canCancel = false,
   });
 
   final int queuePosition;
@@ -370,6 +371,7 @@ class OperatorQueueItem {
   final int? etaSeconds;
   final String etaState;
   final String? requestId;
+  final bool canCancel;
   // No agvId: the Operator queue is a business view and the API no longer
   // serializes the raw RDS AGV identifier.
 
@@ -385,6 +387,7 @@ class OperatorQueueItem {
     etaSeconds: _nullableInteger(json['etaSeconds']),
     etaState: json['etaState'] as String? ?? 'UNAVAILABLE',
     requestId: json['requestId'] as String?,
+    canCancel: json['canCancel'] as bool? ?? false,
   );
 }
 
@@ -1027,3 +1030,87 @@ double? _decimal(Object? value) => value is num ? value.toDouble() : null;
 
 DateTime? _date(Object? value) =>
     value is String && value.isNotEmpty ? DateTime.tryParse(value) : null;
+
+/// Immutable business state captured at the inception of an Operator mutation.
+/// Pins all operational context so in-flight requests and ambiguous retries
+/// cannot be corrupted by subsequent screen or navigation changes.
+///
+/// Under domain safety rules, physical routing fields (sourceSlotId,
+/// destinationSlotId, workSite, RDS IDs) are strictly excluded: the backend
+/// remains authoritative for physical slot resolution and mapping.
+class PendingOperation {
+  const PendingOperation({
+    required this.machineId,
+    required this.machineCode,
+    required this.variantId,
+    this.variantCode,
+    required this.layoutId,
+    this.productGroupId,
+    required this.partId,
+    this.partCode,
+    this.logicalContainerNumber,
+    required this.operation,
+    required this.idempotencyKey,
+    required this.startedAt,
+    this.navigationProfileId,
+  });
+
+  final String machineId;
+  final String machineCode;
+  final String variantId;
+  final String? variantCode;
+  final String layoutId;
+  final String? productGroupId;
+  final String partId;
+  final String? partCode;
+  final int? logicalContainerNumber;
+  final String operation;
+  final String idempotencyKey;
+  final DateTime startedAt;
+  final String? navigationProfileId;
+
+  @override
+  String toString() =>
+      'PendingOperation($machineCode, variant: $variantCode, part: $partCode, '
+      'pos: $logicalContainerNumber, op: $operation, key: $idempotencyKey)';
+
+  Map<String, dynamic> toJson() => {
+        'machineId': machineId,
+        'machineCode': machineCode,
+        'variantId': variantId,
+        'variantCode': variantCode,
+        'layoutId': layoutId,
+        'productGroupId': productGroupId,
+        'partId': partId,
+        'partCode': partCode,
+        'logicalContainerNumber': logicalContainerNumber,
+        'operation': operation,
+        'idempotencyKey': idempotencyKey,
+        'startedAt': startedAt.toIso8601String(),
+        'navigationProfileId': navigationProfileId,
+      };
+}
+
+enum MutationGateReason {
+  ready,
+  offline,
+  mutationPending,
+  unauthenticated,
+  resumePending,
+  noContext,
+}
+
+/// Central client-side mutation gate evaluating safety and operational
+/// prerequisites across all Operator mutation entry points.
+class MutationGate {
+  const MutationGate({
+    required this.canMutate,
+    required this.reason,
+    required this.message,
+  });
+
+  final bool canMutate;
+  final MutationGateReason reason;
+  final String? message;
+}
+

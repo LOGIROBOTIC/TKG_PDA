@@ -392,7 +392,10 @@ class FakePdaRepository implements PdaDataSource {
   int containerActionBatchCount = 0;
   int removeAllCount = 0;
   Object? removeAllError;
+  Completer<RemoveAllResult>? removeAllCompleter;
   String? lastRemoveAllIdempotencyKey;
+  String? lastRemoveAllMachineId;
+  String? lastRemoveAllVariantId;
   OperatorQueuePage operatorQueueValue = const OperatorQueuePage(
     terminal: false,
     offset: 0,
@@ -652,7 +655,12 @@ class FakePdaRepository implements PdaDataSource {
   }) async {
     removeAllCount++;
     lastRemoveAllIdempotencyKey = idempotencyKey;
+    lastRemoveAllMachineId = machineId;
+    lastRemoveAllVariantId = variantId;
     if (removeAllError case final error?) throw error;
+    if (removeAllCompleter case final completer?) {
+      return completer.future;
+    }
     return const RemoveAllResult(
       idempotentReplay: false,
       ignoredVacantPositions: [],

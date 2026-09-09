@@ -52,6 +52,72 @@ public sealed class RdsExecutionClientTests
         Assert.DoesNotContain(new string('i', 40), result.Message, StringComparison.Ordinal);
     }
 
+    // ---------------------------------------------------------------------
+    // Global mutation policy applied to the Wind engine.
+    // Stopping an existing WindTask reduces motion, exactly like the native
+    // /terminate path, so it must stay reachable when the global dispatch gate is
+    // closed. Creating work must not.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Wind_cancellation_stays_available_when_the_global_dispatch_gate_is_closed()
+    {
+        var handler = new RecordingHandler("""{"code":200,"msg":"Success","data":null}""");
+        var client = GatedClient(handler, dispatchEnabled: false);
+
+        var result = await client.StopTaskAsync(Guid.NewGuid().ToString(), Guid.NewGuid());
+
+        Assert.Equal(200, result.Code);
+        Assert.Equal("/api/stop-task", handler.LastPath);
+    }
+
+    [Fact]
+    public async Task Wind_task_creation_is_blocked_when_the_global_dispatch_gate_is_closed()
+    {
+        var handler = new RecordingHandler("""{"code":200,"msg":"Success","data":null}""");
+        var client = GatedClient(handler, dispatchEnabled: false);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(() => client.CreateTransportAsync(
+            new RdsCreateTransportRequest("rec-1", "TKG_TRANSPORT", 100, new Dictionary<string, object?>()),
+            Guid.NewGuid()));
+
+        Assert.Equal("RDS_DISPATCH_DISABLED", error.Code);
+        Assert.Null(handler.LastPath);
+    }
+
+    [Fact]
+    public async Task Wind_content_update_is_blocked_when_the_global_dispatch_gate_is_closed()
+    {
+        var handler = new RecordingHandler("""{"code":200,"msg":"Success","data":null}""");
+        var client = GatedClient(handler, dispatchEnabled: false);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => client.UpdateContentAsync("SITE-1", "EMPTY", Guid.NewGuid()));
+
+        Assert.Equal("RDS_DISPATCH_DISABLED", error.Code);
+        Assert.Null(handler.LastPath);
+    }
+
+    [Fact]
+    public async Task Wind_cancellation_is_also_available_with_the_gate_open()
+    {
+        var handler = new RecordingHandler("""{"code":200,"msg":"Success","data":null}""");
+        var client = GatedClient(handler, dispatchEnabled: true);
+
+        var result = await client.StopTaskAsync(Guid.NewGuid().ToString(), Guid.NewGuid());
+
+        Assert.Equal(200, result.Code);
+    }
+
+    private static RdsExecutionClient GatedClient(RecordingHandler handler, bool dispatchEnabled)
+    {
+        var options = dispatchEnabled
+            ? new RdsOptions(true, "http://127.0.0.1:8080", 5, true, new string('i', 40), "http://127.0.0.1/callback", new string('c', 40))
+            : new RdsOptions(true, "http://127.0.0.1:8080", 5, false);
+        options.Validate();
+        return new RdsExecutionClient(new Factory(handler, options.BaseAddress), options);
+    }
+
     private static RdsExecutionClient Client(RecordingHandler handler)
     {
         var options = new RdsOptions(

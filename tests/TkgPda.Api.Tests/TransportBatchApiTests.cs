@@ -26,7 +26,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-two-items",
-            [Bring(context, slots[0], "item-1"), Bring(context, slots[1], "item-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP1"), "item-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP2"), "item-2")]);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var batch = await response.Content.ReadFromJsonAsync<TransportBatchHttpResponse>();
@@ -49,7 +49,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-distinct-uuids",
-            [Bring(context, slots[0], "distinct-1"), Bring(context, slots[1], "distinct-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP3"), "distinct-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP4"), "distinct-2")]);
 
         Assert.NotEqual(batch.Items[0].Id, batch.Items[1].Id);
     }
@@ -69,7 +69,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-own-keys",
-            [Bring(context, slots[0], "own-key-1"), Bring(context, slots[1], "own-key-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP5"), "own-key-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP6"), "own-key-2")]);
 
         var keys = await fixture.ScalarAsync<string[]>(
             "SELECT array_agg(idempotency_key ORDER BY request_no) FROM ops.transport_requests WHERE batch_id = @batch_id",
@@ -92,7 +92,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-own-fields",
-            [Bring(context, slots[0], "fields-1"), Bring(context, slots[1], "fields-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP7"), "fields-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP8"), "fields-2")]);
 
         Assert.Equal("BRING_EMPTY", batch.Items[0].Operation);
         Assert.Equal(slots[0], batch.Items[0].DestinationSlotId);
@@ -121,7 +121,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-links",
-            [Bring(context, slots[0], "links-1"), Bring(context, slots[1], "links-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP9"), "links-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP10"), "links-2")]);
 
         foreach (var item in batch.Items)
         {
@@ -143,7 +143,8 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
 
         var response = await fixture.SendTransportAsync(
             client,
-            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null, null, null, "BRING_EMPTY", null, slot),
+            new CreateTransportHttpRequest(context.MachineId, context.VariantId, context.LayoutId, null, null,
+                await fixture.PartForSlotAsync(slot, "P05-STANDALONE"), null, "BRING_EMPTY"),
             "standalone-no-batch");
         var created = await response.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
@@ -162,7 +163,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
         await fixture.SetSlotAsync(slots[1], "VACANT", "UNKNOWN");
         var identity = await fixture.SeedIdentityAsync(machineCode: "SH-01-A");
         using var client = await fixture.LoginClientAsync(identity);
-        var items = new[] { Bring(context, slots[0], "replay-1"), Bring(context, slots[1], "replay-2") };
+        var items = new[] { Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP11"), "replay-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP12"), "replay-2") };
 
         var first = await PostBatchAsync(client, context.MachineId, "batch-replay", items);
         var second = await PostBatchAsync(client, context.MachineId, "batch-replay", items);
@@ -199,10 +200,13 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-one-invalid",
-            [Bring(context, slots[0], "valid-1"), Bring(context, slots[1], "invalid-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP13"), "valid-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP14"), "invalid-2")]);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("SLOT_STATE_MISMATCH", await ApiTestFixture.ErrorCodeAsync(response));
+        // With backend slot resolution the invalid child is rejected because no slot in
+        // the required state is eligible for its part, rather than by a supplied-slot
+        // state mismatch. The batch is still refused atomically.
+        Assert.Equal("BRING_EMPTY_SLOT_NOT_FOUND", await ApiTestFixture.ErrorCodeAsync(response));
         Assert.Equal(0L, await fixture.ScalarAsync<long>("SELECT count(*) FROM ops.transport_batches"));
         Assert.Equal(0L, await fixture.ScalarAsync<long>("SELECT count(*) FROM ops.transport_requests"));
     }
@@ -221,7 +225,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-unauthorized",
-            [Bring(context, slot, "unauthorized-1")]);
+            [Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP15"), "unauthorized-1")]);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("MACHINE_ACCESS_DENIED", await ApiTestFixture.ErrorCodeAsync(response));
@@ -245,7 +249,7 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-mixed-machine",
-            [Bring(context, slot, "mixed-1"), Bring(otherContext, otherSlot, "mixed-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slot, "P05-TRANSP16"), "mixed-1"), Bring(otherContext, await fixture.PartForSlotAsync(otherSlot, "P05-TRANSP17"), "mixed-2")]);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("BATCH_MACHINE_MISMATCH", await ApiTestFixture.ErrorCodeAsync(response));
@@ -268,25 +272,23 @@ public sealed class TransportBatchApiTests(ApiTestFixture fixture) : IClassFixtu
             client,
             context.MachineId,
             "batch-no-rds",
-            [Bring(context, slots[0], "no-rds-1"), Bring(context, slots[1], "no-rds-2")]);
+            [Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-TRANSP18"), "no-rds-1"), Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-TRANSP19"), "no-rds-2")]);
 
         Assert.Equal(0L, await fixture.ScalarAsync<long>(
             "SELECT count(*) FROM integration.rds_tasks WHERE transport_request_id = ANY(@ids)",
             ("ids", batch.Items.Select(i => i.Id).ToArray())));
     }
 
-    private static CreateTransportBatchItemHttpRequest Bring(LayoutContext context, Guid destination, string idempotencyKey) => new(
+    private static CreateTransportBatchItemHttpRequest Bring(LayoutContext context, Guid partId, string idempotencyKey) => new(
         idempotencyKey,
         context.MachineId,
         context.VariantId,
         context.LayoutId,
         null,
         null,
+        partId,
         null,
-        null,
-        "BRING_EMPTY",
-        null,
-        destination);
+        "BRING_EMPTY");
 
     private static Task<HttpResponseMessage> PostBatchAsync(
         HttpClient client,

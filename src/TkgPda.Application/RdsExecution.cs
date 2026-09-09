@@ -3,6 +3,28 @@ using TkgPda.Domain;
 
 namespace TkgPda.Application;
 
+/// <summary>Fleet-scoped robot maintenance operations exposed to Admin/Supervisor.</summary>
+public enum RdsRobotMaintenanceAction
+{
+    Pause,
+    Resume,
+    ClearErrors,
+    SetDispatchable
+}
+
+/// <summary>
+/// Outcome of an expert recovery action. <see cref="Vehicle"/> and
+/// <see cref="TaskRecordId"/> are the server-resolved targets, echoed back so the
+/// caller can see exactly what was acted on.
+/// </summary>
+public sealed record RdsExpertActionResult(
+    Guid RequestId,
+    string TaskRecordId,
+    string Vehicle,
+    int Code,
+    string Message,
+    bool Accepted);
+
 public sealed record RdsExecutionSettings(
     bool DispatchEnabled,
     TimeSpan WorkSiteFreshness,
@@ -90,6 +112,21 @@ public interface IRdsExecutionStore
     Task<IReadOnlyList<RdsTaskProjection>> ListActiveTasksAsync(int limit, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Guid>> ListPendingWorkSiteRefreshRequestIdsAsync(int limit, CancellationToken cancellationToken = default);
     Task<IRdsExecutionLease?> TryAcquireRequestLeaseAsync(Guid requestId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Serialises TKG operations that target one physical ROBOT, as opposed to the
+    /// per-request lease above. The request lease cannot cover this: two different
+    /// TransportRequests can legitimately hold their own request leases while both
+    /// resolving to the same robot, so a robot-scoped mutation validated under only a
+    /// request lease can be invalidated by another request between the check and the
+    /// call. It must be a distributed lock because TKG can run as more than one
+    /// process; an in-process semaphore would not serialise across instances.
+    ///
+    /// <paramref name="robotLeaseKey"/> is <see cref="RdsRobotIdentity.RobotLeaseKey"/>
+    /// and must already be resolved from telemetry so that a uuid and a vehicle_id
+    /// naming the same robot cannot take two different leases.
+    /// </summary>
+    Task<IRdsExecutionLease?> TryAcquireRobotLeaseAsync(string robotLeaseKey, CancellationToken cancellationToken = default);
     Task<RdsDispatchContext?> GetDispatchContextAsync(Guid requestId, CancellationToken cancellationToken = default);
     Task<TransportRequestSnapshot?> FindRequestAsync(Guid requestId, CancellationToken cancellationToken = default);
     Task<RdsTaskProjection?> FindTaskByRequestAsync(Guid requestId, CancellationToken cancellationToken = default);
@@ -293,11 +330,35 @@ public sealed class RdsExecutionCoordinator(
     IRobotTelemetryProvider? robotTelemetry = null,
     IRdsCoreNativeOrderClient? nativeOrderClient = null)
 {
+    /// <summary>
+    /// Global physical mutation gate. <c>Rds:DispatchEnabled = false</c> means ZERO
+    /// normal execution-triggered physical RDS mutation — <c>/setOrder</c>, native
+    /// order dispatch, WindTask dispatch, <c>/lock</c>, <c>/switchMap</c>,
+    /// <c>/unlock</c> and the automatic map preparation that surrounds them —
+    /// regardless of which execution engine happens to be configured.
+    /// Read-only telemetry, reconciliation and Admin diagnostics are deliberately
+    /// unaffected, and cancellation (<c>/terminate</c>) stays reachable because it
+    /// stops motion rather than starting it.
+    /// </summary>
+    private bool IsGlobalDispatchAllowed => settings.DispatchEnabled;
+
+    /// <summary>
+    /// Native engine <em>configuration</em> only: explicitly selected native mode,
+    /// enabled client, and a valid configured RDSCore endpoint. This selects which
+    /// engine reconciliation and cancellation talk to. It never authorises new
+    /// physical motion on its own and must never bypass
+    /// <see cref="IsGlobalDispatchAllowed"/>.
+    /// </summary>
     private bool IsNativeMode => nativeOrderClient is not null
         && nativeOrderClient.Mode == RdsExecutionMode.RdsCoreNativeOrder
         && nativeOrderClient.MutationEnabled;
 
-    public bool IsDispatchEnabled => (settings.DispatchEnabled && executionClient.DispatchEnabled) || IsNativeMode;
+    /// <summary>
+    /// Dispatch eligibility is the global gate AND at least one configured
+    /// execution engine. Native enablement can never bypass the gate.
+    /// </summary>
+    public bool IsDispatchEnabled => IsGlobalDispatchAllowed
+        && (executionClient.DispatchEnabled || IsNativeMode);
 
     public async Task<IReadOnlyList<RdsDispatchAttemptResult>> DispatchQueuedAsync(int limit, CancellationToken cancellationToken = default)
     {
@@ -341,6 +402,22 @@ public sealed class RdsExecutionCoordinator(
 
     public async Task<RdsDispatchAttemptResult?> DispatchOneAsync(Guid requestId, Guid correlationId, CancellationToken cancellationToken = default)
     {
+        // Defence in depth: this method is public and directly callable, so the
+        // global mutation gate is re-checked here and not only in
+        // DispatchQueuedAsync. No lease is taken and no RDS call is made when the
+        // gate is closed.
+        if (!IsDispatchEnabled)
+        {
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_DISPATCH_BLOCKED",
+                "RDS_DISPATCH_DISABLED",
+                "Physical RDS dispatch is globally disabled by configuration (Rds:DispatchEnabled=false).",
+                correlationId,
+                cancellationToken);
+            return new(requestId, requestId.ToString(), false, false, "RDS_DISPATCH_DISABLED", "Physical RDS dispatch is globally disabled by configuration.");
+        }
+
         await using var lease = await store.TryAcquireRequestLeaseAsync(requestId, cancellationToken);
         if (lease is null)
         {
@@ -517,12 +594,583 @@ public sealed class RdsExecutionCoordinator(
                     await store.EnrichRemainingTimesAsync(remainingTimes, cancellationToken);
                 }
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Best-effort enrichment; ETA falls back to elapsed-time estimate.
+                // Cancellation propagates: a shutdown must not be reported as a
+                // completed reconciliation cycle. RDS clients already translate
+                // request timeouts into RdsReadException/RdsCoreNativeOrderException,
+                // so an OperationCanceledException here is always caller cancellation.
             }
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Expert recovery actions.
+    //
+    // These are high-risk maintenance operations, so the server resolves the
+    // exact target itself and never trusts a caller-supplied vehicle or order
+    // identifier. Each action binds to a real TKG TransportRequest, refuses
+    // terminal requests, targets exactly the robot RDS assigned to that request,
+    // and writes an execution audit record.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Resolves the authoritative RDS task and assigned vehicle for a request, or
+    /// throws with a precise reason. Never returns a caller-influenced target.
+    /// </summary>
+    private async Task<(TransportRequestSnapshot Request, RdsTaskProjection Task)> ResolveExpertTargetAsync(
+        Guid requestId,
+        bool requireAssignedVehicle,
+        CancellationToken cancellationToken)
+    {
+        var request = await store.FindRequestAsync(requestId, cancellationToken)
+            ?? throw new RdsExecutionException("REQUEST_NOT_FOUND", "The transport request does not exist.");
+
+        if (request.Status is TransportRequestStatus.Completed
+            or TransportRequestStatus.Cancelled
+            or TransportRequestStatus.Failed)
+        {
+            throw new RdsExecutionException(
+                "REQUEST_ALREADY_TERMINAL",
+                $"The transport request is already {request.Status.ToDatabase()}; expert recovery does not apply.");
+        }
+
+        var task = await store.FindTaskByRequestAsync(requestId, cancellationToken)
+            ?? throw new RdsExecutionException(
+                "RDS_TASK_NOT_FOUND",
+                "The request has no dispatched RDS task, so there is nothing to recover.");
+
+        if (requireAssignedVehicle && string.IsNullOrWhiteSpace(task.AgvId))
+        {
+            throw new RdsExecutionException(
+                "RDS_VEHICLE_UNASSIGNED",
+                "RDS has not assigned a robot to this request yet, so no exact vehicle can be targeted.");
+        }
+
+        return (request, task);
+    }
+
+    /// <summary>
+    /// Live corroboration for a vehicle-scoped expert mutation.
+    ///
+    /// <c>/manualFinished</c> and <c>/redoFailedOrder</c> act on whatever the named
+    /// robot is doing RIGHT NOW. <see cref="ResolveExpertTargetAsync"/> proves only
+    /// historical facts — a TransportRequest, a persisted integration.rds_tasks row
+    /// and the agv_id recorded at dispatch time — and a historical mapping is not
+    /// authority for a physical mutation. If the robot has since moved on, acting on
+    /// the recorded agv_id advances or re-runs an unrelated order.
+    ///
+    /// So the vehicle is re-derived from CURRENT telemetry: the order identity comes
+    /// from the persisted task (never the caller), the order must currently be in one
+    /// of <paramref name="allowedStates"/>, and exactly one robot must currently be
+    /// executing that order. Matching uses <see cref="RdsRobotIdentity"/>, so a
+    /// recorded uuid still corroborates telemetry reporting a vehicle_id. Missing,
+    /// ambiguous or contradictory evidence fails closed.
+    /// </summary>
+    private async Task<(RdsTaskProjection Task, string Vehicle)> ResolveCurrentExecutionTargetAsync(
+        Guid requestId,
+        Func<RdsCoreKnownOrderState, RdsCoreRobotTelemetry, bool> satisfiesPrecondition,
+        string preconditionDescription,
+        string operation,
+        string heldLeaseKey,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
+
+        RdsCoreOrderDetails details;
+        try
+        {
+            details = await nativeOrderClient!.GetOrderDetailsAsync(task.TaskRecordId, correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException error)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                $"Current RDS state for order '{task.TaskRecordId}' could not be read, so {operation} is refused.",
+                error);
+        }
+
+        RdsCoreFleetStatus fleet;
+        try
+        {
+            fleet = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException error)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                $"Current robot telemetry could not be read, so {operation} is refused.",
+                error);
+        }
+
+        // The robot that is executing THIS order right now — not the one that was
+        // assigned when the order was dispatched.
+        var robots = fleet.Robots;
+        var executing = robots
+            .Where(robot => !string.IsNullOrWhiteSpace(robot.CurrentOrderId)
+                            && string.Equals(robot.CurrentOrderId, task.TaskRecordId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (executing.Length != 1)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ORDER_NOT_CURRENTLY_EXECUTING",
+                executing.Length == 0
+                    ? $"No robot is currently executing order '{task.TaskRecordId}', so {operation} is refused."
+                    : $"Order '{task.TaskRecordId}' is reported by more than one robot, so {operation} is refused.");
+        }
+
+        var robotNow = executing[0];
+
+        // The recorded assignment must still agree with live telemetry, compared
+        // across identity spaces rather than by raw string equality.
+        if (!robotNow.ResolvedIdentity.Matches(task.AgvId))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ROBOT_MISMATCH",
+                $"Order '{task.TaskRecordId}' is currently executing on a different robot than the one recorded for this request, so {operation} is refused.");
+        }
+
+        // Before anything else about this robot is trusted, prove the lease we hold is
+        // the lease for THIS robot.
+        EnsureLeaseCoversTarget(heldLeaseKey, robotNow, operation);
+
+        var vehicle = robotNow.ResolvedIdentity.MutationTarget;
+        if (string.IsNullOrWhiteSpace(vehicle))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ROBOT_MISMATCH",
+                $"The robot executing order '{task.TaskRecordId}' reports no usable vehicle identity, so {operation} is refused.");
+        }
+
+        // The documented SEER precondition, evaluated last because it may depend on
+        // BOTH the current order state and the current robot state.
+        if (!satisfiesPrecondition(details.State.Known, robotNow))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ORDER_STATE_INCOMPATIBLE",
+                $"Order '{task.TaskRecordId}' is {details.State.Known.ToString().ToUpperInvariant()} and robot '{vehicle}' reports no error condition. {operation} requires {preconditionDescription}.");
+        }
+
+        return (task, vehicle);
+    }
+
+    /// <summary>
+    /// SEER's documented manualFinished precondition, verbatim from
+    /// SEER_RDSCore_HTTP_API_Turkce_Ceviri_Tam.docx section 4.3 (/manualFinished):
+    /// "Yalnız mevcut order hata durumundayken veya AGV hata raporluyorken çalışır."
+    /// — it works ONLY while the current order is in an error condition, or while the
+    /// AGV is reporting an error. The section is titled "Mevcut Başarısız Block'u
+    /// Manuel Tamamlama" (manually completing the current FAILED block).
+    ///
+    /// RUNNING, WAITING and SUSPENDED are therefore NOT sufficient on their own. An
+    /// earlier round accepted them, which asked RDSCore to advance a block that was
+    /// executing normally.
+    ///
+    /// "Order in an error condition" maps to the two documented error-ish order
+    /// states: FAILED ("aktif/uygulama kaynaklı failure") and Error ("parametre hatası
+    /// nedeniyle yürütülemez"). "AGV reporting an error" maps to is_error or a
+    /// blocking fatal/error alarm.
+    /// </summary>
+    private static bool SatisfiesManualFinishPrecondition(RdsCoreKnownOrderState state, RdsCoreRobotTelemetry robot) =>
+        state is RdsCoreKnownOrderState.Failed or RdsCoreKnownOrderState.Error
+        || robot.IsError
+        || robot.HasBlockingAlarm;
+
+    /// <summary>
+    /// SEER's documented redoFailedOrder precondition, verbatim from
+    /// SEER_RDSCore_HTTP_API_Turkce_Ceviri_Tam.docx section 3.18 (/redoFailedOrder):
+    /// "Yalnız order durumu FAILED iken etkilidir; diğer durumlarda komut yok sayılır."
+    /// — effective ONLY when the order status is FAILED; in any other state the command
+    /// is ignored.
+    ///
+    /// Error is deliberately NOT accepted. The documented order-state list makes them
+    /// distinct: FAILED is "aktif/uygulama kaynaklı failure" while Error is "parametre
+    /// hatası nedeniyle yürütülemez" — an order that cannot run at all. An earlier
+    /// round treated them as equivalent without evidence.
+    /// </summary>
+    private static bool SatisfiesRedoPrecondition(RdsCoreKnownOrderState state, RdsCoreRobotTelemetry robot) =>
+        state == RdsCoreKnownOrderState.Failed;
+
+    private void EnsureNativeExpertActionAvailable()
+    {
+        if (nativeOrderClient is null || !IsNativeMode)
+        {
+            throw new RdsExecutionException(
+                "NATIVE_EXECUTION_UNAVAILABLE",
+                "RDSCore native execution is not configured, so expert recovery is unavailable.");
+        }
+    }
+
+    /// <summary>Reads current telemetry for fleet maintenance, failing closed.</summary>
+    private async Task<RdsCoreFleetStatus> ReadFleetForMaintenanceAsync(
+        string operation,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await nativeOrderClient!.GetRobotsStatusAsync(correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException error)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                $"Current robot telemetry could not be read, so {operation} is refused.",
+                error);
+        }
+    }
+
+    /// <summary>
+    /// Fail-closed alias resolution for the map-prep re-reads. An ambiguous or absent
+    /// alias yields null, which every caller already treats as "cannot proceed".
+    /// </summary>
+    private static RdsCoreRobotTelemetry? ResolveUniqueRobot(IReadOnlyList<RdsCoreRobotTelemetry> robots, string? alias)
+    {
+        var match = RdsRobotResolver.Resolve(robots, alias);
+        return match.Kind == RdsRobotMatchKind.Unique ? match.Robot : null;
+    }
+
+    /// <summary>
+    /// Resolves the canonical <see cref="RdsRobotIdentity.RobotLeaseKey"/> for a robot
+    /// that a caller knows by ONE alias. This read exists purely to collapse the two
+    /// identity spaces onto one lease key before the lease is taken: a caller holding a
+    /// uuid and a caller holding a vehicle_id must not end up on two different locks
+    /// for the same physical robot. It deliberately proves nothing about safety —
+    /// every safety-relevant fact is re-read INSIDE the lease.
+    ///
+    /// Returns null when telemetry cannot identify the robot, which callers treat as
+    /// fail-closed rather than as "no lock needed".
+    /// </summary>
+    private async Task<string?> ResolveRobotLeaseKeyAsync(
+        string knownAlias,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(knownAlias)) return null;
+
+        RdsCoreFleetStatus fleet;
+        try
+        {
+            fleet = await nativeOrderClient!.GetRobotsStatusAsync(correlationId, cancellationToken);
+        }
+        catch (RdsCoreNativeOrderException)
+        {
+            return null;
+        }
+
+        // Ambiguous aliases must not silently pick a machine. Returning null makes the
+        // caller refuse the mutation rather than lease the wrong robot.
+        var match = RdsRobotResolver.Resolve(fleet.Robots, knownAlias);
+        return match.Kind == RdsRobotMatchKind.Unique ? match.Robot!.ResolvedIdentity.RobotLeaseKey : null;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="leasedWork"/> while holding the robot-scoped distributed
+    /// lease, so that VALIDATE-then-MUTATE is atomic with respect to every other TKG
+    /// operation that could retarget the same physical robot. The per-request lease is
+    /// not sufficient: two different TransportRequests can each hold their own request
+    /// lease and still resolve to the same robot.
+    ///
+    /// The lease is a PostgreSQL session advisory lock, so it serialises across TKG
+    /// processes, not merely across tasks in one process. It is released in the
+    /// implicit finally of the await-using on every path — success, adapter exception
+    /// and cancellation alike.
+    /// </summary>
+    private async Task<T> WithRobotLeaseAsync<T>(
+        string knownAlias,
+        string operation,
+        Guid correlationId,
+        Func<string, CancellationToken, Task<T>> leasedWork,
+        CancellationToken cancellationToken)
+    {
+        var leaseKey = await ResolveRobotLeaseKeyAsync(knownAlias, correlationId, cancellationToken);
+        if (leaseKey is null)
+        {
+            throw new RdsExecutionException(
+                "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                $"The robot for this request could not be identified from current telemetry, so {operation} is refused.");
+        }
+
+        await using var lease = await store.TryAcquireRobotLeaseAsync(leaseKey, cancellationToken);
+        if (lease is null)
+        {
+            throw new RdsExecutionException(
+                "ROBOT_BUSY",
+                $"Another TKG operation is currently acting on robot '{leaseKey}', so {operation} is refused. Retry once it completes.");
+        }
+
+        // The held key is handed to the leased work so it can prove the robot it
+        // finally mutates is the robot this lease actually covers.
+        return await leasedWork(leaseKey, cancellationToken);
+    }
+
+    /// <summary>
+    /// Held-lease / final-target invariant. The lease is taken from a candidate alias
+    /// BEFORE the authoritative in-lease re-read, so the re-read can legitimately land
+    /// on a different physical robot — RDSCore may have reassigned the order in
+    /// between. Mutating that robot while holding a lease on another one would defeat
+    /// the whole point of the lease, so this fails closed and the caller retries from
+    /// fresh state. Swapping leases mid-attempt is deliberately not done: it would
+    /// reintroduce the very window the lease exists to close.
+    /// </summary>
+    private static void EnsureLeaseCoversTarget(string heldLeaseKey, RdsCoreRobotTelemetry target, string operation)
+    {
+        var targetKey = target.ResolvedIdentity.RobotLeaseKey;
+        if (!string.Equals(heldLeaseKey, targetKey, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new RdsExecutionException(
+                "EXPERT_ROBOT_CHANGED_DURING_VALIDATION",
+                $"The robot for this request changed from '{heldLeaseKey}' to '{targetKey}' after the lease was taken, so {operation} is refused. Retry from current state.");
+        }
+    }
+
+    /// <summary>
+    /// Single enforcement point for the global physical mutation gate outside the
+    /// dispatch path. Being Admin/Supervisor-only never substitutes for this check.
+    /// </summary>
+    private void EnsureMutationAllowed(RdsMutationClass mutationClass, string operation)
+    {
+        if (!RdsMutationPolicy.IsAllowed(mutationClass, IsGlobalDispatchAllowed))
+        {
+            throw new RdsExecutionException(
+                RdsMutationPolicy.BlockedCode,
+                RdsMutationPolicy.BlockedMessage(operation));
+        }
+    }
+
+    /// <summary>
+    /// Fleet-scoped robot maintenance routed through the Application layer so it
+    /// shares the one mutation policy instead of calling the adapter directly.
+    /// An explicit, non-empty vehicle list is required; there are no broadcast
+    /// semantics. Machine scoping for Supervisor is deliberately not invented here.
+    /// </summary>
+    public async Task<RdsCoreSimpleResult> RobotMaintenanceAsync(
+        RdsRobotMaintenanceAction action,
+        IReadOnlyList<string> vehicles,
+        string? dispatchableType,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (vehicles is not { Count: > 0 } || vehicles.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new RdsExecutionException("VEHICLES_REQUIRED", "At least one explicit vehicle identifier is required.");
+        }
+
+        var (mutationClass, operation) = action switch
+        {
+            RdsRobotMaintenanceAction.Pause => (RdsMutationClass.SafetyStop, "/gotoSitePause"),
+            RdsRobotMaintenanceAction.Resume => (RdsMutationClass.MotionEnabling, "/gotoSiteResume"),
+            RdsRobotMaintenanceAction.ClearErrors => (RdsMutationClass.MotionEnabling, "/clearRobotAllError"),
+            RdsRobotMaintenanceAction.SetDispatchable => (RdsMutationPolicy.ClassifyDispatchable(dispatchableType), "/dispatchable"),
+            _ => throw new RdsExecutionException("UNSUPPORTED_MAINTENANCE_ACTION", "Unsupported robot maintenance action.")
+        };
+
+        EnsureMutationAllowed(mutationClass, operation);
+        EnsureNativeExpertActionAvailable();
+
+        async Task<RdsCoreSimpleResult> InvokeAsync(IReadOnlyList<string> targets, CancellationToken ct) => action switch
+        {
+            RdsRobotMaintenanceAction.Pause => await nativeOrderClient!.GotoSitePauseAsync(targets, correlationId, ct),
+            RdsRobotMaintenanceAction.Resume => await nativeOrderClient!.GotoSiteResumeAsync(targets, correlationId, ct),
+            RdsRobotMaintenanceAction.ClearErrors => await nativeOrderClient!.ClearRobotAllErrorAsync(targets, correlationId, ct),
+            _ => await nativeOrderClient!.SetDispatchableAsync(targets, dispatchableType ?? string.Empty, correlationId, ct)
+        };
+
+        // Safety-stop actions are deliberately NOT leased. Pause and making a robot
+        // undispatchable reduce motion, and queueing them behind a motion-enabling
+        // lease would delay a stop — the wrong direction for safety. Only the
+        // motion-enabling and execution classes serialise against the same robot.
+        if (mutationClass == RdsMutationClass.SafetyStop)
+        {
+            // A stop is never delayed or refused for identity bookkeeping. It is sent
+            // with the caller's aliases exactly as before.
+            return await InvokeAsync(vehicles, cancellationToken);
+        }
+
+        // Motion-enabling fleet maintenance resolves every caller alias to a PHYSICAL
+        // robot first, then leases and calls RDS with the server-resolved identity.
+        // Previously the canonical identity was computed only to derive lease keys and
+        // the ORIGINAL caller aliases were still sent to RDS, so a request could hold
+        // the right lease while naming the robot in a way the server had never
+        // validated. Two aliases for one machine now collapse to one target, and an
+        // ambiguous alias is refused before any mutation.
+        var fleet = await ReadFleetForMaintenanceAsync(operation, correlationId, cancellationToken);
+        var resolved = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var alias in vehicles.Select(v => v.Trim()).Where(v => v.Length > 0))
+        {
+            var match = RdsRobotResolver.Resolve(fleet.Robots, alias);
+            if (match.Kind == RdsRobotMatchKind.Ambiguous)
+            {
+                throw new RdsExecutionException(
+                    "ROBOT_ALIAS_AMBIGUOUS",
+                    $"'{alias}' matches more than one physical robot, so {operation} is refused.");
+            }
+
+            if (match.Kind == RdsRobotMatchKind.NoMatch)
+            {
+                throw new RdsExecutionException(
+                    "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                    $"Robot '{alias}' could not be identified in current telemetry, so {operation} is refused.");
+            }
+
+            var identity = match.Robot!.ResolvedIdentity;
+            var leaseKey = identity.RobotLeaseKey;
+            var target = identity.MutationTarget;
+            if (string.IsNullOrWhiteSpace(leaseKey) || string.IsNullOrWhiteSpace(target))
+            {
+                throw new RdsExecutionException(
+                    "EXPERT_CURRENT_STATE_UNAVAILABLE",
+                    $"Robot '{alias}' reports no usable identity, so {operation} is refused.");
+            }
+
+            // Keyed by lease key, so two aliases naming one machine yield one target.
+            resolved[leaseKey] = target;
+        }
+
+        var leases = new List<IRdsExecutionLease>();
+        try
+        {
+            // Sorted order: two concurrent multi-robot calls cannot deadlock by taking
+            // the same pair in opposite orders.
+            foreach (var key in resolved.Keys)
+            {
+                var lease = await store.TryAcquireRobotLeaseAsync(key, cancellationToken)
+                    ?? throw new RdsExecutionException(
+                        "ROBOT_BUSY",
+                        $"Another TKG operation is currently acting on robot '{key}', so {operation} is refused.");
+                leases.Add(lease);
+            }
+
+            return await InvokeAsync([.. resolved.Values], cancellationToken);
+        }
+        finally
+        {
+            for (var i = leases.Count - 1; i >= 0; i--)
+            {
+                await leases[i].DisposeAsync();
+            }
+        }
+    }
+
+    public async Task<RdsExpertActionResult> ManualFinishAsync(
+        Guid requestId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        // Marking the current block finished advances the robot to the next block,
+        // so this starts physical work and is gated.
+        EnsureMutationAllowed(RdsMutationClass.MotionEnabling, "/manualFinished");
+        EnsureNativeExpertActionAvailable();
+
+        // The recorded agv_id is only a CANDIDATE used to find the lease. All
+        // validation happens inside the lease, against freshly read state.
+        var (_, candidate) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
+
+        return await WithRobotLeaseAsync(candidate.AgvId!, "manual finish", correlationId, async (heldLeaseKey, ct) =>
+        {
+            // SEER permits this only in an error condition; see
+            // SatisfiesManualFinishPrecondition for the documented wording.
+            var (task, vehicle) = await ResolveCurrentExecutionTargetAsync(
+                requestId,
+                SatisfiesManualFinishPrecondition,
+                "the current order to be in an error state (FAILED/Error) or the robot to be reporting an error",
+                "manual finish",
+                heldLeaseKey,
+                correlationId,
+                ct);
+
+            var result = await nativeOrderClient!.ManualFinishedAsync([vehicle], correlationId, ct);
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_EXPERT_MANUAL_FINISH",
+                result.CoreAccepted ? "ACCEPTED" : "REJECTED",
+                $"Manual finish targeted vehicle '{vehicle}', corroborated as currently executing order '{task.TaskRecordId}'.",
+                correlationId,
+                ct);
+
+            return new RdsExpertActionResult(requestId, task.TaskRecordId, vehicle, result.Code ?? 0, result.Message ?? string.Empty, result.CoreAccepted);
+        }, cancellationToken);
+    }
+
+    public async Task<RdsExpertActionResult> RedoFailedAsync(
+        Guid requestId,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        // Re-running a failed block re-dispatches physical work.
+        EnsureMutationAllowed(RdsMutationClass.MotionEnabling, "/redoFailedOrder");
+        EnsureNativeExpertActionAvailable();
+
+        var (_, candidate) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: true, cancellationToken);
+
+        return await WithRobotLeaseAsync(candidate.AgvId!, "redo failed order", correlationId, async (heldLeaseKey, ct) =>
+        {
+            // SEER permits this only for a FAILED order; see SatisfiesRedoPrecondition.
+            var (task, vehicle) = await ResolveCurrentExecutionTargetAsync(
+                requestId,
+                SatisfiesRedoPrecondition,
+                "the order to be FAILED",
+                "redo failed order",
+                heldLeaseKey,
+                correlationId,
+                ct);
+
+            var result = await nativeOrderClient!.RedoFailedOrderAsync([vehicle], correlationId, ct);
+            await store.WriteExecutionAuditAsync(
+                requestId,
+                "RDS_EXPERT_REDO_FAILED",
+                result.CoreAccepted ? "ACCEPTED" : "REJECTED",
+                $"Redo failed order targeted vehicle '{vehicle}', corroborated as currently executing failed order '{task.TaskRecordId}'.",
+                correlationId,
+                ct);
+
+            return new RdsExpertActionResult(requestId, task.TaskRecordId, vehicle, result.Code ?? 0, result.Message ?? string.Empty, result.CoreAccepted);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reprioritises the RDS order that belongs to this request. The order identity
+    /// comes from the persisted RDS task, never from the caller. SEER's numeric
+    /// priority direction is not documented in this repository, so the value is
+    /// range-checked and passed through without inventing overtaking semantics.
+    /// </summary>
+    public async Task<RdsExpertActionResult> SetRequestPriorityAsync(
+        Guid requestId,
+        int priority,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        // Input validation first: a malformed value is rejected regardless of which
+        // execution engine happens to be configured.
+        if (priority is < MinRdsPriority or > MaxRdsPriority)
+        {
+            throw new RdsExecutionException(
+                "PRIORITY_OUT_OF_RANGE",
+                $"Priority must be between {MinRdsPriority} and {MaxRdsPriority}.");
+        }
+
+        // Reordering the queue can cause work to be dispatched sooner.
+        EnsureMutationAllowed(RdsMutationClass.ExecutionMutation, "/setPriority");
+        EnsureNativeExpertActionAvailable();
+        var (_, task) = await ResolveExpertTargetAsync(requestId, requireAssignedVehicle: false, cancellationToken);
+
+        var result = await nativeOrderClient!.SetPriorityAsync(task.TaskRecordId, priority, correlationId, cancellationToken);
+        await store.WriteExecutionAuditAsync(
+            requestId,
+            "RDS_EXPERT_SET_PRIORITY",
+            result.CoreAccepted ? "ACCEPTED" : "REJECTED",
+            $"Priority {priority} applied to RDS order '{task.TaskRecordId}'.",
+            correlationId,
+            cancellationToken);
+
+        return new(requestId, task.TaskRecordId, task.AgvId ?? string.Empty, result.Code ?? 0, result.Message ?? string.Empty, result.CoreAccepted);
+    }
+
+    private const int MinRdsPriority = 0;
+    private const int MaxRdsPriority = 1000;
 
     public async Task<RdsCancellationResult> CancelAsync(Guid requestId, Guid? actorUserId, Guid correlationId, CancellationToken cancellationToken = default)
     {
@@ -650,18 +1298,63 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, taskRecordId, false, false, "VEHICLE_UNRESOLVED", "No vehicle could be resolved from the template or navigation profile.");
         }
 
+        // Everything from here on — telemetry validation, map-prep lock/switchMap and
+        // the SetOrder itself — is motion-enabling work against ONE physical robot, so
+        // it takes the robot-scoped distributed lease. The per-request lease already
+        // held by DispatchOneAsync is not enough: two different TransportRequests can
+        // each hold their own request lease and still resolve to the same robot, which
+        // is precisely how an expert mutation could retarget a robot mid-dispatch.
+        // The lease is released when this method returns, on every path.
+        var dispatchLeaseKey = await ResolveRobotLeaseKeyAsync(vehicle, correlationId, cancellationToken);
+        if (dispatchLeaseKey is null)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_DEFERRED", "ROBOT_IDENTITY_UNRESOLVED", $"Robot '{vehicle}' could not be identified in current telemetry, so dispatch is deferred.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_IDENTITY_UNRESOLVED", $"Robot '{vehicle}' could not be identified in current telemetry.");
+        }
+
+        await using var dispatchRobotLease = await store.TryAcquireRobotLeaseAsync(dispatchLeaseKey, cancellationToken);
+        if (dispatchRobotLease is null)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_DEFERRED", "ROBOT_BUSY", $"Another TKG operation currently holds the lease on robot '{dispatchLeaseKey}'.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_BUSY", "The robot is currently held by another TKG operation; the request remains queued.");
+        }
+
+        RdsCoreFleetStatus fleet;
         IReadOnlyList<RdsCoreRobotTelemetry> robots;
         try
         {
-            robots = await nativeOrderClient!.GetRobotsStatusAsync(correlationId, cancellationToken);
+            fleet = await nativeOrderClient!.GetRobotsStatusAsync(correlationId, cancellationToken);
+            robots = fleet.Robots;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Cancellation is never a robot fault: a shutdown must not be recorded
+            // as ROBOT_OFFLINE against a healthy robot.
             await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_OFFLINE", $"Failed to query robot telemetry: {ex.Message}", correlationId, cancellationToken);
             return new(requestId, taskRecordId, false, false, "ROBOT_OFFLINE", "RDSCore robot status query failed.");
         }
 
-        var robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+        // A core-level fatal/error means RDSCore's own state is unsafe to dispatch
+        // into — "have no charge point in map" and friends are scene problems, not
+        // one robot's problem. These alarms were previously parsed but never handed
+        // to any caller, so this gate could not fire at all.
+        if (fleet.GlobalHasBlockingAlarm)
+        {
+            var codes = string.Join(",", fleet.GlobalAlarms.Where(a => a.IsBlocking).Select(a => a.Code));
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "RDSCORE_HAS_BLOCKING_ALARM", $"RDSCore reports core-level blocking alarms: {codes}.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "RDSCORE_HAS_BLOCKING_ALARM", "RDSCore reports a core-level blocking alarm.");
+        }
+
+        var robot = ResolveUniqueRobot(robots, vehicle);
+        // Same invariant as the expert paths: the lease was taken from the configured
+        // vehicle alias before this authoritative read, so confirm the robot we are
+        // about to dispatch to is the one the held lease covers.
+        if (robot is not null && !string.Equals(dispatchLeaseKey, robot.ResolvedIdentity.RobotLeaseKey, StringComparison.OrdinalIgnoreCase))
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_DEFERRED", "ROBOT_CHANGED_DURING_VALIDATION", $"Robot for '{vehicle}' changed from '{dispatchLeaseKey}' after the lease was taken.", correlationId, cancellationToken);
+            return new(requestId, taskRecordId, false, false, "ROBOT_CHANGED_DURING_VALIDATION", "The robot changed after the lease was taken; the request remains queued.");
+        }
+
         if (robot is null || robot.ConnectionStatus != 1)
         {
             await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_OFFLINE", $"Robot '{vehicle}' is offline or not found.", correlationId, cancellationToken);
@@ -672,7 +1365,26 @@ public sealed class RdsExecutionCoordinator(
         var hasUnreleasedLock = lockSnapshot?.HasUnreleasedLock == true;
         var capturedLockInfo = lockSnapshot?.CapturedLockInfo;
         var isRobotLocked = robot.LockInfo?.Locked == true;
+
+        // Defence in depth: the store already filters the record by vehicle, but the
+        // returned record is revalidated here against the CURRENT preparation context
+        // before it can authorise an automatic /unlock. The recorded robot is matched
+        // through the shared identity so a uuid is never compared against a
+        // vehicle_id, and the recorded target map must be the map being prepared now.
+        // A record missing either value cannot be trusted and is treated as
+        // uncorrelated.
+        var recordedVehicleMatches = !string.IsNullOrWhiteSpace(lockSnapshot?.Vehicle)
+                                     && robot.ResolvedIdentity.Matches(lockSnapshot!.Vehicle);
+        var recordedMapMatches = !string.IsNullOrWhiteSpace(lockSnapshot?.TargetMap)
+                                 && string.Equals(lockSnapshot!.TargetMap!.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase);
+
+        // Needed by the recovery eligibility check below as well as by the normal
+        // transition flow, so it is resolved before either uses it.
+        var mapPrepOrderId = RdsCoreNormalOrder.TransitionOrderId(requestId, requiredMap);
+
         var isLockCorrelated = hasUnreleasedLock
+                               && recordedVehicleMatches
+                               && recordedMapMatches
                                && capturedLockInfo is not null
                                && robot.LockInfo is not null
                                && capturedLockInfo.CorrelatesWith(robot.LockInfo);
@@ -694,20 +1406,81 @@ public sealed class RdsExecutionCoordinator(
             }
             else
             {
-                // Robot is still locked, not dispatchable, or lock_info is unavailable
-                // Only perform automatic recovery /unlock when:
-                // 1. TKG has an unreleased map-prep lock record
-                // 2. Robot is currently locked
-                // 3. Current lock_info can be correlated with the lock_info captured by TKG
-                // 4. Current map / orchestration state makes unlock safe (current_map == requiredMap)
-                if (isLockCorrelated && string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
+                // Robot is still locked, not dispatchable, or lock_info is unavailable.
+                //
+                // Automatic /unlock is a physical mutation on a robot TKG believes it
+                // left locked. Correlation proves the lock is OURS; it does not prove
+                // that releasing it right now is SAFE. Ownership and safety are
+                // separate questions and both must be answered BEFORE the adapter
+                // call — previously the blocking-alarm and incompatible-order checks
+                // sat further down this method and so ran only AFTER the unlock had
+                // already been issued.
+                //
+                // Every condition is evaluated here, and the adapter call is last:
+                //   A recovery record exists for this request      hasUnreleasedLock
+                //   B the record names this robot                  recordedVehicleMatches
+                //   C the record targets the map being prepared    recordedMapMatches
+                //   D the robot currently reports itself locked    robotReportsLocked
+                //   E the live lock fingerprint correlates         CorrelatesWith
+                //   F the robot is on the required map now         currentMapMatches
+                //   G no incompatible order is active              !hasIncompatibleOrder
+                //   H no blocking (fatal/error) alarm              !HasBlockingAlarm
+                //   I business state is documented-idle            IsBusinessIdle
+                // A/B/C/E are folded into isLockCorrelated above.
+                var currentMapMatches = string.Equals(
+                    robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase);
+                var robotReportsLocked = robot.LockInfo?.Locked == true;
+
+                // ANY non-terminal order blocks automatic recovery — including this
+                // request's own main order and its own MAP_PREP transition order. An
+                // earlier round exempted those two on the grounds that they belong to
+                // this request, but ownership is not safety: a MAP_PREP order that is
+                // still RUNNING or SUSPENDED means the map preparation this lock exists
+                // for is still in progress, and releasing the lock underneath it is
+                // exactly the unsafe case. SEER documents no order state that is
+                // provably safe to unlock beneath, so the rule is: no active order at
+                // all. A terminal own order simply leaves this check satisfied.
+                var hasActiveOrder = IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState);
+
+                // procBusiness is a NECESSARY condition, never sufficient — see
+                // RdsCoreRobotTelemetry.MayBeExecutingBusinessWork for the documentation
+                // ambiguity. The positive evidence that nothing is executing is
+                // hasActiveOrder above; this only adds SEER's own report and fails
+                // closed when it is true or absent.
+                var recoveryEligible = isLockCorrelated
+                    && currentMapMatches
+                    && robotReportsLocked
+                    && !hasActiveOrder
+                    && !robot.HasBlockingAlarm
+                    && !robot.MayBeExecutingBusinessWork;
+
+                if (!recoveryEligible && isLockCorrelated)
+                {
+                    // The lock is ours but the runtime state forbids touching it now.
+                    // Recorded so a commissioning engineer can see why recovery stalled.
+                    var blockingReason = !currentMapMatches ? "MAP_MISMATCH"
+                        : !robotReportsLocked ? "ROBOT_NOT_LOCKED"
+                        : hasActiveOrder ? "ACTIVE_ORDER_ON_ROBOT"
+                        : robot.HasBlockingAlarm ? "BLOCKING_ALARM"
+                        : robot.ProcBusiness is null ? "BUSINESS_STATE_UNKNOWN"
+                        : "BUSINESS_BUSY";
+                    await store.WriteExecutionAuditAsync(
+                        requestId,
+                        "MAP_PREP_BLOCKED",
+                        "LOCK_RECOVERY_UNSAFE",
+                        $"Correlated map-switch lock on '{vehicle}' was not automatically released: {blockingReason}.",
+                        correlationId,
+                        cancellationToken: cancellationToken);
+                }
+
+                if (recoveryEligible)
                 {
                     var unlockRecovery = await nativeOrderClient.UnlockAsync([vehicle], correlationId, cancellationToken);
                     if (unlockRecovery.CoreAccepted)
                     {
                         await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_LOCK_RELEASED", "LOCK_RECOVERY_SUCCESS", "Successfully released post-switchMap lock after correlated crash recovery.", correlationId, cancellationToken: cancellationToken);
-                        robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
-                        robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                        robots = (await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken)).Robots;
+                        robot = ResolveUniqueRobot(robots, vehicle);
                     }
                 }
 
@@ -726,13 +1499,14 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, taskRecordId, false, false, "ROBOT_NOT_DISPATCHABLE", $"Robot '{vehicle}' is not dispatchable.");
         }
 
-        if (robot.IsError || robot.Alarms.Count > 0)
+        // Only fatal/error alarms block dispatch. A warning or a notice is reported
+        // but is not a fault, so it must not strand a healthy robot.
+        if (robot.IsError || robot.HasBlockingAlarm)
         {
             await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "ROBOT_HAS_BLOCKING_ALARM", $"Robot '{vehicle}' has blocking errors/alarms.", correlationId, cancellationToken);
             return new(requestId, taskRecordId, false, false, "ROBOT_HAS_BLOCKING_ALARM", $"Robot '{vehicle}' has blocking errors/alarms.");
         }
 
-        var mapPrepOrderId = RdsCoreNormalOrder.TransitionOrderId(requestId, requiredMap);
         if (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState)
             && !string.Equals(robot.CurrentOrderId, taskRecordId, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
@@ -766,9 +1540,12 @@ public sealed class RdsExecutionCoordinator(
                 {
                     prepDetails = await nativeOrderClient.GetOrderDetailsAsync(mapPrepOrderId, correlationId, cancellationToken);
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // Order not yet found or query failed
+                    // Order not yet found or query failed. Cancellation propagates:
+                    // the branch below decides whether to dispatch a *physical*
+                    // transition navigation, so a cancelled caller must never fall
+                    // through to a motion-enabling SetOrder.
                 }
 
                 if (prepDetails?.State.Known is RdsCoreKnownOrderState.Running or RdsCoreKnownOrderState.Created or RdsCoreKnownOrderState.Waiting or RdsCoreKnownOrderState.ToBeDispatched)
@@ -796,20 +1573,22 @@ public sealed class RdsExecutionCoordinator(
             // Re-query /robotsStatus and strictly confirm current_station == transitionStation and robot health
             try
             {
-                robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+                robots = (await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken)).Robots;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCH_TRANSITION_NOT_CONFIRMED", $"Failed to query robot status for transition arrival verification: {ex.Message}", correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "SWITCH_TRANSITION_NOT_CONFIRMED", "Failed to query robot status for transition arrival verification.");
             }
 
-            robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+            robot = ResolveUniqueRobot(robots, vehicle);
             if (robot is null
                 || robot.ConnectionStatus != 1
                 || !robot.Dispatchable
                 || robot.IsError
-                || robot.Alarms.Count > 0
+                // Fatal/error only: a standing notice must not permanently prevent a
+                // legitimate map switch.
+                || robot.HasBlockingAlarm
                 || (IsOrderActive(robot.CurrentOrderId, robot.CurrentOrderState) && !string.Equals(robot.CurrentOrderId, mapPrepOrderId, StringComparison.OrdinalIgnoreCase))
                 || !string.Equals(robot.CurrentStation?.Trim(), transitionStation, StringComparison.OrdinalIgnoreCase))
             {
@@ -822,7 +1601,7 @@ public sealed class RdsExecutionCoordinator(
             {
                 lockResult = await nativeOrderClient.LockAsync([vehicle], correlationId, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "LOCK_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "LOCK_FAILED", ex.Message);
@@ -838,13 +1617,15 @@ public sealed class RdsExecutionCoordinator(
             RdsCoreRobotLockInfo? activeLockInfo = null;
             try
             {
-                var postLockRobots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
-                var postLockRobot = postLockRobots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+                var postLockRobots = (await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken)).Robots;
+                var postLockRobot = ResolveUniqueRobot(postLockRobots, vehicle);
                 activeLockInfo = postLockRobot?.LockInfo;
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Telemetry capture failure does not block switchMap attempt, but leaves lock uncorrelatable on crash
+                // Telemetry capture failure does not block switchMap attempt, but leaves lock uncorrelatable on crash.
+                // Cancellation propagates instead: SwitchMap below is a physical
+                // mutation, so a cancelled caller must not continue into it.
             }
 
             await store.WriteExecutionAuditAsync(
@@ -861,7 +1642,7 @@ public sealed class RdsExecutionCoordinator(
             {
                 switchResult = await nativeOrderClient.SwitchMapAsync(vehicle, requiredMap, correlationId, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "SWITCHMAP_FAILED", ex.Message);
@@ -878,7 +1659,11 @@ public sealed class RdsExecutionCoordinator(
                 }
                 catch
                 {
-                    // If unlock throws or fails, MAP_PREP_LOCK_RELEASED is not written, enabling safe recovery on restart
+                    // If unlock throws or fails, MAP_PREP_LOCK_RELEASED is not written, enabling safe recovery on restart.
+                    // This one deliberately swallows cancellation too: throwing out of a
+                    // finally block would replace the real SWITCHMAP_FAILED cause, and
+                    // swallowing is the fail-safe direction here — the lock stays recorded
+                    // as unreleased, so recovery blocks rather than assuming it was freed.
                 }
             }
 
@@ -890,21 +1675,21 @@ public sealed class RdsExecutionCoordinator(
 
             try
             {
-                robots = await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+                robots = (await nativeOrderClient.GetRobotsStatusAsync(correlationId, cancellationToken)).Robots;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_TELEMETRY_FAILED", ex.Message, correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "POST_SWITCH_TELEMETRY_FAILED", ex.Message);
             }
-            robot = robots.FirstOrDefault(r => string.Equals(r.VehicleId, vehicle, StringComparison.OrdinalIgnoreCase));
+            robot = ResolveUniqueRobot(robots, vehicle);
             if (robot is null || !string.Equals(robot.CurrentMap?.Trim(), requiredMap, StringComparison.OrdinalIgnoreCase))
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "SWITCHMAP_VERIFICATION_FAILED", $"Robot map is '{robot?.CurrentMap}', expected '{requiredMap}'.", correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "SWITCHMAP_VERIFICATION_FAILED", "Robot did not switch to the required map.");
             }
 
-            if (robot.IsError || robot.Alarms.Count > 0)
+            if (robot.IsError || robot.HasBlockingAlarm)
             {
                 await store.WriteExecutionAuditAsync(requestId, "MAP_PREP_BLOCKED", "POST_SWITCH_ALARM", "Robot has alarms following map switch.", correlationId, cancellationToken);
                 return new(requestId, taskRecordId, false, false, "POST_SWITCH_ALARM", "Robot has alarms following map switch.");

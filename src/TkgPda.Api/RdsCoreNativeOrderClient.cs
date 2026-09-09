@@ -368,7 +368,7 @@ public sealed class RdsCoreNativeOrderClient(
         return ParseSimpleResult(response);
     }
 
-    public async Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(
+    public async Task<RdsCoreFleetStatus> GetRobotsStatusAsync(
         Guid correlationId,
         CancellationToken cancellationToken = default)
     {
@@ -733,20 +733,32 @@ public sealed class RdsCoreNativeOrderClient(
             root);
     }
 
-    private static IReadOnlyList<RdsCoreRobotTelemetry> ParseRobotTelemetry(JsonElement root)
+    private static RdsCoreFleetStatus ParseRobotTelemetry(JsonElement root)
     {
         var target = root;
         if (target.TryGetProperty("data", out var dataProp) && dataProp.ValueKind == JsonValueKind.Object)
             target = dataProp;
 
+        // Core-level alarms live on the response root, beside "report". This is the
+        // object the parser was never given: it used to receive only report[] entries,
+        // so a documented root fatal reached nobody. Append scans the direct buckets
+        // and the "alarms" wrapper on this object and does not descend into report[],
+        // so robot alarms are not double-counted here.
+        var globalAlarms = new List<RdsParsedAlarm>();
+        RdsRobotAlarmParser.Append(globalAlarms, target, new HashSet<string>(StringComparer.Ordinal));
+
         if (!target.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Array)
-            return [];
+        {
+            // A malformed or absent report must not discard core-level alarms.
+            return new RdsCoreFleetStatus([], globalAlarms);
+        }
 
         var list = new List<RdsCoreRobotTelemetry>();
         foreach (var robot in report.EnumerateArray())
         {
             if (robot.ValueKind != JsonValueKind.Object) continue;
-            var vehicleId = Text(robot, "vehicle_id") ?? Text(robot, "uuid");
+            var identity = RdsRobotIdentity.FromRobotElement(robot);
+            var vehicleId = identity.MutationTarget;
             if (string.IsNullOrWhiteSpace(vehicleId)) continue;
 
             var basic = Object(robot, "basic_info");
@@ -756,7 +768,8 @@ public sealed class RdsCoreNativeOrderClient(
             var rbk = Object(robot, "rbk_report");
             var currentStation = rbk is { } rcs ? Text(rcs, "current_station") : null;
             var lastStation = rbk is { } rls ? Text(rls, "last_station") : null;
-            var batteryLevel = rbk is { } rbl && rbl.TryGetProperty("battery_level", out var bl) && bl.TryGetDouble(out var bld) ? bld : 0.0;
+            // Absence of battery telemetry is UNAVAILABLE (null), never a 0% reading.
+            var batteryLevel = rbk is { } rbl && rbl.TryGetProperty("battery_level", out var bl) && bl.TryGetDouble(out var bld) ? bld : (double?)null;
             var x = rbk is { } rx && rx.TryGetProperty("x", out var xp) && xp.TryGetDouble(out var xd) ? xd : (double?)null;
             var y = rbk is { } ry && ry.TryGetProperty("y", out var yp) && yp.TryGetDouble(out var yd) ? yd : (double?)null;
             var angle = rbk is { } ra && ra.TryGetProperty("angle", out var ap) && ap.TryGetDouble(out var ad) ? ad : (double?)null;
@@ -772,35 +785,21 @@ public sealed class RdsCoreNativeOrderClient(
             var currentOrderId = currentOrder is { } co ? Text(co, "id") : null;
             var currentOrderState = currentOrder is { } cos ? Text(cos, "state") : null;
 
-            var alarms = new List<string>();
-            if (robot.TryGetProperty("alarms", out var alarmsObj) && alarmsObj.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var kind in new[] { "fatals", "errors", "warnings", "notices" })
-                {
-                    if (alarmsObj.TryGetProperty(kind, out var arr) && arr.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in arr.EnumerateArray())
-                        {
-                            var s = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
-                            if (!string.IsNullOrWhiteSpace(s)) alarms.Add(s);
-                        }
-                    }
-                }
-            }
-            if (alarms.Count == 0 && rbk is { } rbkAlarms && rbkAlarms.TryGetProperty("alarms", out var rbkAlarmsObj) && rbkAlarmsObj.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var kind in new[] { "fatals", "errors", "warnings", "notices" })
-                {
-                    if (rbkAlarmsObj.TryGetProperty(kind, out var arr) && arr.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in arr.EnumerateArray())
-                        {
-                            var s = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
-                            if (!string.IsNullOrWhiteSpace(s)) alarms.Add(s);
-                        }
-                    }
-                }
-            }
+            // Alarms come from the one shared parser: documented buckets only
+            // (fatals/errors/warnings/notices), both entry shapes, severity kept.
+            // This block previously looked for "alarms.fatals" and
+            // "rbk_report.alarms.fatals" — paths that appear nowhere in the SEER
+            // documentation — so it matched nothing on a real payload and every
+            // robot reported zero alarms.
+            var alarms = RdsRobotAlarmParser.ParseRobot(robot);
+
+            // SEER idle test: dispatchable && !procBusiness. Absent means UNKNOWN.
+            var procBusiness = robot.ValueKind == JsonValueKind.Object
+                               && robot.TryGetProperty("procBusiness", out var pb)
+                               && pb.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? pb.ValueKind == JsonValueKind.True
+                : (bool?)null;
+
             var lockInfoObj = Object(robot, "lock_info") ?? (rbk is { } r ? Object(r, "lock_info") : null);
             RdsCoreRobotLockInfo? lockInfo = null;
             if (lockInfoObj is { } li)
@@ -833,10 +832,12 @@ public sealed class RdsCoreNativeOrderClient(
                 currentOrderId,
                 currentOrderState,
                 alarms,
-                lockInfo));
+                lockInfo,
+                identity,
+                procBusiness));
         }
 
-        return list;
+        return new RdsCoreFleetStatus(list, globalAlarms);
     }
 
     private static JsonElement? Object(JsonElement value, string name) =>
@@ -886,11 +887,10 @@ public sealed class RdsCoreRobotTelemetryProvider(
             foreach (var robot in report.EnumerateArray())
             {
                 if (robot.ValueKind != JsonValueKind.Object) continue;
-                var vehicleId = robot.TryGetProperty("vehicle_id", out var vid) && vid.ValueKind == JsonValueKind.String
-                    ? vid.GetString()
-                    : robot.TryGetProperty("uuid", out var uid) && uid.ValueKind == JsonValueKind.String
-                        ? uid.GetString()
-                        : null;
+                // Shared identity policy: the ETA map is keyed by the same
+                // vehicle-space identifier that rds_tasks.agv_id and the mutation
+                // APIs use, so enrichment cannot miss on an identity-space mismatch.
+                var vehicleId = RdsRobotIdentity.FromRobotElement(robot).MutationTarget;
                 if (string.IsNullOrWhiteSpace(vehicleId)) continue;
 
                 if (robot.TryGetProperty("remaining_time", out var rt) && rt.TryGetDouble(out var rtd) && rtd >= 0)

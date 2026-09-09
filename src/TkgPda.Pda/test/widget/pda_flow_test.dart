@@ -209,18 +209,18 @@ void main() {
 
         await _scrollTo(
           tester,
-          find.byKey(const Key('direct-action-BRING_EMPTY')),
+          find.byKey(const Key('direct-action-BRING_EMPTY-1')),
         );
         expect(
-          find.byKey(const Key('direct-action-BRING_EMPTY')),
+          find.byKey(const Key('direct-action-BRING_EMPTY-1')),
           findsOneWidget,
         );
         expect(
-          find.byKey(const Key('direct-action-REMOVE_FULL')),
+          find.byKey(const Key('direct-action-REMOVE_FULL-1')),
           findsOneWidget,
         );
         expect(
-          find.byKey(const Key('direct-action-REMOVE_EMPTY')),
+          find.byKey(const Key('direct-action-REMOVE_EMPTY-1')),
           findsNothing,
         );
         expect(find.text('İşleme Devam Et'), findsNothing);
@@ -237,9 +237,9 @@ void main() {
 
       await _scrollTo(
         tester,
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY-1')),
       );
-      await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
+      await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY-1')));
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const Key('confirm-direct-transport')), findsNothing);
       expect(find.text('Sistem tarafından seçilecek'), findsNothing);
@@ -254,12 +254,12 @@ void main() {
       expect(find.text('Fiziksel Yerleşim'), findsNothing);
       await _scrollTo(
         tester,
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY-1')),
       );
       expect(
         tester
             .widget<ElevatedButton>(
-              find.byKey(const Key('direct-action-BRING_EMPTY')),
+              find.byKey(const Key('direct-action-BRING_EMPTY-1')),
             )
             .onPressed,
         isNull,
@@ -280,10 +280,10 @@ void main() {
 
           await _scrollTo(
             tester,
-            find.byKey(Key('direct-action-${operationCase.operation}')),
+            find.byKey(Key('direct-action-${operationCase.operation}-1')),
           );
           await tester.tap(
-            find.byKey(Key('direct-action-${operationCase.operation}')),
+            find.byKey(Key('direct-action-${operationCase.operation}-1')),
           );
           await tester.pump(const Duration(milliseconds: 500));
           expect(
@@ -325,10 +325,10 @@ void main() {
 
         await _scrollTo(
           tester,
-          find.byKey(Key('direct-action-${errorCase.operation}')),
+          find.byKey(Key('direct-action-${errorCase.operation}-1')),
         );
         await tester.tap(
-          find.byKey(Key('direct-action-${errorCase.operation}')),
+          find.byKey(Key('direct-action-${errorCase.operation}-1')),
         );
         await tester.pumpAndSettle();
         expect(find.text(errorCase.message), findsOneWidget);
@@ -344,8 +344,8 @@ void main() {
       ..createCompleter = Completer<TransportResult>();
     final harness = await _operationHarness(tester, repository: repository);
 
-    await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
-    await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
+    await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY-1')));
+    await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY-1')));
     // A single frame — the pending completer never resolves, and the busy
     // indicator is an indeterminate animation, so pumpAndSettle would hang.
     await tester.pump();
@@ -355,7 +355,7 @@ void main() {
     expect(
       tester
           .widget<ElevatedButton>(
-            find.byKey(const Key('direct-action-BRING_EMPTY')),
+            find.byKey(const Key('direct-action-BRING_EMPTY-1')),
           )
           .onPressed,
       isNull,
@@ -421,14 +421,14 @@ void main() {
   ) async {
     final repository = FakePdaRepository();
     final harness = await _operationHarness(tester, repository: repository);
-    await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
+    await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY-1')));
     repository.contextError = const ConnectivityException();
 
     await harness.controller.refreshContext(showBusy: true);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('offline-banner')), findsOneWidget);
     final button = tester.widget<ElevatedButton>(
-      find.byKey(const Key('direct-action-BRING_EMPTY')),
+      find.byKey(const Key('direct-action-BRING_EMPTY-1')),
     );
     expect(button.onPressed, isNull);
     harness.dispose();
@@ -604,11 +604,11 @@ void main() {
         expect(tester.takeException(), isNull);
         await _scrollTo(
           tester,
-          find.byKey(const Key('direct-action-BRING_EMPTY')),
+          find.byKey(const Key('direct-action-BRING_EMPTY-1')),
         );
         expect(
           tester
-              .getSize(find.byKey(const Key('direct-action-BRING_EMPTY')))
+              .getSize(find.byKey(const Key('direct-action-BRING_EMPTY-1')))
               .height,
           greaterThanOrEqualTo(48),
         );
@@ -629,17 +629,17 @@ void main() {
 
       await _scrollTo(
         tester,
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY-1')),
       );
       expect(
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY-1')),
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('direct-action-REMOVE_FULL')),
+        find.byKey(const Key('direct-action-REMOVE_FULL-1')),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
+      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY-1')), findsNothing);
       expect(find.text('İşleme Devam Et'), findsNothing);
       expect(find.text('Fiziksel Yerleşim'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -712,8 +712,8 @@ Future<void> _loginFromUi(
 }
 
 Future<void> _submitBringEmpty(WidgetTester tester) async {
-  await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY')));
-  await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY')));
+  await _scrollTo(tester, find.byKey(const Key('direct-action-BRING_EMPTY-1')));
+  await tester.tap(find.byKey(const Key('direct-action-BRING_EMPTY-1')));
   await tester.pumpAndSettle();
 }
 
@@ -754,16 +754,10 @@ ActiveTransportRequest _failureRequest() => ActiveTransportRequest(
   cancelDisabledMessage: 'Yürütme başladıktan sonra PDA iptali yapılamaz.',
   execution: const ExecutionProjection(
     state: 'FAILED',
-    rdsTaskRecordId: 'RDS-77',
-    rdsTaskLabel: null,
-    outOrderNo: null,
-    agvId: 'AGV-7',
-    rdsStatus: 1004,
     lastSyncAt: null,
     failureCode: 'EXECUTION_FAILED',
     failureCategory: 'EXECUTION',
     operatorMessage: 'Robot görevi tamamlayamadı.',
-    technicalMessage: null,
     correlationId: 'failure-correlation',
   ),
 );

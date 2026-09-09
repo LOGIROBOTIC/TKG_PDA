@@ -400,11 +400,11 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         await fixture.SetSlotAsync(slots[0], "VACANT", "UNKNOWN");
         await fixture.SetSlotAsync(slots[1], "VACANT", "UNKNOWN");
         using var client = await fixture.LoginClientAsync(identity);
-        var body = Bring(context, slots[0]);
+        var body = Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-AUTHEN1"));
 
         var created = await fixture.SendTransportAsync(client, body, "http-idempotency");
         var replay = await fixture.SendTransportAsync(client, body, "http-idempotency");
-        var conflict = await fixture.SendTransportAsync(client, Bring(context, slots[1]), "http-idempotency");
+        var conflict = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-AUTHEN2")), "http-idempotency");
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
@@ -425,7 +425,7 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         using var client = await fixture.LoginClientAsync(identity);
 
-        var response = await fixture.SendTransportAsync(client, Bring(context, slot), "operate-denied");
+        var response = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slot, "P05-AUTHEN3")), "operate-denied");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("MACHINE_ACCESS_DENIED", await ApiTestFixture.ErrorCodeAsync(response));
@@ -442,13 +442,13 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         await fixture.SetSlotAsync(slots[1], "VACANT", "UNKNOWN");
         using var client = await fixture.LoginClientAsync(identity);
 
-        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, slots[0]), "cancel-http");
+        var createdResponse = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slots[0], "P05-AUTHEN4")), "cancel-http");
         var created = await createdResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         var cancelled = await client.PostAsync($"/api/v1/transport-requests/{created!.Id}/cancel", null);
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
         Assert.Contains("CANCELLED", await cancelled.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var lateResponse = await fixture.SendTransportAsync(client, Bring(context, slots[1]), "cancel-late-http");
+        var lateResponse = await fixture.SendTransportAsync(client, Bring(context, await fixture.PartForSlotAsync(slots[1], "P05-AUTHEN5")), "cancel-late-http");
         var late = await lateResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
         await fixture.ExecuteAsync(
             "UPDATE ops.transport_requests SET status = 'SENT_TO_RDS' WHERE id = @id",
@@ -522,7 +522,7 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         var slot = (await fixture.LogisticsSlotsAsync(active.LayoutId, 1)).Single();
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         using var client = await fixture.LoginClientAsync(identity);
-        _ = await fixture.SendTransportAsync(client, Bring(active, slot), "switch-http-block");
+        _ = await fixture.SendTransportAsync(client, Bring(active, await fixture.PartForSlotAsync(slot, "P05-AUTHEN6")), "switch-http-block");
 
         var response = await client.PostAsJsonAsync(
             $"/api/v1/machines/{active.MachineId}/variant-selection",
@@ -541,15 +541,21 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         using var client = await fixture.LoginClientAsync(identity);
-        var body = Bring(context, slot);
+        var body = Bring(context, await fixture.PartForSlotAsync(slot, "P05-AUTHEN7"));
 
         var responses = await Task.WhenAll(
             fixture.SendTransportAsync(client, body, "http-slot-race-a"),
             fixture.SendTransportAsync(client, body, "http-slot-race-b"));
 
-        Assert.Contains(responses, response => response.StatusCode == HttpStatusCode.Created);
-        var conflict = Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
-        Assert.Equal("SLOT_ALREADY_RESERVED", await ApiTestFixture.ErrorCodeAsync(conflict));
+        // The invariant under test is unchanged: exactly one reservation is created.
+        // Only the rejection reason moved — with backend slot resolution the loser
+        // finds no eligible slot rather than colliding with a supplied one.
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
+        var rejected = Assert.Single(responses, response => !response.IsSuccessStatusCode);
+        var rejectedCode = await ApiTestFixture.ErrorCodeAsync(rejected);
+        Assert.True(
+            rejectedCode is "SLOT_ALREADY_RESERVED" or "BRING_EMPTY_SLOT_NOT_FOUND",
+            $"Unexpected concurrent-rejection code '{rejectedCode}'.");
         Assert.Equal(1, await fixture.ScalarAsync<long>("SELECT count(*) FROM ops.transport_requests"));
     }
 
@@ -562,7 +568,7 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         var slot = (await fixture.LogisticsSlotsAsync(context.LayoutId, 1)).Single();
         await fixture.SetSlotAsync(slot, "VACANT", "UNKNOWN");
         using var client = await fixture.LoginClientAsync(identity);
-        var body = Bring(context, slot);
+        var body = Bring(context, await fixture.PartForSlotAsync(slot, "P05-AUTHEN8"));
 
         var responses = await Task.WhenAll(
             fixture.SendTransportAsync(client, body, "http-same-key-race"),
@@ -589,15 +595,15 @@ public sealed class AuthenticatedApiTests(ApiTestFixture fixture) : IClassFixtur
         Assert.All(responses, response => Assert.Equal(HttpStatusCode.NotFound, response.StatusCode));
     }
 
-    private static CreateTransportHttpRequest Bring(LayoutContext context, Guid destination) => new(
+    // The Operator contract has no source/destination slot: the part identifies the
+    // position and the backend resolves it from master.layout_slot_parts.
+    private static CreateTransportHttpRequest Bring(LayoutContext context, Guid partId) => new(
         context.MachineId,
         context.VariantId,
         context.LayoutId,
         null,
         null,
+        partId,
         null,
-        null,
-        "BRING_EMPTY",
-        null,
-        destination);
+        "BRING_EMPTY");
 }

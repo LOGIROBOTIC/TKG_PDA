@@ -88,7 +88,7 @@ public sealed class WarehousePreparationApiTests(ApiTestFixture fixture) : IClas
         var toBeReady = await CreateWaitingRequestAsync(creatorClient, context, slots[1], "excl-ready");
         var notRequiredResponse = await fixture.SendTransportAsync(
             creatorClient,
-            Bring(context, slots[2]),
+            Bring(context, await fixture.PartForSlotAsync(slots[2], "P05-WAREHO1")),
             "excl-not-required");
         var notRequired = await notRequiredResponse.Content.ReadFromJsonAsync<TransportHttpResponse>();
 
@@ -172,7 +172,7 @@ public sealed class WarehousePreparationApiTests(ApiTestFixture fixture) : IClas
         Assert.DoesNotContain(requests, r => r.RequestId == hidden.Id);
     }
 
-    private static async Task<TransportHttpResponse> CreateWaitingRequestAsync(
+    private async Task<TransportHttpResponse> CreateWaitingRequestAsync(
         HttpClient client,
         LayoutContext context,
         Guid destination,
@@ -181,7 +181,7 @@ public sealed class WarehousePreparationApiTests(ApiTestFixture fixture) : IClas
         var response = await client.SendAsync(
             new HttpRequestMessage(HttpMethod.Post, "/api/v1/transport-requests")
             {
-                Content = JsonContent.Create(Bring(context, destination, requiresPreparation: true)),
+                Content = JsonContent.Create(Bring(context, await fixture.PartForSlotAsync(destination, "P05-WAREHO2"), requiresPreparation: true)),
                 Headers = { { ApiHeaders.IdempotencyKey, idempotencyKey } },
             });
         response.EnsureSuccessStatusCode();
@@ -191,18 +191,16 @@ public sealed class WarehousePreparationApiTests(ApiTestFixture fixture) : IClas
 
     private static CreateTransportHttpRequest Bring(
         LayoutContext context,
-        Guid destination,
+        Guid partId,
         bool requiresPreparation = false) => new(
         context.MachineId,
         context.VariantId,
         context.LayoutId,
         null,
         null,
-        null,
+        partId,
         null,
         "BRING_EMPTY",
-        null,
-        destination,
         RequiresPreparation: requiresPreparation);
 
     private static async Task<List<WarehousePreparationRequestRecord>> ReadAsync(HttpResponseMessage response) =>

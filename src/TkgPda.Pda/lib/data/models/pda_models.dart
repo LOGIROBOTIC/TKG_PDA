@@ -358,7 +358,6 @@ class OperatorQueueItem {
     required this.etaSeconds,
     required this.etaState,
     this.requestId,
-    this.agvId,
   });
 
   final int queuePosition;
@@ -371,7 +370,8 @@ class OperatorQueueItem {
   final int? etaSeconds;
   final String etaState;
   final String? requestId;
-  final String? agvId;
+  // No agvId: the Operator queue is a business view and the API no longer
+  // serializes the raw RDS AGV identifier.
 
   factory OperatorQueueItem.fromJson(JsonMap json) => OperatorQueueItem(
     queuePosition: _integer(json['queuePosition']),
@@ -385,7 +385,6 @@ class OperatorQueueItem {
     etaSeconds: _nullableInteger(json['etaSeconds']),
     etaState: json['etaState'] as String? ?? 'UNAVAILABLE',
     requestId: json['requestId'] as String?,
-    agvId: json['agvId'] as String?,
   );
 }
 
@@ -415,54 +414,6 @@ class OperatorQueuePage {
   );
 }
 
-class RdsWorkSiteProjection {
-  const RdsWorkSiteProjection({
-    required this.isMapped,
-    required this.siteId,
-    required this.area,
-    required this.groupName,
-    required this.type,
-    required this.filled,
-    required this.locked,
-    required this.disabled,
-    required this.syncFailed,
-    required this.content,
-    required this.agvId,
-    required this.lastSyncAt,
-  });
-
-  final bool isMapped;
-  final String? siteId;
-  final String? area;
-  final String? groupName;
-  final int? type;
-  final int? filled;
-  final int? locked;
-  final int? disabled;
-  final int? syncFailed;
-  final String? content;
-  final String? agvId;
-  final DateTime? lastSyncAt;
-
-  bool get hasSyncProblem => syncFailed != null && syncFailed != 0;
-  bool get isDisabled => disabled != null && disabled != 0;
-  bool get isLocked => locked != null && locked != 0;
-
-  factory RdsWorkSiteProjection.fromJson(JsonMap json) => RdsWorkSiteProjection(
-    isMapped: json['isMapped'] as bool? ?? false,
-    siteId: json['siteId'] as String?,
-    area: json['area'] as String?,
-    groupName: json['groupName'] as String?,
-    type: _nullableInteger(json['type']),
-    filled: _nullableInteger(json['filled']),
-    locked: _nullableInteger(json['locked']),
-    disabled: _nullableInteger(json['disabled']),
-    syncFailed: _nullableInteger(json['syncFailed']),
-    content: json['content'] as String?,
-    agvId: json['agvId'] as String?,
-    lastSyncAt: _date(json['lastSyncAt']),
-  );
-}
 
 class ExecutionReadiness {
   const ExecutionReadiness({
@@ -528,7 +479,6 @@ class LayoutSlot {
     required this.currentContainerTypeId,
     required this.currentContainerCode,
     required this.rowVersion,
-    required this.rdsWorkSite,
     required this.executionReadiness,
     required this.availableActions,
     required this.loadStateActions,
@@ -554,7 +504,6 @@ class LayoutSlot {
   final String? currentContainerTypeId;
   final String? currentContainerCode;
   final int rowVersion;
-  final RdsWorkSiteProjection rdsWorkSite;
   final ExecutionReadiness executionReadiness;
   final List<AvailableAction> availableActions;
   final List<AvailableAction> loadStateActions;
@@ -582,7 +531,6 @@ class LayoutSlot {
     currentContainerTypeId: json['currentContainerTypeId'] as String?,
     currentContainerCode: json['currentContainerCode'] as String?,
     rowVersion: _integer(json['rowVersion']),
-    rdsWorkSite: RdsWorkSiteProjection.fromJson(_map(json['rdsWorkSite'])),
     executionReadiness: ExecutionReadiness.fromJson(
       _map(json['executionReadiness']),
     ),
@@ -663,7 +611,6 @@ class TaskTemplate {
     required this.variantId,
     required this.productGroupId,
     required this.operation,
-    required this.rdsTaskLabel,
     required this.rdsTaskLabelConfigured,
     required this.priority,
   });
@@ -672,7 +619,6 @@ class TaskTemplate {
   final String variantId;
   final String? productGroupId;
   final String operation;
-  final String? rdsTaskLabel;
   final bool rdsTaskLabelConfigured;
   final int priority;
 
@@ -681,53 +627,37 @@ class TaskTemplate {
     variantId: json['variantId'] as String,
     productGroupId: json['productGroupId'] as String?,
     operation: json['operation'] as String? ?? '',
-    rdsTaskLabel: json['rdsTaskLabel'] as String?,
     rdsTaskLabelConfigured: json['rdsTaskLabelConfigured'] as bool? ?? false,
     priority: _integer(json['priority']),
   );
 }
 
+/// Business execution view. The API does not serialize raw RDS identifiers
+/// (taskRecordId, taskLabel, outOrderNo, AGV id, numeric status) to any PDA
+/// role, so this model has no fields for them.
 class ExecutionProjection {
   const ExecutionProjection({
     required this.state,
-    required this.rdsTaskRecordId,
-    required this.rdsTaskLabel,
-    required this.outOrderNo,
-    required this.agvId,
-    required this.rdsStatus,
     required this.lastSyncAt,
     required this.failureCode,
     required this.failureCategory,
     required this.operatorMessage,
-    required this.technicalMessage,
     required this.correlationId,
   });
 
   final String state;
-  final String? rdsTaskRecordId;
-  final String? rdsTaskLabel;
-  final String? outOrderNo;
-  final String? agvId;
-  final int? rdsStatus;
   final DateTime? lastSyncAt;
   final String? failureCode;
   final String? failureCategory;
   final String? operatorMessage;
-  final String? technicalMessage;
   final String correlationId;
 
   factory ExecutionProjection.fromJson(JsonMap json) => ExecutionProjection(
     state: json['state'] as String? ?? 'REQUESTED',
-    rdsTaskRecordId: json['rdsTaskRecordId'] as String?,
-    rdsTaskLabel: json['rdsTaskLabel'] as String?,
-    outOrderNo: json['outOrderNo'] as String?,
-    agvId: json['agvId'] as String?,
-    rdsStatus: _nullableInteger(json['rdsStatus']),
     lastSyncAt: _date(json['lastSyncAt']),
     failureCode: json['failureCode'] as String?,
     failureCategory: json['failureCategory'] as String?,
     operatorMessage: json['operatorMessage'] as String?,
-    technicalMessage: json['technicalMessage'] as String?,
     correlationId: json['correlationId'] as String? ?? '',
   );
 }
@@ -1040,65 +970,42 @@ class TransportBatchResult {
   );
 }
 
+/// Operator-safe robot view.
+///
+/// The API deliberately does not serialize raw RDS technical data to a Line or
+/// Warehouse Operator — no SEER uuid, vehicle_id, map, WorkSite/station, pose,
+/// order or block identifier, and no lock fingerprint. This model therefore has
+/// no fields for them: the boundary is a contract, not a rendering choice.
+///
+/// Connectivity and battery are nullable because absent telemetry is UNKNOWN,
+/// never "offline" or "0%".
 class RobotTelemetry {
   const RobotTelemetry({
-    required this.vehicleId,
-    this.model,
-    this.currentMap,
-    this.currentStation,
-    this.lastStation,
-    required this.connectionStatus,
-    required this.dispatchable,
-    required this.isLoaded,
-    required this.isError,
-    required this.batteryLevel,
-    this.x,
-    this.y,
-    this.angle,
-    this.remainingTime,
-    this.currentOrderId,
-    this.currentOrderState,
-    this.alarms = const [],
+    this.displayName,
+    this.online,
+    this.batteryLevel,
+    this.hasActiveAlarm = false,
   });
 
-  final String vehicleId;
-  final String? model;
-  final String? currentMap;
-  final String? currentStation;
-  final String? lastStation;
-  final int connectionStatus;
-  final bool dispatchable;
-  final bool isLoaded;
-  final bool isError;
-  final double batteryLevel;
-  final double? x;
-  final double? y;
-  final double? angle;
-  final double? remainingTime;
-  final String? currentOrderId;
-  final String? currentOrderState;
-  final List<String> alarms;
+  /// Verified friendly model/display name. Never a raw dispatch identifier.
+  final String? displayName;
 
-  bool get isConnected => connectionStatus == 1;
+  /// Null when connectivity could not be observed.
+  final bool? online;
+
+  /// Null when battery telemetry is unavailable. Never defaulted to zero.
+  final double? batteryLevel;
+
+  /// True only for fatal/error faults. Benign notices do not raise this.
+  final bool hasActiveAlarm;
+
+  bool get isConnected => online == true;
 
   factory RobotTelemetry.fromJson(JsonMap json) => RobotTelemetry(
-    vehicleId: json['vehicleId'] as String? ?? json['vehicle_id'] as String? ?? '',
-    model: json['model'] as String?,
-    currentMap: json['currentMap'] as String? ?? json['current_map'] as String?,
-    currentStation: json['currentStation'] as String? ?? json['current_station'] as String?,
-    lastStation: json['lastStation'] as String? ?? json['last_station'] as String?,
-    connectionStatus: _integer(json['connectionStatus'] ?? json['connection_status']),
-    dispatchable: json['dispatchable'] as bool? ?? false,
-    isLoaded: json['isLoaded'] as bool? ?? false,
-    isError: json['isError'] as bool? ?? json['is_error'] as bool? ?? false,
-    batteryLevel: _decimal(json['batteryLevel'] ?? json['battery_level']) ?? 0.0,
-    x: _decimal(json['x']),
-    y: _decimal(json['y']),
-    angle: _decimal(json['angle']),
-    remainingTime: _decimal(json['remainingTime'] ?? json['remaining_time']),
-    currentOrderId: json['currentOrderId'] as String? ?? json['current_order_id'] as String?,
-    currentOrderState: json['currentOrderState'] as String? ?? json['current_order_state'] as String?,
-    alarms: _strings(json['alarms']),
+    displayName: json['displayName'] as String?,
+    online: json['online'] as bool?,
+    batteryLevel: _decimal(json['batteryLevel']),
+    hasActiveAlarm: json['hasActiveAlarm'] as bool? ?? false,
   );
 }
 

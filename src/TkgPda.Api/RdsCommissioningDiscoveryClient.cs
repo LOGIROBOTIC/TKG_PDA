@@ -291,10 +291,15 @@ public sealed class RdsCoreDiscoveryClient(
         foreach (var robot in report.EnumerateArray())
         {
             if (robot.ValueKind != JsonValueKind.Object) continue;
-            var id = Text(robot, "uuid") ?? Text(robot, "vehicle_id");
+            // Shared resolver so all three /robotsStatus readers parse both identity
+            // spaces the same way. Discovery deliberately keys on the internal uuid:
+            // /getRobotParkPoints and /queryDist are uuid-keyed, unlike the
+            // vehicle-keyed mutation APIs.
+            var identity = RdsRobotIdentity.FromRobotElement(robot);
+            var id = identity.DiscoveryKey;
             if (string.IsNullOrWhiteSpace(id)) continue;
-            var uuid = Text(robot, "uuid");
-            var vehicleId = Text(robot, "vehicle_id");
+            var uuid = identity.Uuid;
+            var vehicleId = identity.VehicleId;
             var basic = Object(robot, "basic_info");
             var telemetry = Object(robot, "rbk_report");
             var lockInfo = Object(robot, "lock_info");

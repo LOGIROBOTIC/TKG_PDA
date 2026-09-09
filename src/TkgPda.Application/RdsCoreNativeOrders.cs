@@ -410,15 +410,99 @@ public sealed record RdsCoreRobotTelemetry(
     bool Dispatchable,
     bool IsLoaded,
     bool IsError,
-    double BatteryLevel,
+    /// <summary>Null when battery telemetry is absent — UNAVAILABLE, never 0%.</summary>
+    double? BatteryLevel,
     double? X,
     double? Y,
     double? Angle,
     double? RemainingTime,
     string? CurrentOrderId,
     string? CurrentOrderState,
-    IReadOnlyList<string> Alarms,
-    RdsCoreRobotLockInfo? LockInfo = null);
+    /// <summary>
+    /// Alarms with severity preserved. Do not treat a non-empty list as a fault —
+    /// use <see cref="HasBlockingAlarm"/>, because warnings and notices are not
+    /// blocking.
+    /// </summary>
+    IReadOnlyList<RdsParsedAlarm> Alarms,
+    RdsCoreRobotLockInfo? LockInfo = null,
+    /// <summary>Both SEER identity spaces. See <see cref="RdsRobotIdentity"/>.</summary>
+    RdsRobotIdentity? Identity = null,
+    /// <summary>
+    /// SEER <c>procBusiness</c>: whether the robot is executing a business waybill.
+    /// SEER documents idle as <c>dispatchable == true &amp;&amp; procBusiness == false</c>
+    /// (RdsCustomProjectTutorial_en.md:350, 377-378). Null means the field was absent,
+    /// which is UNKNOWN — never assume idle.
+    /// </summary>
+    bool? ProcBusiness = null)
+{
+    /// <summary>
+    /// Identity for target matching. Falls back to treating <see cref="VehicleId"/>
+    /// as the vehicle-space identifier, which is what the reader produces.
+    /// </summary>
+    public RdsRobotIdentity ResolvedIdentity => Identity ?? new RdsRobotIdentity(null, VehicleId);
+
+    /// <summary>
+    /// True only for a fatal or error alarm. Warnings and notices are reported but
+    /// do not block dispatch, so a notice never behaves as a fault.
+    /// </summary>
+    public bool HasBlockingAlarm => Alarms.Any(alarm => alarm.IsBlocking);
+
+    /// <summary>
+    /// True unless SEER positively reports that no user-submitted order is running.
+    ///
+    /// DOCUMENTATION AMBIGUITY — read this before using it as an idle test. The DOCX
+    /// field table defines <c>procBusiness</c> only as "Kullanıcı tarafından gönderilen
+    /// order'ı yürütüyor mu" (is it executing a user-submitted order), and
+    /// RdsCustomProjectTutorial_en.md:350 gives idle as the CONJUNCTION
+    /// <c>dispatchable == true &amp;&amp; procBusiness == false</c>. Neither states that
+    /// <c>procBusiness == false</c> ALONE means idle, and the conjunction is unusable
+    /// as written during lock recovery because holding a lock is itself a reason for
+    /// <c>dispatchable</c> to be false. SEER documents no caller-owned-lock recovery
+    /// predicate at all.
+    ///
+    /// So this property is deliberately named for what it can prove — the absence of a
+    /// positive "no user order" report — and is used only as ONE necessary negative
+    /// condition. It is never treated as sufficient proof of idle: the actual evidence
+    /// that nothing is executing comes from the order-state checks alongside it.
+    /// True for <c>procBusiness == true</c> and also for null/absent, so an unknown
+    /// business state fails closed.
+    /// </summary>
+    public bool MayBeExecutingBusinessWork => ProcBusiness != false;
+}
+
+/// <summary>
+/// One <c>/robotsStatus</c> snapshot: the per-robot report AND the core-level alarms
+/// that sit beside it on the response root.
+///
+/// These are returned together deliberately. The parser has understood root alarms
+/// for a while, but both clients only ever handed it a narrower object — the native
+/// client a <c>report[]</c> element, the read client an <c>rbk_report</c> — so a
+/// documented core-level fatal could not reach any caller and dispatch saw a
+/// perfectly healthy fleet. Returning robots without the global alarms made that
+/// omission easy; returning one snapshot makes it impossible to ask for the robots
+/// and silently miss the rest.
+///
+/// SCOPE. Root alarms are RDSCore/scene-level, not robot-level: on the documented
+/// response they sit alongside <c>disable_paths</c>, <c>disable_points</c> and
+/// <c>dynamic_obstacle</c>, and although their <c>desc</c> text may name robots
+/// ("2000-1, have no charge point in map.") nothing attributes them structurally to
+/// one. They are therefore NOT copied onto each robot — that would invent an
+/// attribution the documentation does not make, and would strand every robot in the
+/// fleet on one robot's charge-point problem. They are kept as their own fact and
+/// consulted where core-level health actually matters.
+/// </summary>
+public sealed record RdsCoreFleetStatus(
+    IReadOnlyList<RdsCoreRobotTelemetry> Robots,
+    IReadOnlyList<RdsParsedAlarm> GlobalAlarms)
+{
+    public static readonly RdsCoreFleetStatus Empty = new([], []);
+
+    /// <summary>
+    /// A core-level fatal or error means RDSCore's own state is unsafe to dispatch
+    /// into. Warnings and notices stay non-blocking, exactly as for robot alarms.
+    /// </summary>
+    public bool GlobalHasBlockingAlarm => GlobalAlarms.Any(alarm => alarm.IsBlocking);
+}
 
 public interface IRdsCoreNativeOrderClient
 {
@@ -438,7 +522,7 @@ public interface IRdsCoreNativeOrderClient
     Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreFleetStatus> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> LockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> UnlockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> SwitchMapAsync(string vehicle, string map, Guid correlationId, CancellationToken cancellationToken = default);

@@ -152,7 +152,13 @@ public sealed record SlotContextRecord(
     string? CurrentContainerCode,
     long RowVersion,
     DateTimeOffset? RuntimeUpdatedAt,
-    RdsWorkSiteProjectionRecord RdsWorkSite,
+    // RdsWorkSite is deliberately absent from the serialized PDA contract. The raw
+    // WorkSite SiteId, area, group, content, AGV id and filled/locked/disabled/
+    // syncFailed flags are RDS technical evidence, not business state, and they are
+    // not TKG Occupancy/Load truth. The business-safe distillation the Operator
+    // actually needs is ExecutionReadiness below; the raw record stays on
+    // SlotContextDataRecord for server-side readiness evaluation and is available
+    // to Admin through the technical RDS endpoints.
     PdaExecutionReadinessRecord ExecutionReadiness,
     IReadOnlyList<PdaAvailableActionRecord> AvailableActions,
     IReadOnlyList<PdaAvailableActionRecord> LoadStateActions);
@@ -183,7 +189,10 @@ public sealed record PdaTaskTemplateRecord(
     string Operation,
     Guid? SourceSlotGroupId,
     Guid? DestinationSlotGroupId,
-    string? RdsTaskLabel,
+    // The raw RDS task label is deliberately absent from the PDA contract: it is
+    // RDS technical configuration and belongs to Admin diagnostics. The Operator
+    // only needs to know whether a label is configured, which is the readiness
+    // signal below. The label itself stays server-side for dispatch.
     bool RdsTaskLabelConfigured,
     int Priority);
 
@@ -219,18 +228,30 @@ public sealed record ActiveTransportDataRecord(
     Guid CorrelationId,
     RdsTaskDataRecord? RdsTask);
 
+/// <summary>
+/// Business execution view for the PDA. Raw RDS identifiers — taskRecordId,
+/// taskLabel, outOrderNo, AGV id and the numeric RDS status — are deliberately
+/// absent: this is a business contract served to every PDA role, and a Supervisor
+/// happening to hold a PDA does not make it a technical surface. Those values
+/// remain available to AdminWeb through the technical RDS endpoints.
+/// <see cref="State"/> is the friendly execution state derived from TKG status and
+/// refined by persisted RDS status server-side.
+///
+/// There is deliberately no TechnicalMessage. It previously carried the raw
+/// TKG FailureMessage or the raw RDS EndedReason to a device-bound Supervisor or
+/// Admin, which handed unbounded RDS text to a business contract. Every failure
+/// now crosses the boundary only as the normalised triple below
+/// (<see cref="FailureCode"/>, <see cref="FailureCategory"/>,
+/// <see cref="OperatorMessage"/>), and <see cref="CorrelationId"/> is the key an
+/// authorised user follows into AdminWeb or the server audit log for the
+/// technical detail.
+/// </summary>
 public sealed record PdaExecutionProjectionRecord(
     string State,
-    string? RdsTaskRecordId,
-    string? RdsTaskLabel,
-    string? OutOrderNo,
-    string? AgvId,
-    int? RdsStatus,
     DateTimeOffset? LastSyncAt,
     string? FailureCode,
     string? FailureCategory,
     string? OperatorMessage,
-    string? TechnicalMessage,
     Guid CorrelationId);
 
 public sealed record ActiveTransportRequestRecord(

@@ -240,9 +240,9 @@ void main() {
       expect(harness.controller.transportActionsReady, isTrue);
       expect(harness.controller.context?.activeVariantId, testVariantV1Id);
       expect(repository.switchCount, 0); // already active — no switch needed
-      await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
+      await _scrollTo(tester, const Key('direct-action-BRING_EMPTY-1'));
       expect(
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY-1')),
         findsOneWidget,
       );
       expect(find.text('İşleme Devam Et'), findsNothing);
@@ -304,9 +304,9 @@ void main() {
       expect(repository.switchCount, 1);
       expect(repository.lastSwitchVariantId, testVariantV2Id);
       expect(harness.controller.transportActionsReady, isTrue);
-      await _scrollTo(tester, const Key('direct-action-REMOVE_FULL'));
+      await _scrollTo(tester, const Key('direct-action-REMOVE_FULL-1'));
       expect(
-        find.byKey(const Key('direct-action-REMOVE_FULL')),
+        find.byKey(const Key('direct-action-REMOVE_FULL-1')),
         findsOneWidget,
       );
       expect(find.text('İşleme Devam Et'), findsNothing);
@@ -368,9 +368,9 @@ void main() {
     expect(repository.switchCount, 1);
     expect(repository.lastSwitchVariantId, testVariantV2Id);
     expect(harness.controller.transportActionsReady, isTrue);
-    await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
-    expect(find.byKey(const Key('direct-action-BRING_EMPTY')), findsOneWidget);
-    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
+    await _scrollTo(tester, const Key('direct-action-BRING_EMPTY-1'));
+    expect(find.byKey(const Key('direct-action-BRING_EMPTY-1')), findsOneWidget);
+    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY-1')), findsNothing);
     harness.dispose();
   });
 
@@ -459,8 +459,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(harness.controller.transportActionsReady, isTrue);
-    await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
-    expect(find.byKey(const Key('direct-action-BRING_EMPTY')), findsOneWidget);
+    await _scrollTo(tester, const Key('direct-action-BRING_EMPTY-1'));
+    expect(find.byKey(const Key('direct-action-BRING_EMPTY-1')), findsOneWidget);
     harness.dispose();
   });
 
@@ -483,16 +483,16 @@ void main() {
         find.byKey(Key('main-part-${testMainPartOption.partId}')),
       );
       await tester.pumpAndSettle();
-      await _scrollTo(tester, const Key('direct-action-BRING_EMPTY'));
+      await _scrollTo(tester, const Key('direct-action-BRING_EMPTY-1'));
       expect(
-        find.byKey(const Key('direct-action-BRING_EMPTY')),
+        find.byKey(const Key('direct-action-BRING_EMPTY-1')),
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('direct-action-REMOVE_FULL')),
+        find.byKey(const Key('direct-action-REMOVE_FULL-1')),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
+      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY-1')), findsNothing);
       expect(find.text('İşleme Devam Et'), findsNothing);
       expect(find.byKey(const Key('operation-content')), findsNothing);
       expect(find.text('Fiziksel Yerleşim'), findsNothing);

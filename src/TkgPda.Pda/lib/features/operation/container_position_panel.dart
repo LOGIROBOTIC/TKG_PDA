@@ -187,10 +187,20 @@ class _BusinessActionButton extends StatelessWidget {
       key: Key('container-${position.positionNumber}-$action'),
       message: enabled ? label : availability.disabledMessage ?? label,
       child: ElevatedButton(
+        // The key names the LOGICAL business action, which under WP-33 is
+        // (machine, variant/layout, part, logical container number, action) — so the
+        // container number has to be part of it. Without it every container card
+        // rendered the same key and a finder matched N widgets on any machine with
+        // more than one container position; the widget-test fixture happens to have
+        // exactly one, so only the real browser run caught it.
+        //
+        // positionNumber is the logical container ordinal already shown to the
+        // operator as "1. Kasa", not a physical slot id, WorkSite, RDS point or
+        // database UUID, so the Operator surface stays business-safe.
         key: Key(
           action == 'FULL'
-              ? 'direct-action-REMOVE_FULL'
-              : 'direct-action-BRING_EMPTY',
+              ? 'direct-action-REMOVE_FULL-${position.positionNumber}'
+              : 'direct-action-BRING_EMPTY-${position.positionNumber}',
         ),
         onPressed: enabled
             ? () => controller.submitContainerAction(position, action)

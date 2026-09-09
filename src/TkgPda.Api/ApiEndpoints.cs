@@ -86,8 +86,12 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/rds/robots/dispatchable", SetRobotDispatchableAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
 
+        // Conservative product-policy choice: no repository or customer evidence was
+        // found that a Line/Warehouse Operator should reprioritise a transport, so
+        // priority mutation is restricted to Admin/Supervisor until one is cited.
+        // Machine authorization and auditing are unchanged.
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/priority", SetRequestPriorityAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+            .RequireAuthorization(PolicyNames.VariantManager);
 
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/manual-finish", ManualFinishRequestAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
@@ -95,8 +99,12 @@ public static class ApiEndpoints
         endpoints.MapPost("/api/v1/transport-requests/{requestId:guid}/redo", RedoRequestAsync)
             .RequireAuthorization(PolicyNames.VariantManager);
 
-        endpoints.MapGet("/api/v1/rds/orders", ListRdsOrdersAsync)
-            .RequireAuthorization(PolicyNames.Operator);
+        // GET /api/v1/rds/orders is deliberately absent. It was an unfiltered,
+        // fleet-wide RDSCore passthrough reachable by LINE_OPERATOR that leaked raw
+        // order UUIDs, vehicles, block ids and WorkSite/point codes with no machine
+        // scoping, and it had no client consumer. A properly scoped Admin
+        // request/order correlation view belongs to the Task/Order Explorer work
+        // package, not to the Operator surface.
 
         return endpoints;
     }
@@ -333,8 +341,9 @@ public static class ApiEndpoints
             request.PartId,
             request.ContainerTypeId,
             operation,
-            request.SourceSlotId,
-            request.DestinationSlotId,
+            // Physical positions are resolved by the domain, never supplied by a caller.
+            null,
+            null,
             request.Priority,
             request.RequiresPreparation);
         var result = await workflow.CreateAsync(command, cancellationToken);
@@ -571,8 +580,9 @@ public static class ApiEndpoints
                 item.PartId,
                 item.ContainerTypeId,
                 operation,
-                item.SourceSlotId,
-                item.DestinationSlotId,
+                // Physical positions are resolved by the domain, never supplied.
+                null,
+                null,
                 item.Priority,
                 item.RequiresPreparation));
         }
@@ -744,7 +754,7 @@ public static class ApiEndpoints
             result.LoadState.ToDatabase(),
             result.RowVersion,
             result.WasIdempotentReplay,
-            contentSync));
+            LoadContentSyncHttpResult.From(contentSync)));
     }
 
     private static async Task<IResult> SwitchVariantAsync(
@@ -789,6 +799,23 @@ public static class ApiEndpoints
 
     private static void EnsureTransportOperationAllowed(ClaimsPrincipal principal, TransportTaskType operation)
     {
+        // REMOVE_EMPTY is internal orchestration vocabulary, not a standalone
+        // Operator action. The Operator's business actions are "Kasa Doldu"
+        // (REMOVE_FULL) and "Kasa Boş" (BRING_EMPTY); REMOVE_EMPTY exists so the
+        // Remove-All workflow can clear an OCCUPIED+EMPTY position, and the domain
+        // generates it server-side. It stays in the Domain enum and Remove-All keeps
+        // producing it — it is only barred from generic transport creation, which is
+        // the Operator business surface. This applies to every role on this route:
+        // holding more authority on a PDA does not make an internal operation
+        // directly selectable.
+        if (operation == TransportTaskType.RemoveEmpty)
+        {
+            throw new ApiException(
+                StatusCodes.Status422UnprocessableEntity,
+                "OPERATION_NOT_OPERATOR_SELECTABLE",
+                "REMOVE_EMPTY is produced by the Remove-All workflow and cannot be requested directly.");
+        }
+
         var warehouseOnly = principal.IsInRole(RoleCodes.WarehouseOperator)
             && !principal.IsInRole(RoleCodes.Admin)
             && !principal.IsInRole(RoleCodes.Supervisor)
@@ -875,130 +902,249 @@ public static class ApiEndpoints
     public sealed record SetDispatchableApiRequest(IReadOnlyList<string>? Vehicles, string Type);
     public sealed record SetPriorityApiRequest(int Priority);
 
+    // Operator information boundary: this returns an explicit business projection.
+    // Raw RDS telemetry (uuid, vehicle_id, map, station, pose, order/block ids,
+    // lock fingerprint) must never be serialized to a Line/Warehouse Operator, and
+    // that is enforced here rather than by the client choosing not to render it.
     private static async Task<IResult> ListRobotsAsync(
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
+        RdsIntegrationService service,
         CancellationToken cancellationToken)
     {
-        var correlationId = CorrelationId(context);
-        var robots = await rdsClient.GetRobotsStatusAsync(correlationId, cancellationToken);
+        var robots = await service.ListRobotsForOperatorAsync(CorrelationId(context), cancellationToken);
         return Results.Ok(new { robots });
     }
 
-    private static async Task<IResult> PauseRobotAsync(
-        RobotVehiclesApiRequest? request,
+    // Robot-scoped maintenance. These are fleet operations with no request context,
+    // so an explicit vehicle list is legitimate — but the list must be non-empty and
+    // explicit (never broadcast), Supervisor/Admin only, and every call is audited.
+    /// <summary>Logger for audit-write failures, which must never mask the real outcome.</summary>
+    private static ILogger MaintenanceLogger(HttpContext context) =>
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("TkgPda.Api.RobotMaintenance");
+
+    private static async Task<IResult> RobotMaintenanceAsync(
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
+        IApiDataStore dataStore,
+        RdsExecutionCoordinator rdsExecution,
+        RdsRobotMaintenanceAction action,
+        IReadOnlyList<string>? vehicles,
+        string? dispatchableType,
+        string auditAction,
+        object? auditDetail,
         CancellationToken cancellationToken)
     {
-        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
+        if (vehicles is not { Count: > 0 } || vehicles.Any(string.IsNullOrWhiteSpace))
         {
             return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
         }
+
         var correlationId = CorrelationId(context);
-        var result = await rdsClient.GotoSitePauseAsync(vehicles, correlationId, cancellationToken);
+        RdsCoreSimpleResult result;
+        try
+        {
+            // Routed through the Application layer so the one global mutation policy
+            // applies; motion-enabling maintenance is refused when dispatch is disabled.
+            result = await rdsExecution.RobotMaintenanceAsync(action, vehicles, dispatchableType, correlationId, cancellationToken);
+        }
+        // A refused attempt on a physical robot is exactly the event an audit log exists
+        // for. Catching only RdsExecutionException was not enough: the native adapter
+        // surfaces RdsCoreNativeOrderException, and HTTP/JSON faults can escape as
+        // themselves, so those attempts were never recorded. Cancellation is excluded —
+        // a disconnected caller is not a rejected attempt.
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            var rejectedCode = error switch
+            {
+                RdsExecutionException rds => rds.Code,
+                RdsCoreNativeOrderException native => native.Code,
+                _ => error.GetType().Name
+            };
+
+            await BestEffortAuditAsync(
+                dataStore,
+                context,
+                auditAction,
+                vehicles,
+                new { vehicles, detail = auditDetail, accepted = false, rejectedCode },
+                "Failed to record the rejected robot maintenance attempt");
+
+            // The original physical failure is rethrown with its stack intact. The
+            // mutation is never retried because bookkeeping failed.
+            throw;
+        }
+
+        await BestEffortAuditAsync(
+            dataStore,
+            context,
+            auditAction,
+            vehicles,
+            new { vehicles, detail = auditDetail, accepted = result.CoreAccepted, code = result.Code },
+            "Robot maintenance succeeded but its audit row could not be written");
+
         return Results.Json(result, statusCode: result.HttpStatusCode);
     }
 
-    private static async Task<IResult> ResumeRobotAsync(
+    /// <summary>
+    /// Post-outcome audit. Once RDS has answered, the PHYSICAL result is authoritative
+    /// and the audit row is bookkeeping: it must never change what the caller is told.
+    ///
+    /// Two things were wrong before. The catch filters excluded
+    /// OperationCanceledException, so an audit cancellation escaped — masking the real
+    /// physical failure on one path, and turning a completed mutation into a client
+    /// error on the other, which invites a retry of something that already happened.
+    /// And the write used the request's own token, which is exactly the token most
+    /// likely to be cancelled at that moment.
+    ///
+    /// So this swallows EVERY exception including cancellation, and writes under its
+    /// own short bounded token rather than the request token — bounded rather than
+    /// CancellationToken.None so a stuck write cannot hang the response.
+    /// </summary>
+    private static async Task BestEffortAuditAsync(
+        IApiDataStore dataStore,
+        HttpContext context,
+        string auditAction,
+        IReadOnlyList<string> vehicles,
+        object detail,
+        string failureMessage)
+    {
+        await PostOutcomeAudit.RunAsync(
+            token => WriteAuditAsync(
+                dataStore,
+                context,
+                context.User.UserId(),
+                Device(context).Id,
+                auditAction,
+                "ROBOT",
+                string.Join(',', vehicles),
+                detail,
+                token),
+            auditFailure => MaintenanceLogger(context).LogError(
+                auditFailure,
+                "{FailureMessage}: {AuditAction} for request {TraceIdentifier}.",
+                failureMessage,
+                auditAction,
+                context.TraceIdentifier));
+    }
+
+    private static Task<IResult> PauseRobotAsync(
         RobotVehiclesApiRequest? request,
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
-        CancellationToken cancellationToken)
-    {
-        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
-        {
-            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
-        }
-        var correlationId = CorrelationId(context);
-        var result = await rdsClient.GotoSiteResumeAsync(vehicles, correlationId, cancellationToken);
-        return Results.Json(result, statusCode: result.HttpStatusCode);
-    }
+        IApiDataStore dataStore,
+        RdsExecutionCoordinator rdsExecution,
+        CancellationToken cancellationToken) =>
+        RobotMaintenanceAsync(
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.Pause,
+            request?.Vehicles, null, "RDS_ROBOT_PAUSE", null, cancellationToken);
 
-    private static async Task<IResult> ClearRobotErrorsAsync(
+    private static Task<IResult> ResumeRobotAsync(
         RobotVehiclesApiRequest? request,
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
-        CancellationToken cancellationToken)
-    {
-        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
-        {
-            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
-        }
-        var correlationId = CorrelationId(context);
-        var result = await rdsClient.ClearRobotAllErrorAsync(vehicles, correlationId, cancellationToken);
-        return Results.Json(result, statusCode: result.HttpStatusCode);
-    }
+        IApiDataStore dataStore,
+        RdsExecutionCoordinator rdsExecution,
+        CancellationToken cancellationToken) =>
+        RobotMaintenanceAsync(
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.Resume,
+            request?.Vehicles, null, "RDS_ROBOT_RESUME", null, cancellationToken);
 
-    private static async Task<IResult> SetRobotDispatchableAsync(
+    private static Task<IResult> ClearRobotErrorsAsync(
+        RobotVehiclesApiRequest? request,
+        HttpContext context,
+        IApiDataStore dataStore,
+        RdsExecutionCoordinator rdsExecution,
+        CancellationToken cancellationToken) =>
+        RobotMaintenanceAsync(
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.ClearErrors,
+            request?.Vehicles, null, "RDS_ROBOT_CLEAR_ERRORS", null, cancellationToken);
+
+    private static Task<IResult> SetRobotDispatchableAsync(
         SetDispatchableApiRequest request,
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
-        CancellationToken cancellationToken)
-    {
-        if (request.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
-        {
-            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
-        }
-        var correlationId = CorrelationId(context);
-        var result = await rdsClient.SetDispatchableAsync(vehicles, request.Type, correlationId, cancellationToken);
-        return Results.Json(result, statusCode: result.HttpStatusCode);
-    }
+        IApiDataStore dataStore,
+        RdsExecutionCoordinator rdsExecution,
+        CancellationToken cancellationToken) =>
+        RobotMaintenanceAsync(
+            context, dataStore, rdsExecution, RdsRobotMaintenanceAction.SetDispatchable,
+            request.Vehicles, request.Type, "RDS_ROBOT_SET_DISPATCHABLE", new { request.Type }, cancellationToken);
 
+    // Expert recovery actions bind to a real TransportRequest, enforce machine
+    // authorization, resolve the exact RDS-assigned target server-side (never from
+    // the caller) and write an audit record. See RdsExecutionCoordinator.
     private static async Task<IResult> SetRequestPriorityAsync(
         Guid requestId,
         SetPriorityApiRequest request,
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
+        IApiDataStore dataStore,
+        MachineAccessService access,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken)
     {
-        var correlationId = CorrelationId(context);
-        var result = await rdsClient.SetPriorityAsync(requestId.ToString("D"), request.Priority, correlationId, cancellationToken);
-        return Results.Json(result, statusCode: result.HttpStatusCode);
+        var existing = await dataStore.FindTransportRequestAsync(requestId, cancellationToken)
+            ?? throw new ApiException(StatusCodes.Status404NotFound, "REQUEST_NOT_FOUND", "The transport request does not exist.");
+        _ = await access.EnsureAsync(context.User, existing.MachineId, MachineAccessKind.Operate, cancellationToken);
+
+        var result = await rdsExecution.SetRequestPriorityAsync(requestId, request.Priority, CorrelationId(context), cancellationToken);
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            "RDS_EXPERT_SET_PRIORITY",
+            "TRANSPORT_REQUEST",
+            requestId.ToString(),
+            new { request.Priority, result.TaskRecordId, result.Accepted },
+            cancellationToken);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> ManualFinishRequestAsync(
         Guid requestId,
-        RobotVehiclesApiRequest? request,
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
+        IApiDataStore dataStore,
+        MachineAccessService access,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken)
     {
-        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
-        {
-            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
-        }
-        var correlationId = CorrelationId(context);
-        var result = await rdsClient.ManualFinishedAsync(vehicles, correlationId, cancellationToken);
-        return Results.Json(result, statusCode: result.HttpStatusCode);
+        var existing = await dataStore.FindTransportRequestAsync(requestId, cancellationToken)
+            ?? throw new ApiException(StatusCodes.Status404NotFound, "REQUEST_NOT_FOUND", "The transport request does not exist.");
+        _ = await access.EnsureAsync(context.User, existing.MachineId, MachineAccessKind.Operate, cancellationToken);
+
+        var result = await rdsExecution.ManualFinishAsync(requestId, CorrelationId(context), cancellationToken);
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            "RDS_EXPERT_MANUAL_FINISH",
+            "TRANSPORT_REQUEST",
+            requestId.ToString(),
+            new { result.Vehicle, result.TaskRecordId, result.Accepted },
+            cancellationToken);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> RedoRequestAsync(
         Guid requestId,
-        RobotVehiclesApiRequest? request,
         HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
+        IApiDataStore dataStore,
+        MachineAccessService access,
+        RdsExecutionCoordinator rdsExecution,
         CancellationToken cancellationToken)
     {
-        if (request?.Vehicles is not { Count: > 0 } vehicles || vehicles.Any(string.IsNullOrWhiteSpace))
-        {
-            return Results.BadRequest(new { error = "VEHICLES_REQUIRED", message = "At least one valid vehicle identifier is required." });
-        }
-        var correlationId = CorrelationId(context);
-        var result = await rdsClient.RedoFailedOrderAsync(vehicles, correlationId, cancellationToken);
-        return Results.Json(result, statusCode: result.HttpStatusCode);
-    }
+        var existing = await dataStore.FindTransportRequestAsync(requestId, cancellationToken)
+            ?? throw new ApiException(StatusCodes.Status404NotFound, "REQUEST_NOT_FOUND", "The transport request does not exist.");
+        _ = await access.EnsureAsync(context.User, existing.MachineId, MachineAccessKind.Operate, cancellationToken);
 
-    private static async Task<IResult> ListRdsOrdersAsync(
-        int? page,
-        int? size,
-        HttpContext context,
-        IRdsCoreNativeOrderClient rdsClient,
-        CancellationToken cancellationToken)
-    {
-        var correlationId = CorrelationId(context);
-        var query = new RdsCoreOrderQuery(Page: Math.Max(1, page ?? 1), Size: Math.Clamp(size ?? 20, 1, 100));
-        var result = await rdsClient.GetOrdersAsync(query, correlationId, cancellationToken);
+        var result = await rdsExecution.RedoFailedAsync(requestId, CorrelationId(context), cancellationToken);
+        await WriteAuditAsync(
+            dataStore,
+            context,
+            context.User.UserId(),
+            Device(context).Id,
+            "RDS_EXPERT_REDO_FAILED",
+            "TRANSPORT_REQUEST",
+            requestId.ToString(),
+            new { result.Vehicle, result.TaskRecordId, result.Accepted },
+            cancellationToken);
         return Results.Ok(result);
     }
 

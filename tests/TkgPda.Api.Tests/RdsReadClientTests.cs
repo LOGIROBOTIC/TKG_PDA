@@ -172,6 +172,221 @@ public sealed class RdsReadClientTests
         Assert.Equal(0, handler.Calls);
     }
 
+    [Fact]
+    public async Task Robot_telemetry_fields_are_parsed_accurately()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {
+                    "uuid":"1003",
+                    "vehicle_id":"1003",
+                    "dispatchable":true,
+                    "connection_status":1,
+                    "isLoaded":false,
+                    "basic_info":{"model":"HELIFORK","current_map":"26.7.2026_map_optimak"},
+                    "current_order":{"id":"ORD-999","state":"RUNNING"},
+                    "rbk_report":{
+                        "battery_level":0.88,
+                        "charging":true,
+                        "current_station":"PP80",
+                        "last_station":"LM12",
+                        "current_map":"26.7.2026_map_optimak",
+                        "lock_info":{"locked":true,"nick_name":"TKG_LOCK"},
+                        "errors":[],"fatals":[],"warnings":[],"notices":[]
+                    }
+                }
+            ]}}
+            """);
+        var client = Client(handler);
+
+        var result = await client.GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(result.Data.Robots);
+        Assert.Equal("1003", robot.RobotId);
+        Assert.Equal("HELIFORK", robot.Model);
+        Assert.True(robot.Dispatchable);
+        Assert.True(robot.Online);
+        Assert.Equal(0.88, robot.BatteryLevel);
+        Assert.True(robot.IsCharging);
+        Assert.Equal("PP80", robot.CurrentStation);
+        Assert.Equal("LM12", robot.LastStation);
+        Assert.Equal("26.7.2026_map_optimak", robot.CurrentMap);
+        Assert.True(robot.IsLocked);
+        Assert.Equal("TKG_LOCK", robot.LockNickName);
+        Assert.Equal("ORD-999", robot.ActiveOrderId);
+        Assert.Equal("RUNNING", robot.ActiveOrderState);
+        Assert.False(robot.RdsReportedPayloadLoaded);
+    }
+
+    [Fact]
+    public async Task Both_seer_identity_spaces_are_preserved_when_uuid_differs_from_vehicle_id()
+    {
+        // Real SEER robots report a different internal uuid and dispatch vehicle_id.
+        // The simulator reports them identically, which is why the previous
+        // uuid-first / vehicle-first disagreement between readers went unnoticed.
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {
+                    "uuid":"ROBOT-INTERNAL-123",
+                    "vehicle_id":"AGV-01",
+                    "dispatchable":true,
+                    "connection_status":1,
+                    "rbk_report":{"errors":[],"fatals":[],"warnings":[],"notices":[]}
+                }
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(result.Data.Robots);
+        // RobotId is the vehicle-space mutation/join key.
+        Assert.Equal("AGV-01", robot.RobotId);
+        // Both spaces stay addressable.
+        Assert.Equal("ROBOT-INTERNAL-123", robot.ResolvedIdentity.Uuid);
+        Assert.Equal("AGV-01", robot.ResolvedIdentity.VehicleId);
+        // Correlation is identity-space agnostic in both directions...
+        Assert.True(robot.ResolvedIdentity.Matches("AGV-01"));
+        Assert.True(robot.ResolvedIdentity.Matches("ROBOT-INTERNAL-123"));
+        // ...but never widens to an unrelated robot or a blank candidate.
+        Assert.False(robot.ResolvedIdentity.Matches("AGV-99"));
+        Assert.False(robot.ResolvedIdentity.Matches(null));
+        Assert.False(robot.ResolvedIdentity.Matches("   "));
+    }
+
+    [Fact]
+    public async Task Absent_connectivity_and_lock_telemetry_stay_unknown_rather_than_online_and_unlocked()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"AGV-02","vehicle_id":"AGV-02",
+                 "rbk_report":{"errors":[],"fatals":[],"warnings":[],"notices":[]}}
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var robot = Assert.Single(result.Data.Robots);
+        Assert.Null(robot.Online);
+        Assert.Null(robot.LockInfo);
+        Assert.Null(robot.IsLocked);
+        Assert.Null(robot.BatteryLevel);
+        Assert.Null(robot.Dispatchable);
+    }
+
+    [Fact]
+    public async Task Full_seer_lock_fingerprint_is_captured_for_correlation()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"AGV-03","vehicle_id":"AGV-03","connection_status":1,
+                 "rbk_report":{
+                    "lock_info":{"locked":true,"nick_name":"TKG_LOCK","ip":"10.0.0.5","port":8088,"time_t":1788522696,"type":1,"desc":"map prep"},
+                    "errors":[],"fatals":[],"warnings":[],"notices":[]}}
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var lockInfo = Assert.Single(result.Data.Robots).LockInfo;
+        Assert.NotNull(lockInfo);
+        Assert.True(lockInfo.Locked);
+        Assert.Equal("TKG_LOCK", lockInfo.NickName);
+        Assert.Equal("10.0.0.5", lockInfo.Ip);
+        Assert.Equal(8088, lockInfo.Port);
+        Assert.Equal("1788522696", lockInfo.TimeT);
+        Assert.Equal(1, lockInfo.Type);
+        Assert.True(lockInfo.HasUsableFingerprint);
+    }
+
+    [Fact]
+    public async Task Both_documented_seer_alarm_shapes_are_parsed_with_their_bucket_severity()
+    {
+        // Literal payloads from RDS DÖKÜMANLARI/RdsScriptMethods/RdsScriptMethods_en.md:
+        // the core-level entry carries an explicit "code", the robot-level entry uses
+        // the alarm code as the property key with the timestamp as its value.
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"hu-test-1","vehicle_id":"AMB-01","connection_status":1,
+                 "rbk_report":{
+                    "fatals":[{"code":50401,"desc":"battery too low and shutdown","times":1,"timestamp":1681110452}],
+                    "errors":[{"52030":1681110460,"desc":"roller error","times":2}],
+                    "warnings":[{"55001":1634020734,"desc":"The robot is in the dispatching state.","times":1}],
+                    "notices":[{"code":80004,"desc":"no joining order","times":1}]}}
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        var byCode = result.Data.Alarms.ToDictionary(a => a.Code, a => a);
+        Assert.Equal(4, result.Data.Alarms.Count);
+
+        // Explicit-code shape.
+        Assert.Equal("fatal", byCode["50401"].Severity);
+        Assert.Equal("battery too low and shutdown", byCode["50401"].Description);
+
+        // Dynamically keyed shape — previously dropped entirely.
+        Assert.Equal("error", byCode["52030"].Severity);
+        Assert.Equal("roller error", byCode["52030"].Description);
+        Assert.Equal(2, byCode["52030"].OccurrenceCount);
+        Assert.Equal("1681110460", byCode["52030"].OccurredAt);
+
+        Assert.Equal("warning", byCode["55001"].Severity);
+        // A notice stays a notice; it is never promoted to an error.
+        Assert.Equal("notice", byCode["80004"].Severity);
+
+        // Every alarm is attributed to the vehicle-space robot key.
+        Assert.All(result.Data.Alarms, a => Assert.Equal("AMB-01", a.RobotId));
+    }
+
+    [Fact]
+    public async Task Malformed_and_duplicate_alarm_entries_do_not_break_the_fleet_read()
+    {
+        var handler = new RecordingHandler("""
+            {"code":200,"msg":"Success","data":{"report":[
+                {"uuid":"AGV-09","vehicle_id":"AGV-09","connection_status":1,
+                 "rbk_report":{
+                    "errors":[
+                        {"52030":1681110460,"desc":"roller error","times":1},
+                        {"52030":1681110499,"desc":"roller error repeated","times":1},
+                        {"desc":"no code at all","times":1},
+                        "not-an-object",
+                        {}],
+                    "fatals":[],"warnings":[],"notices":[]}}
+            ]}}
+            """);
+
+        var result = await Client(handler).GetRobotAlarmsAsync(Guid.NewGuid());
+
+        // The duplicate is collapsed, the malformed entries are skipped, and the read
+        // still succeeds.
+        var alarm = Assert.Single(result.Data.Alarms);
+        Assert.Equal("52030", alarm.Code);
+        Assert.Equal("error", alarm.Severity);
+        Assert.Single(result.Data.Robots);
+    }
+
+    [Fact]
+    public void Read_only_configuration_still_refuses_insecure_remote_http()
+    {
+        // Transport security is independent of dispatch permission.
+        var remoteHttpReadOnly = () => new RdsOptions(true, "http://10.20.30.40:8080", 5, DispatchEnabled: false).Validate();
+        Assert.Throws<InvalidOperationException>(remoteHttpReadOnly);
+
+        var remoteHttpDispatching = () => new RdsOptions(
+            true, "http://10.20.30.40:8080", 5, DispatchEnabled: true,
+            IntegrationKey: new string('k', 40), CallbackUrl: "https://tkg.example.test/cb",
+            CallbackKey: new string('c', 40)).Validate();
+        Assert.Throws<InvalidOperationException>(remoteHttpDispatching);
+
+        // Loopback stays usable for the local simulator, with or without dispatch.
+        new RdsOptions(true, "http://localhost:8080", 5, DispatchEnabled: false).Validate();
+        new RdsOptions(true, "http://127.0.0.1:8080", 5, DispatchEnabled: false).Validate();
+
+        // Remote HTTPS is fine, and an explicit override permits remote HTTP.
+        new RdsOptions(true, "https://rds.example.test", 5, DispatchEnabled: false).Validate();
+        new RdsOptions(true, "http://10.20.30.40:8080", 5, DispatchEnabled: false, AllowInsecureRemoteHttp: true).Validate();
+    }
+
     private static RdsReadClient Client(RecordingHandler handler)
     {
         var options = new RdsOptions(true, "http://127.0.0.1:8080/private/path?hidden=yes", 5);

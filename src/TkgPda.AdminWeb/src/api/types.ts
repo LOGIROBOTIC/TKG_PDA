@@ -239,6 +239,7 @@ export interface RdsNavigationProfile {
   name: string
   version: number
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+  robotMapName?: string | null
 }
 
 export interface RdsWorkSite {
@@ -257,6 +258,72 @@ export interface RdsWorkSite {
   lastSyncAt: string | null
   executionReady: boolean
 }
+
+// Every dimension can be UNKNOWN: absence of telemetry is never positive or
+// negative evidence. These unions mirror exactly what the backend can emit.
+export type RobotConnectivity = 'ONLINE' | 'OFFLINE' | 'UNKNOWN'
+export type RobotDispatch = 'DISPATCHABLE' | 'UNDISPATCHABLE' | 'UNKNOWN'
+export type RobotMotion = 'IDLE' | 'MOVING' | 'BLOCKED' | 'PAUSED' | 'UNKNOWN'
+export type RobotExecution = 'IDLE' | 'WAITING' | 'RUNNING' | 'SUSPENDED' | 'FINISHED' | 'ERROR' | 'UNKNOWN'
+export type RobotControl = 'UNLOCKED' | 'TKG_CORRELATED' | 'EXTERNAL_OR_OTHER' | 'UNKNOWN'
+
+/** SEER severity buckets are preserved, never collapsed into one number. */
+export interface RdsRobotAlarmCounts {
+  fatal: number
+  error: number
+  warning: number
+  notice: number
+  total: number
+  /** fatal + error. Only these justify a danger indicator. */
+  critical: number
+}
+
+export interface RdsRobotDetail {
+  robotId: string
+  model: string | null
+  /** SEER internal robot identity, when the payload carries it. */
+  uuid: string | null
+  /** RDS dispatch vehicle identifier, when the payload carries it. */
+  vehicleId: string | null
+  // 5 orthogonal dimensions
+  connectivity: RobotConnectivity
+  dispatch: RobotDispatch
+  undispatchableReason: string | null
+  motion: RobotMotion
+  execution: RobotExecution
+  control: RobotControl
+  /** Null when lock telemetry is absent (UNKNOWN), not false. */
+  isLocked: boolean | null
+  lockNickName: string | null
+  // Telemetry & diagnostics
+  batteryLevel: number | null
+  isCharging: boolean | null
+  currentStation: string | null
+  lastStation: string | null
+  currentMap: string | null
+  activeOrderId: string | null
+  activeOrderState: string | null
+  /**
+   * Technical diagnostic telemetry reported directly by SEER robot.
+   * Strictly isolated from TKG domain LoadState.
+   */
+  rdsReportedPayloadLoaded?: boolean | null
+  alarms: RdsRobotAlarmCounts
+  online: boolean | null
+  dispatchable: boolean | null
+}
+
+/**
+ * Execution states that mean the robot is actually working on an order right now.
+ * A retained activeOrderId is NOT activity: SEER keeps reporting the previous
+ * order id after it reaches FINISHED.
+ */
+export const ACTIVE_ROBOT_EXECUTIONS: readonly RobotExecution[] = ['RUNNING', 'WAITING', 'SUSPENDED']
+
+export function isRobotExecutionActive(robot: Pick<RdsRobotDetail, 'execution'>): boolean {
+  return ACTIVE_ROBOT_EXECUTIONS.includes(robot.execution)
+}
+
 
 export interface RdsRobotAlarm {
   robotId: string

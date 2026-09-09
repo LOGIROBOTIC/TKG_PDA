@@ -315,6 +315,7 @@ public sealed class RdsExecutionCoordinatorTests
         public Task<IReadOnlyList<RdsTaskProjection>> ListActiveTasksAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult(Active);
         public Task<IReadOnlyList<Guid>> ListPendingWorkSiteRefreshRequestIdsAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult(PendingWorkSiteRefreshes);
         public Task<IRdsExecutionLease?> TryAcquireRequestLeaseAsync(Guid requestId, CancellationToken cancellationToken = default) => Task.FromResult<IRdsExecutionLease?>(new Lease());
+        public Task<IRdsExecutionLease?> TryAcquireRobotLeaseAsync(string robotLeaseKey, CancellationToken cancellationToken = default) => Task.FromResult<IRdsExecutionLease?>(new Lease());
         public Task<RdsDispatchContext?> GetDispatchContextAsync(Guid requestId, CancellationToken cancellationToken = default) => Task.FromResult<RdsDispatchContext?>(Context with { Request = Request });
         public Task<TransportRequestSnapshot?> FindRequestAsync(Guid requestId, CancellationToken cancellationToken = default) => Task.FromResult<TransportRequestSnapshot?>(Request);
         public Task<RdsTaskProjection?> FindTaskByRequestAsync(Guid requestId, CancellationToken cancellationToken = default) => Task.FromResult(TaskProjection);

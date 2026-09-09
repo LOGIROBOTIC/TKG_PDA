@@ -29,8 +29,13 @@ public sealed record CreateTransportHttpRequest(
     Guid? PartId,
     Guid? ContainerTypeId,
     string Operation,
-    Guid? SourceSlotId,
-    Guid? DestinationSlotId,
+    // SourceSlotId / DestinationSlotId are deliberately absent from the Operator
+    // request contract. A normal Operator expresses business intent
+    // (machine -> part -> operation); the backend resolves the physical machine-side
+    // slot from master.layout_slot_parts and allocates the EMPTY_STORAGE buffer with
+    // FOR UPDATE ... SKIP LOCKED. Accepting these fields let an API caller choose
+    // physical routing even though the PDA always sent null. The resolved values are
+    // still returned on the response so the client can show what was chosen.
     int Priority = 100,
     bool RequiresPreparation = false);
 
@@ -44,8 +49,13 @@ public sealed record CreateTransportBatchItemHttpRequest(
     Guid? PartId,
     Guid? ContainerTypeId,
     string Operation,
-    Guid? SourceSlotId,
-    Guid? DestinationSlotId,
+    // SourceSlotId / DestinationSlotId are deliberately absent from the Operator
+    // request contract. A normal Operator expresses business intent
+    // (machine -> part -> operation); the backend resolves the physical machine-side
+    // slot from master.layout_slot_parts and allocates the EMPTY_STORAGE buffer with
+    // FOR UPDATE ... SKIP LOCKED. Accepting these fields let an API caller choose
+    // physical routing even though the PDA always sent null. The resolved values are
+    // still returned on the response so the client can show what was chosen.
     int Priority = 100,
     bool RequiresPreparation = false);
 
@@ -113,6 +123,18 @@ public sealed record VariantSwitchHttpRequest(
 
 public sealed record UpdateLoadStateHttpRequest(string LoadState);
 
+/// <summary>
+/// Operator-safe view of the RDS content synchronization outcome. The raw RDS
+/// WorkSite SiteId that <see cref="RdsLoadContentSyncResult"/> carries internally is
+/// deliberately not serialized: this endpoint is reachable by Line and Warehouse
+/// Operators, and the site identifier is RDS technical evidence.
+/// </summary>
+public sealed record LoadContentSyncHttpResult(string Status, string? Message)
+{
+    public static LoadContentSyncHttpResult From(RdsLoadContentSyncResult result) =>
+        new(result.Status, result.Message);
+}
+
 public sealed record UpdateLoadStateHttpResponse(
     Guid MachineId,
     Guid SlotId,
@@ -120,7 +142,7 @@ public sealed record UpdateLoadStateHttpResponse(
     string LoadState,
     long RowVersion,
     bool IdempotentReplay,
-    RdsLoadContentSyncResult RdsContentSync);
+    LoadContentSyncHttpResult RdsContentSync);
 
 public sealed record TransportHttpResponse(
     Guid Id,

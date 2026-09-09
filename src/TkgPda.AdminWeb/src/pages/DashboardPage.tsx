@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowUpRight, Boxes, Map, PackageOpen, Smartphone, Users } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Bot, Boxes, Map, PackageOpen, Smartphone, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAdminApi } from '../api/ApiContext'
 import { EmptyState, ErrorState, LoadingState, PageHeader, Panel, PanelHeader, StatusPill, compactNumber, formatDate } from '../components/ui'
@@ -14,6 +14,7 @@ export function DashboardPage() {
   const containers = useQuery({ queryKey: ['containers'], queryFn: ({ signal }) => api.containers(signal) })
   const issues = useQuery({ queryKey: ['data-issues'], queryFn: ({ signal }) => api.dataIssues(signal) })
   const audit = useQuery({ queryKey: ['audit', 8], queryFn: ({ signal }) => api.audit({ limit: 8 }, signal) })
+  const robots = useQuery({ queryKey: ['rds-robots'], queryFn: ({ signal }) => api.rdsRobots(signal), refetchOnWindowFocus: false })
   const all = [users, devices, machines, layouts, parts, containers, issues, audit]
   if (all.some((query) => query.isLoading)) return <LoadingState label="Yönetim özeti hazırlanıyor…" />
   const failure = all.find((query) => query.error)?.error
@@ -35,9 +36,10 @@ export function DashboardPage() {
       </div>
       <div className="dashboard-grid">
         <Panel>
-          <PanelHeader title="Konfigürasyon nabzı" description="Yayın ve cihaz durumlarının dağılımı" />
+          <PanelHeader title="Konfigürasyon nabzı" description="Yayın, cihaz ve filo durumlarının dağılımı" action={<Link className="text-link" to="/rds">RDS Filosu <ArrowUpRight size={15} /></Link>} />
           <div className="health-list">
             <div><span><Smartphone /> Aktif PDA cihazları</span><strong>{devices.data?.filter((item) => item.type === 'PDA' && item.isActive).length ?? 0}</strong></div>
+            <div><span><Bot /> Aktif robot filosu</span><strong>{robots.data ? `${robots.data.filter((r) => r.connectivity === 'ONLINE').length}/${robots.data.length} Çevrimiçi` : '—'}</strong></div>
             <div><span><Map /> Draft layout sürümleri</span><strong>{layouts.data?.filter((item) => item.status === 'DRAFT').length ?? 0}</strong></div>
             <div><span><PackageOpen /> Fiziksel ölçüsü eksik kasalar</span><strong>{containers.data?.filter((item) => item.lengthMm === null || item.widthMm === null || item.heightMm === null).length ?? 0}</strong></div>
             <div><span><Boxes /> Aktif canonical parçalar</span><strong>{parts.data?.filter((item) => item.isActive).length ?? 0}</strong></div>

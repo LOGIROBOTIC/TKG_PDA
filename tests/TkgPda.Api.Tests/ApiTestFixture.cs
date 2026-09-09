@@ -292,6 +292,81 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>
         ("layout_id", layoutId),
         ("count", count));
 
+    /// <summary>
+    /// Creates a dedicated part and maps it to exactly one logistics slot, then
+    /// returns the part id.
+    ///
+    /// The Operator HTTP contract no longer accepts a source or destination slot —
+    /// a normal Operator expresses machine -> part -> operation and the backend
+    /// resolves the physical position from master.layout_slot_parts. Tests therefore
+    /// address a slot the same way the real PDA does: by naming its part. Giving each
+    /// slot its own part keeps resolution deterministic, so assertions that expect a
+    /// specific slot still hold.
+    /// </summary>
+    public async Task<Guid> PartForSlotAsync(Guid slotId, string partCode, Guid? variantId = null)
+    {
+        await ExecuteAsync(
+            """
+            INSERT INTO master.parts (part_code, description, is_active)
+            VALUES (@part_code, 'API test part', true)
+            ON CONFLICT (part_code) DO NOTHING
+            """,
+            ("part_code", partCode));
+        var partId = await ScalarAsync<Guid>(
+            "SELECT id FROM master.parts WHERE part_code = @part_code",
+            ("part_code", partCode));
+        await ExecuteAsync(
+            """
+            INSERT INTO master.layout_slot_parts (layout_slot_id, part_id)
+            VALUES (@slot_id, @part_id)
+            ON CONFLICT (layout_slot_id, part_id) DO NOTHING
+            """,
+            ("slot_id", slotId),
+            ("part_id", partId));
+
+        // A transport part must belong to the active variant (PART_VARIANT_CONFLICT),
+        // so attach it to that variant's first product group exactly as customer
+        // master data would.
+        var variant = variantId ?? await ScalarAsync<Guid>(
+            """
+            SELECT v.id
+            FROM master.layout_slots ls
+            JOIN master.variant_layout_assignments a ON a.layout_id = ls.layout_id
+            JOIN master.variants v ON v.id = a.variant_id
+            WHERE ls.id = @slot_id
+            ORDER BY a.is_default DESC
+            LIMIT 1
+            """,
+            ("slot_id", slotId));
+        // A freshly created test variant may have no product group at all; give it one
+        // whose main part is this part, exactly as customer master data would.
+        await ExecuteAsync(
+            """
+            INSERT INTO master.product_groups (variant_id, main_part_id, name, display_order, is_active)
+            SELECT @variant_id, @part_id, 'API test group', 900, true
+            WHERE NOT EXISTS (
+                SELECT 1 FROM master.product_groups pg
+                WHERE pg.variant_id = @variant_id AND pg.is_active)
+            """,
+            ("part_id", partId),
+            ("variant_id", variant));
+        await ExecuteAsync(
+            """
+            INSERT INTO master.product_group_parts (product_group_id, part_id, relation_type, is_active)
+            SELECT pg.id, @part_id, 'RELATED', true
+            FROM master.product_groups pg
+            WHERE pg.variant_id = @variant_id AND pg.is_active
+              AND NOT EXISTS (
+                  SELECT 1 FROM master.product_group_parts x
+                  WHERE x.product_group_id = pg.id AND x.part_id = @part_id)
+            ORDER BY pg.display_order, pg.id
+            LIMIT 1
+            """,
+            ("part_id", partId),
+            ("variant_id", variant));
+        return partId;
+    }
+
     public Task SetSlotAsync(Guid slotId, string occupancy, string load) => ExecuteAsync(
         """
         INSERT INTO ops.slot_runtime_state (layout_slot_id, occupancy_state, load_state)

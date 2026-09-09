@@ -470,6 +470,40 @@ public sealed record RdsCoreRobotTelemetry(
     public bool MayBeExecutingBusinessWork => ProcBusiness != false;
 }
 
+/// <summary>
+/// One <c>/robotsStatus</c> snapshot: the per-robot report AND the core-level alarms
+/// that sit beside it on the response root.
+///
+/// These are returned together deliberately. The parser has understood root alarms
+/// for a while, but both clients only ever handed it a narrower object — the native
+/// client a <c>report[]</c> element, the read client an <c>rbk_report</c> — so a
+/// documented core-level fatal could not reach any caller and dispatch saw a
+/// perfectly healthy fleet. Returning robots without the global alarms made that
+/// omission easy; returning one snapshot makes it impossible to ask for the robots
+/// and silently miss the rest.
+///
+/// SCOPE. Root alarms are RDSCore/scene-level, not robot-level: on the documented
+/// response they sit alongside <c>disable_paths</c>, <c>disable_points</c> and
+/// <c>dynamic_obstacle</c>, and although their <c>desc</c> text may name robots
+/// ("2000-1, have no charge point in map.") nothing attributes them structurally to
+/// one. They are therefore NOT copied onto each robot — that would invent an
+/// attribution the documentation does not make, and would strand every robot in the
+/// fleet on one robot's charge-point problem. They are kept as their own fact and
+/// consulted where core-level health actually matters.
+/// </summary>
+public sealed record RdsCoreFleetStatus(
+    IReadOnlyList<RdsCoreRobotTelemetry> Robots,
+    IReadOnlyList<RdsParsedAlarm> GlobalAlarms)
+{
+    public static readonly RdsCoreFleetStatus Empty = new([], []);
+
+    /// <summary>
+    /// A core-level fatal or error means RDSCore's own state is unsafe to dispatch
+    /// into. Warnings and notices stay non-blocking, exactly as for robot alarms.
+    /// </summary>
+    public bool GlobalHasBlockingAlarm => GlobalAlarms.Any(alarm => alarm.IsBlocking);
+}
+
 public interface IRdsCoreNativeOrderClient
 {
     bool MutationEnabled { get; }
@@ -488,7 +522,7 @@ public interface IRdsCoreNativeOrderClient
     Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> SetDispatchableAsync(IReadOnlyList<string> vehicles, string type, Guid correlationId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
+    Task<RdsCoreFleetStatus> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> LockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> UnlockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default);
     Task<RdsCoreSimpleResult> SwitchMapAsync(string vehicle, string map, Guid correlationId, CancellationToken cancellationToken = default);

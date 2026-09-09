@@ -461,6 +461,129 @@ public sealed class RdsCoreNativeOrderClientTests
         Assert.Equal("26.7.2026_map_optimak_1", body.GetProperty("map").GetString());
     }
 
+    // ------------------------------------------------------------------
+    // Core-level alarms live on the /robotsStatus ROOT, beside "report". The parser
+    // has understood them for a while, but this client only ever handed it a
+    // report[] entry, so a documented root fatal reached nobody and dispatch saw a
+    // healthy fleet. These tests drive the real client with full literal payloads —
+    // a parser-only test cannot catch a caller that never passes the object.
+    // ------------------------------------------------------------------
+
+    private static string RootAlarmPayload(string rootAlarms, string robotAlarms = "") => $$"""
+    {
+      "code": 0,
+      "msg": "ok",
+      {{rootAlarms}}
+      "report": [
+        {
+          "vehicle_id": "Sfl-Cbd15",
+          "uuid": "Sfl-Cbd15",
+          "connection_status": 1,
+          "dispatchable": true,
+          "is_error": false,
+          "procBusiness": false,
+          "basic_info": { "model": "HELIFORK", "current_map": "m1" },
+          "rbk_report": { "current_station": "PP16", "battery_level": 1.0{{robotAlarms}} }
+        }
+      ]
+    }
+    """;
+
+    [Fact]
+    public async Task Root_wrapped_fatal_reaches_the_caller_as_a_blocking_global_alarm()
+    {
+        var json = RootAlarmPayload("""
+          "alarms": {
+            "fatals": [{ "code": 52101, "desc": "2000-1, have no charge point in map.", "times": 1, "timestamp": 1635409588 }],
+            "errors": [], "warnings": [], "notices": []
+          },
+        """);
+        var fleet = await Client(new RecordingHandler(_ => Json(json))).GetRobotsStatusAsync(Guid.NewGuid());
+
+        var alarm = Assert.Single(fleet.GlobalAlarms);
+        Assert.Equal("52101", alarm.Code);
+        Assert.Equal(RdsAlarmSeverity.Fatal, alarm.Severity);
+        Assert.True(fleet.GlobalHasBlockingAlarm);
+        // The robot itself is clean: the core alarm is NOT attributed to it.
+        Assert.False(Assert.Single(fleet.Robots).HasBlockingAlarm);
+    }
+
+    [Fact]
+    public async Task Root_direct_error_reaches_the_caller_as_a_blocking_global_alarm()
+    {
+        // Shape B, exactly as the documented response carries it beside "alarms".
+        var json = RootAlarmPayload("""
+          "errors": [{ "52103": 1631943027, "desc": "Rose_01,SW500_3, have no park point in map.", "times": 1 }],
+        """);
+        var fleet = await Client(new RecordingHandler(_ => Json(json))).GetRobotsStatusAsync(Guid.NewGuid());
+
+        var alarm = Assert.Single(fleet.GlobalAlarms);
+        Assert.Equal("52103", alarm.Code);
+        Assert.Equal(RdsAlarmSeverity.Error, alarm.Severity);
+        Assert.True(fleet.GlobalHasBlockingAlarm);
+    }
+
+    [Theory]
+    [InlineData("warnings", RdsAlarmSeverity.Warning)]
+    [InlineData("notices", RdsAlarmSeverity.Notice)]
+    public async Task Root_warning_and_notice_are_reported_but_not_blocking(string bucket, RdsAlarmSeverity expected)
+    {
+        var json = RootAlarmPayload($$"""
+          "alarms": { "{{bucket}}": [{ "code": 55001, "desc": "dispatching state.", "times": 1 }] },
+        """);
+        var fleet = await Client(new RecordingHandler(_ => Json(json))).GetRobotsStatusAsync(Guid.NewGuid());
+
+        Assert.Equal(expected, Assert.Single(fleet.GlobalAlarms).Severity);
+        Assert.False(fleet.GlobalHasBlockingAlarm);
+    }
+
+    [Fact]
+    public async Task A_robot_fatal_still_blocks_on_the_robot_and_not_globally()
+    {
+        const string robotFatal = """, "alarms": { "fatals": [{ "code": 52201, "desc": "robot fault", "times": 1 }] }""";
+        var json = RootAlarmPayload(string.Empty, robotFatal);
+        var fleet = await Client(new RecordingHandler(_ => Json(json))).GetRobotsStatusAsync(Guid.NewGuid());
+
+        Assert.True(Assert.Single(fleet.Robots).HasBlockingAlarm);
+        Assert.False(fleet.GlobalHasBlockingAlarm);
+        Assert.Empty(fleet.GlobalAlarms);
+    }
+
+    [Fact]
+    public async Task Root_and_robot_alarms_are_both_preserved_and_kept_apart()
+    {
+        const string rootError = "\"alarms\": { \"errors\": [{ \"code\": 52101, \"desc\": \"core\", \"times\": 1 }] },";
+        const string robotWarning = """, "alarms": { "warnings": [{ "code": 55001, "desc": "robot warning", "times": 1 }] }""";
+        var json = RootAlarmPayload(rootError, robotWarning);
+        var fleet = await Client(new RecordingHandler(_ => Json(json))).GetRobotsStatusAsync(Guid.NewGuid());
+
+        Assert.Equal("52101", Assert.Single(fleet.GlobalAlarms).Code);
+        Assert.True(fleet.GlobalHasBlockingAlarm);
+
+        var robot = Assert.Single(fleet.Robots);
+        Assert.Equal("55001", Assert.Single(robot.Alarms).Code);
+        Assert.False(robot.HasBlockingAlarm);
+    }
+
+    [Fact]
+    public async Task A_malformed_report_does_not_discard_a_root_fatal()
+    {
+        // The safety signal must survive a robot array we cannot read at all.
+        var json = """
+        {
+          "code": 0,
+          "msg": "ok",
+          "alarms": { "fatals": [{ "code": 52101, "desc": "core fatal", "times": 1 }] },
+          "report": "not-an-array"
+        }
+        """;
+        var fleet = await Client(new RecordingHandler(_ => Json(json))).GetRobotsStatusAsync(Guid.NewGuid());
+
+        Assert.Empty(fleet.Robots);
+        Assert.True(fleet.GlobalHasBlockingAlarm);
+        Assert.Equal("52101", Assert.Single(fleet.GlobalAlarms).Code);
+    }
+
     [Fact]
     public async Task Get_robots_status_parses_live_report_telemetry_for_Sfl_Cbd15()
     {
@@ -517,7 +640,7 @@ public sealed class RdsCoreNativeOrderClientTests
         var handler = new RecordingHandler(_ => Json(json));
         var client = Client(handler);
 
-        var robots = await client.GetRobotsStatusAsync(Guid.NewGuid());
+        var robots = (await client.GetRobotsStatusAsync(Guid.NewGuid())).Robots;
 
         var robot = Assert.Single(robots);
         Assert.Equal("Sfl-Cbd15", robot.VehicleId);
@@ -566,7 +689,7 @@ public sealed class RdsCoreNativeOrderClientTests
         var options = new RdsCoreExecutionOptions(true, RdsExecutionMode.RdsCoreNativeOrder, "http://127.0.0.1:8088/", 5, true);
         var client = new RdsCoreNativeOrderClient(new LiveFactory(options.BaseAddress), options);
 
-        var robots = await client.GetRobotsStatusAsync(Guid.NewGuid());
+        var robots = (await client.GetRobotsStatusAsync(Guid.NewGuid())).Robots;
         Assert.NotEmpty(robots);
         var robot = Assert.Single(robots, r => r.VehicleId == "Sfl-Cbd15");
         Assert.Equal("Sfl-Cbd15", robot.VehicleId);

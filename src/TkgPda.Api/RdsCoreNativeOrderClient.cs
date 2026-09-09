@@ -368,7 +368,7 @@ public sealed class RdsCoreNativeOrderClient(
         return ParseSimpleResult(response);
     }
 
-    public async Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(
+    public async Task<RdsCoreFleetStatus> GetRobotsStatusAsync(
         Guid correlationId,
         CancellationToken cancellationToken = default)
     {
@@ -733,14 +733,25 @@ public sealed class RdsCoreNativeOrderClient(
             root);
     }
 
-    private static IReadOnlyList<RdsCoreRobotTelemetry> ParseRobotTelemetry(JsonElement root)
+    private static RdsCoreFleetStatus ParseRobotTelemetry(JsonElement root)
     {
         var target = root;
         if (target.TryGetProperty("data", out var dataProp) && dataProp.ValueKind == JsonValueKind.Object)
             target = dataProp;
 
+        // Core-level alarms live on the response root, beside "report". This is the
+        // object the parser was never given: it used to receive only report[] entries,
+        // so a documented root fatal reached nobody. Append scans the direct buckets
+        // and the "alarms" wrapper on this object and does not descend into report[],
+        // so robot alarms are not double-counted here.
+        var globalAlarms = new List<RdsParsedAlarm>();
+        RdsRobotAlarmParser.Append(globalAlarms, target, new HashSet<string>(StringComparer.Ordinal));
+
         if (!target.TryGetProperty("report", out var report) || report.ValueKind != JsonValueKind.Array)
-            return [];
+        {
+            // A malformed or absent report must not discard core-level alarms.
+            return new RdsCoreFleetStatus([], globalAlarms);
+        }
 
         var list = new List<RdsCoreRobotTelemetry>();
         foreach (var robot in report.EnumerateArray())
@@ -826,7 +837,7 @@ public sealed class RdsCoreNativeOrderClient(
                 procBusiness));
         }
 
-        return list;
+        return new RdsCoreFleetStatus(list, globalAlarms);
     }
 
     private static JsonElement? Object(JsonElement value, string name) =>

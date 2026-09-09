@@ -18,7 +18,7 @@ void main() {
     expect(find.text('1. Kasa Doldu'), findsOneWidget);
     expect(find.text('1. Kasa Boş'), findsOneWidget);
     expect(find.text('Tüm Kasaları Kaldır'), findsOneWidget);
-    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY')), findsNothing);
+    expect(find.byKey(const Key('direct-action-REMOVE_EMPTY-1')), findsNothing);
 
     await tester.tap(find.text('1. Kasa Doldu'));
     await tester.pump(const Duration(milliseconds: 500));
@@ -65,6 +65,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2. Kasa Doldu'), findsOneWidget);
     expect(find.text('2. Kasa Boş'), findsOneWidget);
+
+    // Each logical container must own its action keys. These previously collided:
+    // every card rendered the position-independent 'direct-action-BRING_EMPTY', so a
+    // finder matched one widget per container and the browser E2E failed with
+    // "2 widgets found". This is the case that should have caught it — the other
+    // widget fixtures have exactly one container position, so the collision was
+    // invisible to them.
+    expect(find.byKey(const Key('direct-action-BRING_EMPTY-1')), findsOneWidget);
+    expect(find.byKey(const Key('direct-action-BRING_EMPTY-2')), findsOneWidget);
+    expect(find.byKey(const Key('direct-action-REMOVE_FULL-1')), findsOneWidget);
+    expect(find.byKey(const Key('direct-action-REMOVE_FULL-2')), findsOneWidget);
+
+    // Position 2 reports its empty action disabled, so its key must exist but be
+    // inert — proving the keys track per-container availability, not just presence.
+    expect(
+      tester.widget<ElevatedButton>(
+        find.byKey(const Key('direct-action-BRING_EMPTY-2')),
+      ).onPressed,
+      isNull,
+    );
     harness.dispose();
   });
 

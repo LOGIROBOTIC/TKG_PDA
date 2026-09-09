@@ -75,4 +75,79 @@ describe('Normalized layout editor', () => {
     expect(screen.getByText('Makine alanı — RDS taşıma noktası eşlenemez')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Eşle' })).not.toBeInTheDocument()
   })
+
+  it('displays assigned parts from layout_slot_parts and transport metadata in inspector', async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/layouts')) return Promise.resolve(jsonResponse(layouts))
+      if (url.endsWith('/layouts/l-1/slots')) return Promise.resolve(jsonResponse(slots))
+      if (url.endsWith('/machines')) return Promise.resolve(jsonResponse(machines))
+      if (url.endsWith('/containers')) return Promise.resolve(jsonResponse(containers))
+      if (url.endsWith('/layout-slots/s-1/parts')) {
+        return Promise.resolve(jsonResponse([{ id: 'p-1', partCode: '71550BN000-10', description: 'Ana Parça' }]))
+      }
+      return Promise.resolve(jsonResponse([]))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderAuthenticated(<Routes><Route path="/layouts/:layoutId/editor" element={<LayoutEditorPage />} /></Routes>, '/layouts/l-1/editor')
+
+    await userEvent.click(await screen.findByTestId('slot-SLOT-01'))
+    expect(await screen.findByText('71550BN000-10')).toBeVisible()
+    expect(screen.getByText('Ana Parça')).toBeVisible()
+    expect(screen.getByText(/Atanmış Parçalar/)).toBeVisible()
+    expect(screen.getByText('Taşıma Metadata Bilgileri')).toBeVisible()
+  })
+
+  it('shows commissioning warning when slot has assigned parts but missing RDS WorkSite mapping', async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/layouts')) return Promise.resolve(jsonResponse(layouts))
+      if (url.endsWith('/layouts/l-1/slots')) return Promise.resolve(jsonResponse(slots))
+      if (url.endsWith('/machines')) return Promise.resolve(jsonResponse(machines))
+      if (url.endsWith('/containers')) return Promise.resolve(jsonResponse(containers))
+      if (url.endsWith('/layout-slots/s-1/parts')) {
+        return Promise.resolve(jsonResponse([{ id: 'p-1', partCode: '71550BN000-10', description: 'Ana Parça' }]))
+      }
+      // No RDS mappings
+      if (url.includes('/rds/slot-mappings')) return Promise.resolve(jsonResponse([]))
+      return Promise.resolve(jsonResponse([]))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderAuthenticated(<Routes><Route path="/layouts/:layoutId/editor" element={<LayoutEditorPage />} /></Routes>, '/layouts/l-1/editor')
+
+    await userEvent.click(await screen.findByTestId('slot-SLOT-01'))
+    expect(await screen.findByText(/Eksik Devreye Alma Uyarısı/)).toBeVisible()
+  })
+
+  it('freezes save button on 409 concurrency conflict and prevents second-click overwrite', async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'PUT' && url.includes('/slots/')) {
+        return Promise.resolve(
+          jsonResponse(
+            { status: 409, code: 'CONCURRENCY_CONFLICT', title: 'Conflict', detail: 'Slot changed' },
+            { status: 409 },
+          ),
+        )
+      }
+      if (url.endsWith('/layouts')) return Promise.resolve(jsonResponse(layouts))
+      if (url.endsWith('/layouts/l-1/slots')) return Promise.resolve(jsonResponse(slots))
+      if (url.endsWith('/machines')) return Promise.resolve(jsonResponse(machines))
+      if (url.endsWith('/containers')) return Promise.resolve(jsonResponse(containers))
+      return Promise.resolve(jsonResponse([]))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderAuthenticated(<Routes><Route path="/layouts/:layoutId/editor" element={<LayoutEditorPage />} /></Routes>, '/layouts/l-1/editor')
+
+    await userEvent.click(await screen.findByTestId('slot-SLOT-01'))
+    await userEvent.type(screen.getByLabelText('Görünen ad'), ' Değişiklik')
+    const saveButton = screen.getByRole('button', { name: /Seçili slotu kaydet/ })
+    await userEvent.click(saveButton)
+
+    // Conflict banner appears
+    expect(await screen.findByText(/Eşzamanlılık Çakışması \(409 Conflict\)/)).toBeVisible()
+    // Save button must be disabled to freeze and prevent auto-overwrite on second click
+    expect(saveButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Sunucudan yeniden yükle' })).toBeVisible()
+  })
 })

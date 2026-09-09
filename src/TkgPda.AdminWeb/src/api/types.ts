@@ -107,6 +107,12 @@ export interface Slot {
   concurrencyToken: number
 }
 
+export interface SlotPartRecord {
+  id: string
+  partCode: string
+  description: string | null
+}
+
 export interface Part {
   id: string
   code: string

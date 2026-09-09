@@ -26,6 +26,7 @@ import type {
   RdsTaskTemplateValidation,
   Slot,
   SlotDraft,
+  SlotPartRecord,
   UserDraft,
   Variant,
 } from './types'
@@ -155,6 +156,12 @@ export const createAdminApi = (token: string) => ({
     (await request<Slot>(`/api/v1/admin/layouts/${layout.id}/slots/${slot.id}`, {
       method: 'PUT', token, ifMatch: slot.concurrencyToken, layoutVersion: layout.concurrencyToken, body: draft,
     })).data,
+  slotParts: async (slotId: string, signal?: AbortSignal) =>
+    (await request<SlotPartRecord[]>(`/api/v1/admin/layout-slots/${slotId}/parts`, { token, signal })).data,
+  assignSlotPart: async (slotId: string, partId: string) =>
+    (await request<void>(`/api/v1/admin/layout-slots/${slotId}/parts/${partId}`, { method: 'PUT', token })).data,
+  removeSlotPart: async (slotId: string, partId: string) =>
+    (await request<void>(`/api/v1/admin/layout-slots/${slotId}/parts/${partId}`, { method: 'DELETE', token })).data,
 
   parts: async (signal?: AbortSignal) => (await request<Part[]>('/api/v1/admin/parts', { token, signal })).data,
   createPart: async (draft: Pick<Part, 'code' | 'description'>) =>

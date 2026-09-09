@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, CopyPlus, Edit3, ExternalLink, Plus, Rocket, Save } from 'lucide-react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { AlertTriangle, Archive, CheckCircle2, CopyPlus, Edit3, ExternalLink, Plus, Rocket, Save } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAdminApi } from '../api/ApiContext'
-import type { Layout, Machine } from '../api/types'
+import type { Layout, Machine, SlotPartRecord } from '../api/types'
 import { useToast } from '../components/Toast'
 import { Button, EmptyState, ErrorState, Field, LoadingState, Modal, PageHeader, Panel, SearchInput, SelectInput, StatusPill, TableFrame, TextInput, formatDate } from '../components/ui'
 
@@ -52,7 +52,237 @@ function RenameDialog({ layout, busy, onClose, onSave }: { layout: Layout; busy:
 }
 
 function LifecycleDialog({ action, busy, onClose, onConfirm }: { action: LifecycleAction; busy: boolean; onClose: () => void; onConfirm: () => void }) {
-  const config = action.kind === 'publish' ? { title: 'Layout sürümünü yayınla', text: 'Yapısal doğrulama çalışacak; aynı kodun eski published sürümü varsa atamalar yeni sürüme taşınacak.', button: 'Yayınla', icon: Rocket } : action.kind === 'archive' ? { title: 'Layout sürümünü arşivle', text: 'Aktif runtime veya transport referansı varsa API bu işlemi reddedecek.', button: 'Arşivle', icon: Archive } : { title: 'Yeni draft sürümü oluştur', text: 'Slotlar yeni kimliklerle kopyalanacak ve published kaynak değişmeden kalacak.', button: 'Sürümü oluştur', icon: CopyPlus }
+  const api = useAdminApi()
+  const isPublish = action.kind === 'publish'
+  const slotsQuery = useQuery({
+    queryKey: ['publish-slots', action.layout.id],
+    queryFn: ({ signal }) => api.slots(action.layout.id, signal),
+    enabled: isPublish,
+  })
+  const mappingsQuery = useQuery({
+    queryKey: ['publish-mappings', action.layout.id],
+    queryFn: ({ signal }) => api.rdsSlotMappings(action.layout.id, signal),
+    enabled: isPublish,
+  })
+
+  const [slotPartsMap, setSlotPartsMap] = useState<Record<string, SlotPartRecord[]>>({})
+  const [partsLoading, setPartsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isPublish || !slotsQuery.data) return
+    const operational = slotsQuery.data.filter((s) => s.isEnabled && s.role !== 'MACHINE' && s.role !== 'OTHER')
+    let active = true
+    setPartsLoading(true)
+    Promise.all(
+      operational.map(async (slot) => {
+        try {
+          const parts = await api.slotParts(slot.id)
+          return [slot.id, parts] as const
+        } catch {
+          return [slot.id, [] as SlotPartRecord[]] as const
+        }
+      }),
+    ).then((results) => {
+      if (active) {
+        const map: Record<string, SlotPartRecord[]> = {}
+        for (const [slotId, parts] of results) map[slotId] = parts
+        setSlotPartsMap(map)
+        setPartsLoading(false)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [isPublish, slotsQuery.data, api])
+
+  const validation = useMemo(() => {
+    if (!isPublish) return { criticalErrors: [], warnings: [], canPublish: true, isLoading: false }
+    if (slotsQuery.isLoading || mappingsQuery.isLoading || partsLoading) {
+      return { criticalErrors: [], warnings: [], canPublish: false, isLoading: true }
+    }
+
+    const slots = slotsQuery.data ?? []
+    const mappings = mappingsQuery.data ?? []
+    const critical: string[] = []
+    const warnings: string[] = []
+
+    const enabledSlots = slots.filter((s) => s.isEnabled)
+    const operationalSlots = enabledSlots.filter((s) => s.role !== 'MACHINE' && s.role !== 'OTHER')
+
+    if (operationalSlots.length === 0) {
+      critical.push('En az bir aktif operasyonel slot bulunmalıdır (MACHINE harici).')
+    }
+
+    // 1. Boundary check: all enabled slots must have complete geometry within 0..1
+    const unplacedOrOutOfBounds = enabledSlots.filter(
+      (s) =>
+        s.x === null ||
+        s.y === null ||
+        s.width === null ||
+        s.height === null ||
+        s.x < 0 ||
+        s.y < 0 ||
+        s.width <= 0 ||
+        s.height <= 0 ||
+        s.x + s.width > 1.0001 ||
+        s.y + s.height > 1.0001,
+    )
+    if (unplacedOrOutOfBounds.length > 0) {
+      critical.push(
+        `Geometrisi eksik veya ekran sınırları dışına taşan ${unplacedOrOutOfBounds.length} slot var: ${unplacedOrOutOfBounds.map((s) => s.code).join(', ')}.`,
+      )
+    }
+
+    // 2. Overlap check: no overlapping placed enabled slots
+    const placed = enabledSlots.filter((s) => s.x !== null && s.y !== null && s.width !== null && s.height !== null)
+    const overlappingCodes = new Set<string>()
+    for (let i = 0; i < placed.length; i++) {
+      for (let j = i + 1; j < placed.length; j++) {
+        const a = placed[i]
+        const b = placed[j]
+        if (a.x! < b.x! + b.width! && a.x! + a.width! > b.x! && a.y! < b.y! + b.height! && a.y! + a.height! > b.y!) {
+          overlappingCodes.add(a.code)
+          overlappingCodes.add(b.code)
+        }
+      }
+    }
+    if (overlappingCodes.size > 0) {
+      critical.push(
+        `Fiziksel olarak çakışan slot geometrisi tespit edildi: ${Array.from(overlappingCodes).join(', ')}. Yayın öncesi çakışmaları düzeltin.`,
+      )
+    }
+
+    // 3. Operational routing check: every operational slot must have at least one part assigned or be EMPTY_STORAGE or marked general buffer
+    const missingRouting = operationalSlots.filter((s) => {
+      const isGeneralBuffer = s.role === 'EMPTY_STORAGE' || Boolean(s.metadata?.is_general_buffer)
+      if (isGeneralBuffer) return false
+      const parts = slotPartsMap[s.id] ?? []
+      return parts.length === 0
+    })
+    if (missingRouting.length > 0) {
+      critical.push(
+        `Parça eşlemesi olmayan ${missingRouting.length} operasyonel slot var: ${missingRouting.map((s) => s.code).join(', ')}. Her operasyonel slotta en az bir parça veya genel buffer rolü gereklidir.`,
+      )
+    }
+
+    // 4. Commissioning check: operational slots with parts should have an RDS WorkSite mapping
+    const missingCommissioning = operationalSlots.filter((s) => {
+      const parts = slotPartsMap[s.id] ?? []
+      if (parts.length === 0) return false
+      const mapping = mappings.find((m) => m.slotId === s.id)
+      return !mapping?.rdsWorkSiteId || !mapping?.executionReady
+    })
+    if (missingCommissioning.length > 0) {
+      warnings.push(
+        `RDS WorkSite eşlemesi eksik veya hazır olmayan ${missingCommissioning.length} slot var: ${missingCommissioning.map((s) => s.code).join(', ')}. AGV bu slotlara otomatik görev yapamaz.`,
+      )
+    }
+
+    return {
+      criticalErrors: critical,
+      warnings,
+      canPublish: critical.length === 0,
+      isLoading: false,
+    }
+  }, [isPublish, slotsQuery.isLoading, mappingsQuery.isLoading, partsLoading, slotsQuery.data, mappingsQuery.data, slotPartsMap])
+
+  const config =
+    action.kind === 'publish'
+      ? {
+          title: 'Layout sürümünü yayınla',
+          text: 'Yapısal doğrulama ve preflight kontrolleri çalıştırılır; aynı kodun eski published sürümü varsa atamalar yeni sürüme taşınır.',
+          button: 'Yayınla',
+          icon: Rocket,
+        }
+      : action.kind === 'archive'
+        ? {
+            title: 'Layout sürümünü arşivle',
+            text: 'Aktif runtime veya transport referansı varsa API bu işlemi reddedecektir.',
+            button: 'Arşivle',
+            icon: Archive,
+          }
+        : {
+            title: 'Yeni draft sürümü oluştur',
+            text: 'Slotlar ve parça yönlendirmeleri (master.layout_slot_parts) yeni kimliklerle kopyalanacak ve published kaynak değişmeden kalacaktır.',
+            button: 'Sürümü oluştur',
+            icon: CopyPlus,
+          }
   const Icon = config.icon
-  return <Modal open onClose={onClose} title={config.title} description={`${action.layout.code} · v${action.layout.version}`} footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant={action.kind === 'archive' ? 'danger' : 'primary'} disabled={busy} onClick={onConfirm}><Icon size={16} /> {config.button}</Button></>}><div className="confirm-content"><Icon /><p>{config.text}</p><div className="info-banner"><ExternalLink size={17} /> Runtime seçimi bu işlemle otomatik değiştirilmez.</div></div></Modal>
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={config.title}
+      description={`${action.layout.code} · v${action.layout.version}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Vazgeç
+          </Button>
+          <Button
+            variant={action.kind === 'archive' ? 'danger' : 'primary'}
+            disabled={busy || (isPublish && (!validation.canPublish || validation.isLoading))}
+            onClick={onConfirm}
+          >
+            <Icon size={16} /> {config.button}
+          </Button>
+        </>
+      }
+    >
+      <div className="confirm-content">
+        <Icon />
+        <p>{config.text}</p>
+
+        {isPublish && (
+          <div className="preflight-summary">
+            {validation.isLoading ? (
+              <LoadingState label="Preflight doğrulamaları çalıştırılıyor…" />
+            ) : (
+              <>
+                {validation.criticalErrors.length > 0 && (
+                  <div className="preflight-banner preflight-banner--error" role="alert">
+                    <AlertTriangle size={18} />
+                    <div>
+                      <strong>Yayın Öncesi Kritik Hatalar ({validation.criticalErrors.length}):</strong>
+                      <ul className="preflight-list">
+                        {validation.criticalErrors.map((err, idx) => (
+                          <li key={idx}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {validation.warnings.length > 0 && (
+                  <div className="preflight-banner preflight-banner--warning" role="alert">
+                    <AlertTriangle size={18} />
+                    <div>
+                      <strong>Devreye Alma Uyarıları ({validation.warnings.length}):</strong>
+                      <ul className="preflight-list">
+                        {validation.warnings.map((w, idx) => (
+                          <li key={idx}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {validation.canPublish && validation.warnings.length === 0 && (
+                  <div className="preflight-banner preflight-banner--success">
+                    <CheckCircle2 size={18} />
+                    <span>Tüm preflight doğrulamaları başarılı. Sürüm yayınlanmaya uygun.</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="info-banner">
+          <ExternalLink size={17} /> Runtime varyant seçimi bu işlemle otomatik değiştirilmez.
+        </div>
+      </div>
+    </Modal>
+  )
 }

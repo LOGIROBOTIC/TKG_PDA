@@ -271,6 +271,40 @@ public sealed partial class PostgresAdminConfigurationStore
             await copy.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await using (var copyParts = new NpgsqlCommand(
+                         """
+                         INSERT INTO master.layout_slot_parts (layout_slot_id, part_id, created_at)
+                         SELECT new_slot.id, lsp.part_id, now()
+                         FROM master.layout_slots old_slot
+                         JOIN master.layout_slot_parts lsp ON lsp.layout_slot_id = old_slot.id
+                         JOIN master.layout_slots new_slot ON new_slot.layout_id = @new_id AND new_slot.code = old_slot.code
+                         WHERE old_slot.layout_id = @source_id
+                         """,
+                         connection,
+                         transaction))
+        {
+            copyParts.Parameters.AddWithValue("new_id", newId);
+            copyParts.Parameters.AddWithValue("source_id", sourceLayoutId);
+            var copiedCount = await copyParts.ExecuteNonQueryAsync(cancellationToken);
+
+            await using var verifyCmd = new NpgsqlCommand(
+                """
+                SELECT count(*)
+                FROM master.layout_slots old_slot
+                JOIN master.layout_slot_parts lsp ON lsp.layout_slot_id = old_slot.id
+                WHERE old_slot.layout_id = @source_id
+                """,
+                connection,
+                transaction);
+            verifyCmd.Parameters.AddWithValue("source_id", sourceLayoutId);
+            var expectedCount = Convert.ToInt64(await verifyCmd.ExecuteScalarAsync(cancellationToken));
+
+            if (copiedCount != expectedCount)
+            {
+                throw new InvalidOperationException($"Relational loss during layout version cloning: expected {expectedCount} layout_slot_parts, copied {copiedCount}.");
+            }
+        }
+
         var created = await ReadLayoutAsync(connection, transaction, newId, cancellationToken);
         await InsertAuditAsync(connection, transaction, context, "ADMIN_LAYOUT_VERSION_CREATED", "LAYOUT", newId.ToString(), new { sourceLayoutId, source.Version }, created, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

@@ -791,6 +791,207 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         Assert.True(result.CoreAccepted);
     }
 
+    // ---------------------------------------------------------------------
+    // Core-level alarms. These sit on the /robotsStatus root, are RDSCore/scene
+    // problems rather than one robot's, and used to reach no caller at all.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_core_level_fatal_blocks_dispatch_even_when_every_robot_is_healthy()
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+        fixture.NativeClient.GlobalAlarms.Add(
+            new RdsParsedAlarm("52101", RdsAlarmSeverity.Fatal, "have no charge point in map.", null, 1));
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal("RDSCORE_HAS_BLOCKING_ALARM", result.Code);
+        Assert.Equal(0, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Theory]
+    [InlineData(RdsAlarmSeverity.Warning)]
+    [InlineData(RdsAlarmSeverity.Notice)]
+    public async Task A_core_level_warning_or_notice_does_not_block_dispatch(RdsAlarmSeverity severity)
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+        fixture.NativeClient.GlobalAlarms.Add(
+            new RdsParsedAlarm("55001", severity, "dispatching state.", null, 1));
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.NotEqual("RDSCORE_HAS_BLOCKING_ALARM", result.Code);
+        Assert.Equal(1, fixture.NativeClient.SetOrderCount);
+    }
+
+    [Fact]
+    public async Task A_core_level_fatal_blocks_automatic_lock_recovery()
+    {
+        // Otherwise fully recoverable: right robot, right map, correlated fingerprint,
+        // no active order, procBusiness false. The core alarm alone must stop it.
+        var fixture = Fixture();
+        ArrangeCorrelatedRecovery(fixture, TkgLock());
+        fixture.NativeClient.GlobalAlarms.Add(
+            new RdsParsedAlarm("52103", RdsAlarmSeverity.Error, "have no park point in map.", null, 1));
+
+        var result = await fixture.Coordinator.DispatchOneAsync(RequestId, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.False(result.Dispatched);
+        Assert.Equal(0, fixture.NativeClient.UnlockCount);
+    }
+
+    // ---------------------------------------------------------------------
+    // Held lease vs final mutation target. The lease is taken from a candidate alias
+    // BEFORE the authoritative in-lease re-read, so the re-read can land on another
+    // physical robot. Mutating it while holding somebody else's lease defeats the
+    // lease entirely.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task An_expert_mutation_is_refused_when_the_robot_changes_after_the_lease()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null);
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        // The lease is resolved from the recorded alias on the first read; the second
+        // read inside the lease reports the order on a DIFFERENT machine.
+        fixture.NativeClient.IdentityAfterFirstRead = new RdsRobotIdentity("Sfl-Cbd15", "MOVED-ROBOT-2");
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_ROBOT_CHANGED_DURING_VALIDATION", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+        Assert.Equal(0, fixture.Store.RobotLeases.HeldCount);
+    }
+
+    // ---------------------------------------------------------------------
+    // Alias ambiguity. "X" can be robot A's uuid AND robot B's vehicle_id. Picking
+    // the first array entry meant payload order decided which machine moved.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task An_alias_matching_two_physical_robots_is_refused()
+    {
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null, recordedAgvId: "SHARED-X");
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("SHARED-X", "ROBOT-A");
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.ExtraRobot = new RdsCoreRobotTelemetry(
+            "ROBOT-B", "ROBOT-B", "m", "s", null, 1, true, false, false, 90.0,
+            0, 0, 0, null, null, null, [], null,
+            new RdsRobotIdentity("uuid-b", "SHARED-X"), false);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_CURRENT_STATE_UNAVAILABLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task Ambiguity_does_not_depend_on_payload_order()
+    {
+        // Same fleet, robots reported in the other order: still refused.
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null, recordedAgvId: "SHARED-X");
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("uuid-b", "SHARED-X");
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+        fixture.NativeClient.ExtraRobot = new RdsCoreRobotTelemetry(
+            "ROBOT-A", "ROBOT-A", "m", "s", null, 1, true, false, false, 90.0,
+            0, 0, 0, null, null, null, [], null,
+            new RdsRobotIdentity("SHARED-X", "ROBOT-A"), false);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid()));
+
+        Assert.Equal("EXPERT_CURRENT_STATE_UNAVAILABLE", error.Code);
+        Assert.Equal(0, fixture.NativeClient.RedoCount);
+    }
+
+    [Fact]
+    public async Task One_robot_whose_uuid_equals_its_vehicle_id_is_not_ambiguous()
+    {
+        // The same string in both spaces is ONE machine, so this must still work.
+        var fixture = ExpertFixture(RdsCoreKnownOrderState.Failed, robotCurrentOrderId: null, recordedAgvId: "Sfl-Cbd15");
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("Sfl-Cbd15", "Sfl-Cbd15");
+        fixture.NativeClient.RobotCurrentOrderId = OrderIdOf(fixture);
+
+        var result = await fixture.Coordinator.RedoFailedAsync(RequestId, Guid.NewGuid());
+
+        Assert.True(result.Accepted);
+        Assert.Equal(1, fixture.NativeClient.RedoCount);
+    }
+
+    // ---------------------------------------------------------------------
+    // Fleet maintenance must send SERVER-RESOLVED canonical targets, not whatever
+    // alias the caller happened to type.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Fleet_maintenance_sends_the_canonical_mutation_target_not_the_caller_alias()
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("hu-test-1", "AMB-01");
+
+        // The caller names the robot by its uuid; RDS must be called with vehicle_id.
+        await fixture.Coordinator.RobotMaintenanceAsync(
+            RdsRobotMaintenanceAction.Resume, ["hu-test-1"], null, Guid.NewGuid());
+
+        Assert.Equal(["AMB-01"], fixture.NativeClient.LastMaintenanceVehicles);
+    }
+
+    [Fact]
+    public async Task Fleet_maintenance_deduplicates_two_aliases_for_one_physical_robot()
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("hu-test-1", "AMB-01");
+
+        await fixture.Coordinator.RobotMaintenanceAsync(
+            RdsRobotMaintenanceAction.Resume, ["hu-test-1", "AMB-01"], null, Guid.NewGuid());
+
+        // One machine -> one target, and one lease.
+        Assert.Equal(["AMB-01"], fixture.NativeClient.LastMaintenanceVehicles);
+        Assert.Equal(0, fixture.Store.RobotLeases.HeldCount);
+    }
+
+    [Fact]
+    public async Task Fleet_maintenance_refuses_an_ambiguous_alias_before_mutating()
+    {
+        var fixture = Fixture(dispatchEnabled: true);
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("SHARED-X", "ROBOT-A");
+        fixture.NativeClient.ExtraRobot = new RdsCoreRobotTelemetry(
+            "ROBOT-B", "ROBOT-B", "m", "s", null, 1, true, false, false, 90.0,
+            0, 0, 0, null, null, null, [], null,
+            new RdsRobotIdentity("uuid-b", "SHARED-X"), false);
+
+        var error = await Assert.ThrowsAsync<RdsExecutionException>(
+            () => fixture.Coordinator.RobotMaintenanceAsync(
+                RdsRobotMaintenanceAction.Resume, ["SHARED-X"], null, Guid.NewGuid()));
+
+        Assert.Equal("ROBOT_ALIAS_AMBIGUOUS", error.Code);
+        Assert.Equal(0, fixture.NativeClient.ResumeCount);
+    }
+
+    [Fact]
+    public async Task A_safety_stop_still_uses_the_caller_alias_and_is_never_refused_for_identity()
+    {
+        // Pause reduces motion. It must not be blocked by identity bookkeeping.
+        var fixture = Fixture(dispatchEnabled: false);
+        fixture.NativeClient.RobotIdentity = new RdsRobotIdentity("SHARED-X", "ROBOT-A");
+        fixture.NativeClient.ExtraRobot = new RdsCoreRobotTelemetry(
+            "ROBOT-B", "ROBOT-B", "m", "s", null, 1, true, false, false, 90.0,
+            0, 0, 0, null, null, null, [], null,
+            new RdsRobotIdentity("uuid-b", "SHARED-X"), false);
+
+        var result = await fixture.Coordinator.RobotMaintenanceAsync(
+            RdsRobotMaintenanceAction.Pause, ["SHARED-X"], null, Guid.NewGuid());
+
+        Assert.True(result.CoreAccepted);
+        Assert.Equal(["SHARED-X"], fixture.NativeClient.LastMaintenanceVehicles);
+    }
+
     [Fact]
     public async Task Lock_recovery_is_blocked_when_the_robot_runs_an_incompatible_order()
     {
@@ -1748,6 +1949,18 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         /// <summary>A second robot in the fleet, for cases needing two distinct robots.</summary>
         public RdsCoreRobotTelemetry? ExtraRobot { get; set; }
 
+        /// <summary>
+        /// Identity reported from the SECOND robotsStatus read onwards, so a test can
+        /// make the in-lease re-read land on a different physical robot than the one
+        /// the lease was taken for.
+        /// </summary>
+        public RdsRobotIdentity? IdentityAfterFirstRead { get; set; }
+
+        private int robotsStatusReads;
+
+        /// <summary>Vehicles actually sent to the adapter by fleet maintenance.</summary>
+        public IReadOnlyList<string> LastMaintenanceVehicles { get; private set; } = [];
+
         public RdsCoreKnownOrderState DetailsState { get; set; } = RdsCoreKnownOrderState.Waiting;
         public RdsCoreKnownOrderState TransitionOrderState { get; set; } = RdsCoreKnownOrderState.Unknown;
 
@@ -1776,9 +1989,16 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 JsonDocument.Parse("{}").RootElement));
         }
 
-        public Task<IReadOnlyList<RdsCoreRobotTelemetry>> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default)
+        /// <summary>Core-level alarms reported beside report[], not attributed to a robot.</summary>
+        public List<RdsParsedAlarm> GlobalAlarms { get; set; } = [];
+
+        public Task<RdsCoreFleetStatus> GetRobotsStatusAsync(Guid correlationId, CancellationToken cancellationToken = default)
         {
             if (RobotsStatusError is not null) throw RobotsStatusError;
+            robotsStatusReads++;
+            var effectiveIdentity = robotsStatusReads > 1 && IdentityAfterFirstRead is not null
+                ? IdentityAfterFirstRead
+                : RobotIdentity;
             var telemetry = new RdsCoreRobotTelemetry(
                 "Sfl-Cbd15",
                 "Sfl-Cbd15",
@@ -1795,10 +2015,10 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
                 RobotCurrentOrderState,
                 RobotAlarms,
                 RobotLockInfo,
-                RobotIdentity,
+                effectiveIdentity,
                 RobotProcBusiness);
             IReadOnlyList<RdsCoreRobotTelemetry> all = ExtraRobot is null ? [telemetry] : [telemetry, ExtraRobot];
-            return Task.FromResult(all);
+            return Task.FromResult(new RdsCoreFleetStatus(all, GlobalAlarms));
         }
 
         public Task<RdsCoreSimpleResult> LockAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
@@ -1861,11 +2081,11 @@ public sealed class RdsExecutionCoordinatorNativeOrderTests
         public Task<RdsCoreSimpleResult> SetPriorityAsync(string orderId, int priority, Guid correlationId, CancellationToken cancellationToken = default)
         { SetPriorityCount++; return Ok(); }
         public Task<RdsCoreSimpleResult> ClearRobotAllErrorAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
-        { ClearErrorsCount++; return Ok(); }
+        { LastMaintenanceVehicles = vehicles; ClearErrorsCount++; return Ok(); }
         public Task<RdsCoreSimpleResult> GotoSitePauseAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
-        { PauseCount++; return Ok(); }
+        { LastMaintenanceVehicles = vehicles; PauseCount++; return Ok(); }
         public Task<RdsCoreSimpleResult> GotoSiteResumeAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
-        { ResumeCount++; return Ok(); }
+        { LastMaintenanceVehicles = vehicles; ResumeCount++; return Ok(); }
         public Task<RdsCoreSimpleResult> ManualFinishedAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)
         { ManualFinishedCount++; return Ok(); }
         public Task<RdsCoreSimpleResult> RedoFailedOrderAsync(IReadOnlyList<string> vehicles, Guid correlationId, CancellationToken cancellationToken = default)

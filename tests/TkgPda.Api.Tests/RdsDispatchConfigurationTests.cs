@@ -174,4 +174,25 @@ public sealed class RdsDispatchConfigurationTests
     {
         Assert.Equal(expected, RdsMutationPolicy.ClassifyDispatchable(type));
     }
+
+    // G — BaseAddressDisplaySafe presents clean origin without credentials, path or query.
+    [Fact]
+    public void BaseAddressDisplaySafe_formats_clean_origin_without_leakage()
+    {
+        var rdsOptions = FromSettings(
+            ("Rds:Enabled", "true"),
+            ("Rds:BaseUrl", "http://127.0.0.1:8080"));
+        Assert.Equal("http://127.0.0.1:8080", rdsOptions.BaseAddressDisplaySafe);
+
+        var coreConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+            [
+                new KeyValuePair<string, string?>("RdsCore:BaseUrl", "http://127.0.0.1:8088"),
+                new KeyValuePair<string, string?>("RdsCoreExecution:Enabled", "true"),
+                new KeyValuePair<string, string?>("RdsCoreExecution:Mode", "RDSCORE_NATIVE_ORDER"),
+            ])
+            .Build();
+        var coreOptions = RdsCoreExecutionOptions.FromConfiguration(coreConfig);
+        Assert.Equal("http://127.0.0.1:8088", coreOptions.BaseAddressDisplaySafe);
+    }
 }

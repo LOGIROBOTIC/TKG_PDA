@@ -32,6 +32,9 @@ public sealed record RdsCoreExecutionOptions(
     }
 
     public Uri? BaseAddress => string.IsNullOrWhiteSpace(BaseUrl) ? null : new Uri(BaseUrl.Trim(), UriKind.Absolute);
+    public string? BaseAddressDisplaySafe => BaseAddress is { } uri
+        ? $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : $":{uri.Port}")}"
+        : null;
     public bool MutationEnabled => Enabled && Mode == RdsExecutionMode.RdsCoreNativeOrder && BaseAddress is not null;
 
     public void Validate()

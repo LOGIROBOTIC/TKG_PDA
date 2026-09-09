@@ -106,10 +106,7 @@ public static class AdminEndpoints
         return status with
         {
             DispatchEnabled = execution.IsDispatchEnabled,
-            // Origin only — no credentials, path or query.
-            CoreBaseAddressDisplaySafe = coreExecution.BaseAddress is { } uri
-                ? $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : $":{uri.Port}")}"
-                : null,
+            CoreBaseAddressDisplaySafe = coreExecution.BaseAddressDisplaySafe,
         };
     }
 

@@ -236,6 +236,13 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("TkgPda.Startup");
+startupLogger.LogInformation(
+    "RDS Integration: {Status}, RDS Dispatch: {Dispatch}, RDSCore: {Endpoint}",
+    rdsOptions.Enabled ? "ENABLED" : "DISABLED",
+    rdsOptions.DispatchEnabled ? "ENABLED" : "DISABLED",
+    rdsCoreExecutionOptions.BaseAddressDisplaySafe ?? "NONE");
+
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.Use(async (context, next) =>
 {

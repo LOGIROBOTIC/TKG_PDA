@@ -17,9 +17,12 @@ param(
     [int]$AdminPort = 4173,
     [int]$OperatorPort = 7357,
     [string]$HostAddress = '0.0.0.0',
-    [ValidateSet('ReadOnly', 'Off')]
+    [ValidateSet('ReadOnly', 'Commissioning', 'Off')]
     [string]$RdsMode = 'ReadOnly',
     [string]$RdsBaseUrl = 'http://127.0.0.1:8080',
+    [string]$IntegrationKey,
+    [string]$CallbackKey,
+    [string]$CallbackUrl,
     [string]$Password,
     [System.Security.SecureString]$SecurePassword,
     [switch]$NoOperator,
@@ -598,7 +601,22 @@ for ($ci = 0; $ci -lt $corsOrigins.Count; $ci++) {
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:Authentication__Jwt__SigningKey = $jwtSigningKey
 
-if ($RdsMode -eq 'ReadOnly') {
+if ($RdsMode -eq 'Commissioning') {
+    $effectiveIntegrationKey = if (-not [string]::IsNullOrWhiteSpace($IntegrationKey)) { $IntegrationKey } else { $env:Rds__IntegrationKey }
+    $effectiveCallbackKey = if (-not [string]::IsNullOrWhiteSpace($CallbackKey)) { $CallbackKey } else { $env:Rds__CallbackKey }
+    if ([string]::IsNullOrWhiteSpace($effectiveIntegrationKey) -or $effectiveIntegrationKey.Length -lt 32 -or $effectiveIntegrationKey.Length -gt 512) {
+        throw "Commissioning RDS mode requires IntegrationKey (32-512 characters). Pass -IntegrationKey or set env:Rds__IntegrationKey."
+    }
+    if ([string]::IsNullOrWhiteSpace($effectiveCallbackKey) -or $effectiveCallbackKey.Length -lt 32 -or $effectiveCallbackKey.Length -gt 512) {
+        throw "Commissioning RDS mode requires CallbackKey (32-512 characters). Pass -CallbackKey or set env:Rds__CallbackKey."
+    }
+    $env:Rds__Enabled = 'true'
+    $env:Rds__DispatchEnabled = 'true'
+    $env:Rds__BaseUrl = $RdsBaseUrl
+    $env:Rds__IntegrationKey = $effectiveIntegrationKey
+    $env:Rds__CallbackKey = $effectiveCallbackKey
+    $env:Rds__CallbackUrl = if (-not [string]::IsNullOrWhiteSpace($CallbackUrl)) { $CallbackUrl } elseif (-not [string]::IsNullOrWhiteSpace($env:Rds__CallbackUrl)) { $env:Rds__CallbackUrl } else { "http://127.0.0.1:$ApiPort/api/integrations/rds/events" }
+} elseif ($RdsMode -eq 'ReadOnly') {
     $env:Rds__Enabled = 'true'
     $env:Rds__DispatchEnabled = 'false'
     $env:Rds__BaseUrl = $RdsBaseUrl
@@ -674,12 +692,14 @@ if (-not $NoOperator) {
 
 # Check RDS reachability
 $rdsStatusDisplay = 'OFF'
-if ($RdsMode -eq 'ReadOnly') {
+if ($RdsMode -in @('ReadOnly', 'Commissioning')) {
     try {
         $rdsCheck = Invoke-RestMethod -Method Get -Uri $RdsBaseUrl -TimeoutSec 3
-        $rdsStatusDisplay = "READ-ONLY / $RdsBaseUrl"
+        $prefix = if ($RdsMode -eq 'Commissioning') { "COMMISSIONING (DISPATCH ENABLED)" } else { "READ-ONLY" }
+        $rdsStatusDisplay = "$prefix / $RdsBaseUrl"
     } catch {
-        $rdsStatusDisplay = "READ-ONLY (UNAVAILABLE) / $RdsBaseUrl"
+        $prefix = if ($RdsMode -eq 'Commissioning') { "COMMISSIONING (UNAVAILABLE)" } else { "READ-ONLY (UNAVAILABLE)" }
+        $rdsStatusDisplay = "$prefix / $RdsBaseUrl"
     }
 }
 

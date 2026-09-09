@@ -87,8 +87,31 @@ public static class AdminEndpoints
         return endpoints;
     }
 
-    private static Task<RdsConnectionStatusRecord> RdsStatusAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
-        service.GetStatusAsync(CorrelationId(context), ct);
+    /// <summary>
+    /// Admin diagnostics only. Reports the read-side status from the integration
+    /// service and joins it with the two execution-side facts that live outside it:
+    /// whether TKG is currently permitted to dispatch, and which RDSCore endpoint it
+    /// would dispatch to. Composed here rather than inside RdsIntegrationService so
+    /// the read service does not have to take a dependency on the execution
+    /// coordinator.
+    /// </summary>
+    private static async Task<RdsConnectionStatusRecord> RdsStatusAsync(
+        HttpContext context,
+        RdsIntegrationService service,
+        RdsExecutionCoordinator execution,
+        RdsCoreExecutionOptions coreExecution,
+        CancellationToken ct)
+    {
+        var status = await service.GetStatusAsync(CorrelationId(context), ct);
+        return status with
+        {
+            DispatchEnabled = execution.IsDispatchEnabled,
+            // Origin only — no credentials, path or query.
+            CoreBaseAddressDisplaySafe = coreExecution.BaseAddress is { } uri
+                ? $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : $":{uri.Port}")}"
+                : null,
+        };
+    }
 
     private static Task<IReadOnlyList<RdsRobotAdminRecord>> ListRdsRobotsAsync(HttpContext context, RdsIntegrationService service, CancellationToken ct) =>
         service.ListRobotsForAdminAsync(CorrelationId(context), ct);

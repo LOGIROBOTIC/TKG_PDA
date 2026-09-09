@@ -97,6 +97,28 @@ Bu checklist tamamlanmadan simulator sonuçları fiziksel robot kabulü olarak y
 - [ ] Integration/callback anahtarları: **Yetkili teknik kanal üzerinden güvenli environment/configuration sağlanacaktır**; Git/log/shared docs taraması temiz.
 - [ ] `Rds.Enabled` ve `Rds.DispatchEnabled` yalnız controlled test penceresinde, yetkili kişi tarafından açılıyor.
 
+### 4.1 Dispatch izninin runtime'da nasıl verildiği
+
+`appsettings.json` içindeki taban değer kasıtlı olarak `Rds:DispatchEnabled=false`'tır
+ve öyle kalır. Bu bir simulation/live ayrımı değildir: RDS'in simulation mi yoksa
+fiziksel robot mu sürdüğü TKG'yi ilgilendirmez ve TKG'de buna göre dallanan bir kod
+yolu yoktur. Tek fark, TKG'nin o an execution mutation göndermeye yetkili olup
+olmadığıdır.
+
+İzin, kaynak kod değiştirilmeden yalnız çalışma ortamından verilir:
+
+- `Rds__DispatchEnabled=true` environment variable'ı, veya
+- `src/TkgPda.Api/Properties/launchSettings.json` içindeki **Commissioning** profili
+  (aynı değişkeni açıkça verir; adı amacını belirtir, davranışı dallandırmaz).
+
+`DispatchEnabled=true` iken API başlangıçta `IntegrationKey`, `CallbackKey` ve
+`CallbackUrl` ister; bunlar **yalnız** user-secrets/environment üzerinden gelir ve
+hiçbir zaman repoya yazılmaz. Eksiklerse API açık bir hata ile başlamayı reddeder —
+bu istenen fail-fast davranıştır.
+
+- [ ] Controlled test penceresi kapandığında `Rds__DispatchEnabled` operasyonel olarak
+      kaldırıldı/`false` yapıldı; kaynak kodda değişiklik yapılmadı.
+
 ## 5. Dry-run ve kontrollü kabul
 
 - [ ] Production task'lar önce non-motion validation'dan geçti: label mevcut, input binding exact, duplicate task yok.

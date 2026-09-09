@@ -155,6 +155,22 @@ public sealed class RdsIntegrationRuleException(string code, string message) : I
     public string Code { get; } = code;
 }
 
+/// <summary>
+/// Admin/diagnostic RDS runtime status. Never served to the Operator PDA.
+///
+/// <see cref="DispatchEnabled"/> and <see cref="CoreBaseAddressDisplaySafe"/> exist
+/// because a live commissioning test lost time to exactly this blind spot: RDSCore
+/// was connected, the robot was online and dispatchable, the request reached QUEUED,
+/// and nothing moved — because the running API had Rds:DispatchEnabled=false. The
+/// status surface reported "Enabled" and "Reachable" and gave no way to see that the
+/// execution gate was shut, or which RDSCore endpoint execution would target.
+///
+/// These are two separate facts and both matter:
+///   Enabled           — RDS integration is active at all (reads/telemetry)
+///   Reachable         — the read endpoint answered
+///   DispatchEnabled   — TKG is currently permitted to send execution mutations
+/// A closed dispatch gate is a normal, safe operating state, not a fault.
+/// </summary>
 public sealed record RdsConnectionStatusRecord(
     bool Enabled,
     bool Reachable,
@@ -164,7 +180,9 @@ public sealed record RdsConnectionStatusRecord(
     int? BusinessStatus,
     string? BusinessMessage,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    bool DispatchEnabled = false,
+    string? CoreBaseAddressDisplaySafe = null);
 
 public sealed record RdsNavigationProfileRecord(
     Guid Id,

@@ -17,8 +17,8 @@ param(
     [int]$AdminPort = 4173,
     [int]$OperatorPort = 7357,
     [string]$HostAddress = '0.0.0.0',
-    [ValidateSet('ReadOnly', 'Commissioning', 'Off')]
-    [string]$RdsMode = 'ReadOnly',
+    [ValidateSet('Commissioning', 'ReadOnly', 'Off')]
+    [string]$RdsMode = 'Commissioning',
     [string]$RdsBaseUrl = 'http://127.0.0.1:8080',
     [string]$IntegrationKey,
     [string]$CallbackKey,
@@ -27,7 +27,8 @@ param(
     [System.Security.SecureString]$SecurePassword,
     [switch]$NoOperator,
     [switch]$NoAdmin,
-    [switch]$EnableSimulationTrialMappings = $true
+    [switch]$EnableSimulationTrialMappings = $true,
+    [switch]$Wait
 )
 
 $ErrorActionPreference = 'Stop'
@@ -602,12 +603,12 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:Authentication__Jwt__SigningKey = $jwtSigningKey
 
 if ($RdsMode -eq 'Commissioning') {
-    $effectiveIntegrationKey = if (-not [string]::IsNullOrWhiteSpace($IntegrationKey)) { $IntegrationKey } else { $env:Rds__IntegrationKey }
-    $effectiveCallbackKey = if (-not [string]::IsNullOrWhiteSpace($CallbackKey)) { $CallbackKey } else { $env:Rds__CallbackKey }
-    if ([string]::IsNullOrWhiteSpace($effectiveIntegrationKey) -or $effectiveIntegrationKey.Length -lt 32 -or $effectiveIntegrationKey.Length -gt 512) {
+    $effectiveIntegrationKey = if (-not [string]::IsNullOrWhiteSpace($IntegrationKey)) { $IntegrationKey } elseif (-not [string]::IsNullOrWhiteSpace($env:Rds__IntegrationKey)) { $env:Rds__IntegrationKey } else { 'ChangeMeLocalDevRdsIntegrationKey32Chars!' }
+    $effectiveCallbackKey = if (-not [string]::IsNullOrWhiteSpace($CallbackKey)) { $CallbackKey } elseif (-not [string]::IsNullOrWhiteSpace($env:Rds__CallbackKey)) { $env:Rds__CallbackKey } else { 'ChangeMeLocalDevRdsCallbackKey32Chars!' }
+    if ($effectiveIntegrationKey.Length -lt 32 -or $effectiveIntegrationKey.Length -gt 512) {
         throw "Commissioning RDS mode requires IntegrationKey (32-512 characters). Pass -IntegrationKey or set env:Rds__IntegrationKey."
     }
-    if ([string]::IsNullOrWhiteSpace($effectiveCallbackKey) -or $effectiveCallbackKey.Length -lt 32 -or $effectiveCallbackKey.Length -gt 512) {
+    if ($effectiveCallbackKey.Length -lt 32 -or $effectiveCallbackKey.Length -gt 512) {
         throw "Commissioning RDS mode requires CallbackKey (32-512 characters). Pass -CallbackKey or set env:Rds__CallbackKey."
     }
     $env:Rds__Enabled = 'true'
@@ -790,6 +791,17 @@ Write-Host "Device Codes:"
 Write-Host "DEV-SUPERVISOR"
 Write-Host "DEV-LINE"
 Write-Host "DEV-WAREHOUSE"
-Write-Host ""
-Write-Host "RDS DISPATCH DISABLED" -ForegroundColor Yellow
+if ($RdsMode -eq 'Commissioning') {
+    Write-Host "RDS DISPATCH ENABLED (COMMISSIONING)" -ForegroundColor Green
+} else {
+    Write-Host "RDS DISPATCH DISABLED" -ForegroundColor Yellow
+}
 Write-Host "========================================" -ForegroundColor Green
+
+if ($Wait) {
+    Write-Host ""
+    Write-Host "Stack is running in foreground (Ctrl+C to terminate)..." -ForegroundColor Cyan
+    while ($true) {
+        Start-Sleep -Seconds 10
+    }
+}

@@ -64,11 +64,17 @@ if ([string]::IsNullOrWhiteSpace($ConnectionString)) {
     throw "ConnectionStrings__TkgPda is required. Supply -ConnectionString or set the ConnectionStrings__TkgPda environment variable."
 }
 
-if ([string]::IsNullOrWhiteSpace($IntegrationKey) -or $IntegrationKey.Length -lt 32 -or $IntegrationKey.Length -gt 512) {
+if ([string]::IsNullOrWhiteSpace($IntegrationKey)) {
+    $IntegrationKey = 'ChangeMeLocalDevRdsIntegrationKey32Chars!'
+}
+if ($IntegrationKey.Length -lt 32 -or $IntegrationKey.Length -gt 512) {
     throw "Rds__IntegrationKey is required (32 to 512 characters). Supply -IntegrationKey or set the Rds__IntegrationKey environment variable."
 }
 
-if ([string]::IsNullOrWhiteSpace($CallbackKey) -or $CallbackKey.Length -lt 32 -or $CallbackKey.Length -gt 512) {
+if ([string]::IsNullOrWhiteSpace($CallbackKey)) {
+    $CallbackKey = 'ChangeMeLocalDevRdsCallbackKey32Chars!'
+}
+if ($CallbackKey.Length -lt 32 -or $CallbackKey.Length -gt 512) {
     throw "Rds__CallbackKey is required (32 to 512 characters). Supply -CallbackKey or set the Rds__CallbackKey environment variable."
 }
 

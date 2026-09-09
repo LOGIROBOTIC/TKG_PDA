@@ -94,7 +94,9 @@ BEGIN
         ('c1000000-0000-0000-0000-000000000005', v_nav_a_id, 'AP83', 'LINE', 'FEED', 1, 0, 0, 0, null, null, 0, now(), '{}'),
         ('c1000000-0000-0000-0000-000000000006', v_nav_a_id, 'AP4', 'WAREHOUSE', 'DROP', 1, 0, 0, 0, null, null, 0, now(), '{}'),
         ('c1000000-0000-0000-0000-000000000007', v_nav_a_id, 'AP1', 'WAREHOUSE', 'STORAGE', 1, 0, 0, 0, null, null, 0, now(), '{}'),
-        ('c1000000-0000-0000-0000-000000000008', v_nav_a_id, 'PP80', 'PARK', 'PARK', 1, 0, 0, 0, null, null, 0, now(), '{}')
+        ('c1000000-0000-0000-0000-000000000008', v_nav_a_id, 'PP80', 'PARK', 'PARK', 1, 0, 0, 0, null, null, 0, now(), '{}'),
+        ('c1000000-0000-0000-0000-000000000009', v_nav_a_id, 'AP84', 'LINE', 'FEED', 1, 0, 0, 0, null, null, 0, now(), '{}'),
+        ('c1000000-0000-0000-0000-00000000000a', v_nav_a_id, 'AP85', 'LINE', 'FEED', 1, 0, 0, 0, null, null, 0, now(), '{}')
     ON CONFLICT (id) DO UPDATE SET 
         rds_site_id = EXCLUDED.rds_site_id,
         area = EXCLUDED.area,
@@ -149,6 +151,8 @@ BEGIN
         OR (ls.code = 'SLOT-002' AND rw.rds_site_id = 'AP81')
         OR (ls.code = 'SLOT-003' AND rw.rds_site_id = 'AP82')
         OR (ls.code = 'SLOT-004' AND rw.rds_site_id = 'AP83')
+        OR (ls.code = 'SLOT-005' AND rw.rds_site_id = 'AP84')
+        OR (ls.code = 'SLOT-006' AND rw.rds_site_id = 'AP85')
         OR (ls.code = 'DROP-001' AND rw.rds_site_id = 'AP4'))
     ON CONFLICT (layout_slot_id) DO UPDATE SET
         rds_worksite_id = EXCLUDED.rds_worksite_id;

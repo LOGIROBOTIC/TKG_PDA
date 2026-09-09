@@ -960,36 +960,55 @@ public static class ApiEndpoints
                 _ => error.GetType().Name
             };
 
-            try
-            {
-                await WriteAuditAsync(
-                    dataStore,
-                    context,
-                    context.User.UserId(),
-                    Device(context).Id,
-                    auditAction,
-                    "ROBOT",
-                    string.Join(',', vehicles),
-                    new { vehicles, detail = auditDetail, accepted = false, rejectedCode },
-                    cancellationToken);
-            }
-            catch (Exception auditFailure) when (auditFailure is not OperationCanceledException)
-            {
-                // The audit write must never mask the physical-operation failure, and
-                // the mutation is never retried because of it.
-                MaintenanceLogger(context).LogError(
-                    auditFailure,
-                    "Failed to record the rejected robot maintenance attempt {AuditAction} for request {TraceIdentifier}.",
-                    auditAction,
-                    context.TraceIdentifier);
-            }
+            await BestEffortAuditAsync(
+                dataStore,
+                context,
+                auditAction,
+                vehicles,
+                new { vehicles, detail = auditDetail, accepted = false, rejectedCode },
+                "Failed to record the rejected robot maintenance attempt");
 
+            // The original physical failure is rethrown with its stack intact. The
+            // mutation is never retried because bookkeeping failed.
             throw;
         }
 
-        try
-        {
-            await WriteAuditAsync(
+        await BestEffortAuditAsync(
+            dataStore,
+            context,
+            auditAction,
+            vehicles,
+            new { vehicles, detail = auditDetail, accepted = result.CoreAccepted, code = result.Code },
+            "Robot maintenance succeeded but its audit row could not be written");
+
+        return Results.Json(result, statusCode: result.HttpStatusCode);
+    }
+
+    /// <summary>
+    /// Post-outcome audit. Once RDS has answered, the PHYSICAL result is authoritative
+    /// and the audit row is bookkeeping: it must never change what the caller is told.
+    ///
+    /// Two things were wrong before. The catch filters excluded
+    /// OperationCanceledException, so an audit cancellation escaped — masking the real
+    /// physical failure on one path, and turning a completed mutation into a client
+    /// error on the other, which invites a retry of something that already happened.
+    /// And the write used the request's own token, which is exactly the token most
+    /// likely to be cancelled at that moment.
+    ///
+    /// So this swallows EVERY exception including cancellation, and writes under its
+    /// own short bounded token rather than the request token — bounded rather than
+    /// CancellationToken.None so a stuck write cannot hang the response.
+    /// </summary>
+    private static async Task BestEffortAuditAsync(
+        IApiDataStore dataStore,
+        HttpContext context,
+        string auditAction,
+        IReadOnlyList<string> vehicles,
+        object detail,
+        string failureMessage)
+    {
+        await PostOutcomeAudit.RunAsync(
+            token => WriteAuditAsync(
                 dataStore,
                 context,
                 context.User.UserId(),
@@ -997,22 +1016,14 @@ public static class ApiEndpoints
                 auditAction,
                 "ROBOT",
                 string.Join(',', vehicles),
-                new { vehicles, detail = auditDetail, accepted = result.CoreAccepted, code = result.Code },
-                cancellationToken);
-        }
-        catch (Exception auditFailure) when (auditFailure is not OperationCanceledException)
-        {
-            // The physical call already happened. Turning a bookkeeping failure into an
-            // error response would invite the client to retry a mutation that may have
-            // succeeded, so the real outcome is returned and the audit gap is logged.
-            MaintenanceLogger(context).LogError(
+                detail,
+                token),
+            auditFailure => MaintenanceLogger(context).LogError(
                 auditFailure,
-                "Robot maintenance {AuditAction} succeeded but its audit row could not be written for request {TraceIdentifier}.",
+                "{FailureMessage}: {AuditAction} for request {TraceIdentifier}.",
+                failureMessage,
                 auditAction,
-                context.TraceIdentifier);
-        }
-
-        return Results.Json(result, statusCode: result.HttpStatusCode);
+                context.TraceIdentifier));
     }
 
     private static Task<IResult> PauseRobotAsync(

@@ -23,7 +23,10 @@ class MachineListScreen extends StatelessWidget {
               Text(
                 '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
                 key: const Key('operator-user-banner'),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
           ],

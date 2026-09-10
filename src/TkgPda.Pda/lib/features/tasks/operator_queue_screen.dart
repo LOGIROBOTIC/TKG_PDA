@@ -29,7 +29,10 @@ class OperatorQueueScreen extends StatelessWidget {
               Text(
                 '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
                 key: const Key('operator-user-banner'),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
           ],
@@ -91,10 +94,7 @@ class _RobotStatusBar extends StatelessWidget {
     return Column(
       key: const Key('robot-status-bar'),
       mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final robot in robots)
-          _RobotCard(robot: robot),
-      ],
+      children: [for (final robot in robots) _RobotCard(robot: robot)],
     );
   }
 }
@@ -112,8 +112,12 @@ class _RobotCard extends StatelessWidget {
     final batteryLabel = battery == null ? '—' : '${(battery * 100).toInt()}%';
     final isLowBattery = battery != null && battery < 0.20;
 
-    final (String connectivityLabel, Color statusColor, Color statusBg, Color statusFg) =
-        switch (robot.online) {
+    final (
+      String connectivityLabel,
+      Color statusColor,
+      Color statusBg,
+      Color statusFg,
+    ) = switch (robot.online) {
       true => (
         'Çevrimiçi',
         Colors.green.shade700,
@@ -146,15 +150,13 @@ class _RobotCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            Icon(
-              Icons.precision_manufacturing,
-              color: statusColor,
-              size: 20,
-            ),
+            Icon(Icons.precision_manufacturing, color: statusColor, size: 20),
             const SizedBox(width: 8),
             Text(
               robot.displayName ?? 'Robot',
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(width: 8),
             Container(
@@ -212,8 +214,8 @@ class _RobotCard extends StatelessWidget {
                             isLowBattery
                                 ? theme.colorScheme.error
                                 : (battery < 0.50
-                                    ? Colors.amber.shade700
-                                    : Colors.green.shade700),
+                                      ? Colors.amber.shade700
+                                      : Colors.green.shade700),
                           ),
                         ),
                       ),
@@ -279,10 +281,8 @@ class _QueueBody extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               itemCount: items.length,
               separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) => _QueueCard(
-                controller: controller,
-                item: items[index],
-              ),
+              itemBuilder: (context, index) =>
+                  _QueueCard(controller: controller, item: items[index]),
             ),
           ),
         ),
@@ -326,17 +326,15 @@ class _QueueBody extends StatelessWidget {
 }
 
 class _QueueCard extends StatelessWidget {
-  const _QueueCard({
-    required this.controller,
-    required this.item,
-  });
+  const _QueueCard({required this.controller, required this.item});
 
   final AppController controller;
   final OperatorQueueItem item;
 
   @override
   Widget build(BuildContext context) {
-    final canCancel = !controller.operatorQueueTerminal &&
+    final canCancel =
+        !controller.operatorQueueTerminal &&
         item.requestId != null &&
         item.canCancel;
     return Card(
@@ -375,7 +373,10 @@ class _QueueCard extends StatelessWidget {
               const SizedBox(width: 4),
               IconButton(
                 key: Key('cancel-queue-${item.requestId}'),
-                icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                icon: const Icon(
+                  Icons.cancel_outlined,
+                  color: Colors.redAccent,
+                ),
                 tooltip: 'Görevi İptal Et',
                 onPressed: controller.mutationGate.canMutate
                     ? () => _confirmCancel(context)
@@ -446,4 +447,3 @@ String _stateText(String state) => switch (state) {
   'CANCELLED' => 'İptal',
   _ => 'Güncelleniyor',
 };
-

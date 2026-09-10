@@ -371,12 +371,18 @@ class PdaRepository implements PdaDataSource {
 
   @override
   Future<void> clearRobotErrors([List<String>? vehicles]) async {
-    await _api.post('/api/v1/rds/robots/clear-errors', body: {'vehicles': vehicles});
+    await _api.post(
+      '/api/v1/rds/robots/clear-errors',
+      body: {'vehicles': vehicles},
+    );
   }
 
   @override
   Future<void> setRequestPriority(String requestId, int priority) async {
-    await _api.post('/api/v1/transport-requests/$requestId/priority', body: {'priority': priority});
+    await _api.post(
+      '/api/v1/transport-requests/$requestId/priority',
+      body: {'priority': priority},
+    );
   }
 
   static JsonMap _json(Object? body) =>

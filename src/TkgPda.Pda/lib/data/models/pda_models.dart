@@ -417,7 +417,6 @@ class OperatorQueuePage {
   );
 }
 
-
 class ExecutionReadiness {
   const ExecutionReadiness({
     required this.rdsWorkSiteMapped,
@@ -1075,20 +1074,20 @@ class PendingOperation {
       'pos: $logicalContainerNumber, op: $operation, key: $idempotencyKey)';
 
   Map<String, dynamic> toJson() => {
-        'machineId': machineId,
-        'machineCode': machineCode,
-        'variantId': variantId,
-        'variantCode': variantCode,
-        'layoutId': layoutId,
-        'productGroupId': productGroupId,
-        'partId': partId,
-        'partCode': partCode,
-        'logicalContainerNumber': logicalContainerNumber,
-        'operation': operation,
-        'idempotencyKey': idempotencyKey,
-        'startedAt': startedAt.toIso8601String(),
-        'navigationProfileId': navigationProfileId,
-      };
+    'machineId': machineId,
+    'machineCode': machineCode,
+    'variantId': variantId,
+    'variantCode': variantCode,
+    'layoutId': layoutId,
+    'productGroupId': productGroupId,
+    'partId': partId,
+    'partCode': partCode,
+    'logicalContainerNumber': logicalContainerNumber,
+    'operation': operation,
+    'idempotencyKey': idempotencyKey,
+    'startedAt': startedAt.toIso8601String(),
+    'navigationProfileId': navigationProfileId,
+  };
 }
 
 enum MutationGateReason {
@@ -1113,4 +1112,3 @@ class MutationGate {
   final MutationGateReason reason;
   final String? message;
 }
-

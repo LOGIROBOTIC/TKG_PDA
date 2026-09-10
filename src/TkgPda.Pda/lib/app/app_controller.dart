@@ -1111,16 +1111,17 @@ class AppController extends ChangeNotifier {
         return;
       }
 
-      final cartItem = BatchCartItem(
-        cartItemId: _cartIdFactory.v4(),
-        mainPart: _selectedMainPart!,
-        effectivePart: part,
-      )
-        ..command = command
-        ..slotDisplayName = '${position.positionNumber}. Kasa'
-        ..actionCode = action
-        ..variantCode = current.activeVariantCode
-        ..variantId = variantId;
+      final cartItem =
+          BatchCartItem(
+              cartItemId: _cartIdFactory.v4(),
+              mainPart: _selectedMainPart!,
+              effectivePart: part,
+            )
+            ..command = command
+            ..slotDisplayName = '${position.positionNumber}. Kasa'
+            ..actionCode = action
+            ..variantCode = current.activeVariantCode
+            ..variantId = variantId;
 
       _batchCart.add(cartItem);
       _notice =
@@ -1333,10 +1334,7 @@ class AppController extends ChangeNotifier {
     _queuePollTimer = Timer(const Duration(seconds: 5), () {
       if (_stage == AppStage.tasks) {
         unawaited(
-          loadOperatorQueue(
-            offset: _operatorQueue?.offset ?? 0,
-            silent: true,
-          ),
+          loadOperatorQueue(offset: _operatorQueue?.offset ?? 0, silent: true),
         );
       }
     });
@@ -1437,7 +1435,10 @@ class AppController extends ChangeNotifier {
     try {
       await _repository.setRequestPriority(requestId, priority);
       _notice = 'Görev önceliği güncellendi.';
-      await loadOperatorQueue(offset: _operatorQueue?.offset ?? 0, silent: true);
+      await loadOperatorQueue(
+        offset: _operatorQueue?.offset ?? 0,
+        silent: true,
+      );
     } catch (_) {
       _notice = 'Öncelik güncellenemedi.';
     } finally {
@@ -1597,7 +1598,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> _retryPendingOperation(PendingOperation pending) async {
     _activePendingOperation = pending;
-    final submissionId = '${pending.logicalContainerNumber}:${pending.operation}';
+    final submissionId =
+        '${pending.logicalContainerNumber}:${pending.operation}';
     _submittingContainerActions.add(submissionId);
     _submittingOperation = pending.operation;
     _clearFeedback();

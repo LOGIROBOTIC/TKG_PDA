@@ -162,8 +162,8 @@ class OperatorUserBanner extends StatelessWidget {
     final displayName = current.fullName.trim().isNotEmpty
         ? current.fullName
         : current.username;
-    final sicil = current.employeeNo != null &&
-            current.employeeNo!.trim().isNotEmpty
+    final sicil =
+        current.employeeNo != null && current.employeeNo!.trim().isNotEmpty
         ? current.employeeNo!
         : '—';
 
@@ -195,4 +195,3 @@ class OperatorUserBanner extends StatelessWidget {
     );
   }
 }
-

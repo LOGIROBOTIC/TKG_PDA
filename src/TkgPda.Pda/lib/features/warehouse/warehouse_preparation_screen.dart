@@ -36,7 +36,10 @@ class WarehousePreparationScreen extends StatelessWidget {
               Text(
                 '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
                 key: const Key('operator-user-banner'),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
           ],
@@ -213,9 +216,9 @@ class _RequestCard extends StatelessWidget {
                                 MutationGateReason.offline
                             ? 'Bağlantı yok'
                             : (controller.mutationGate.reason ==
-                                    MutationGateReason.mutationPending
-                                ? 'İşlem devam ediyor'
-                                : 'İşlem uygun değil'),
+                                      MutationGateReason.mutationPending
+                                  ? 'İşlem devam ediyor'
+                                  : 'İşlem uygun değil'),
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context).colorScheme.error,
@@ -281,7 +284,10 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
         ),
       ],
     ),

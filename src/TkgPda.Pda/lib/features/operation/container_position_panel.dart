@@ -17,6 +17,7 @@ class ContainerPositionPanel extends StatelessWidget {
   const ContainerPositionPanel({
     required this.controller,
     this.maxHeight = double.infinity,
+    this.expand = false,
     super.key,
   });
 
@@ -27,6 +28,11 @@ class ContainerPositionPanel extends StatelessWidget {
   /// keeps its preferred size and overflows the moment status banners appear
   /// above it — which is precisely when the operator needs both to be visible.
   final double maxHeight;
+
+  /// True when the panel owns a column of its own and should use all of it.
+  /// Docked at the bottom it stops at its preferred height instead, so the
+  /// part selection above keeps the rest.
+  final bool expand;
 
   /// A card narrower than this cannot hold a two-line action label at the
   /// terminal type scale without ellipsing it.
@@ -91,13 +97,15 @@ class ContainerPositionPanel extends StatelessWidget {
               gutter * 0.5,
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Flexible(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxHeight: PdaScale.containerPanelHeight(context),
+                      maxHeight: expand
+                          ? double.infinity
+                          : PdaScale.containerPanelHeight(context),
                     ),
                     child: LayoutBuilder(
                       builder: (context, constraints) {

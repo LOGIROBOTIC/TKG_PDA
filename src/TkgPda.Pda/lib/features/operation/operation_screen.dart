@@ -196,33 +196,68 @@ class _PartFirstWithBatchSkip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Column(
-      children: [
-        Expanded(child: PartFirstSelector(controller: controller)),
-        if (controller.transportActionsReady)
-          ContainerPositionPanel(
-            controller: controller,
-            // The docked panel is a non-flex child, so the Column offers it
-            // unbounded height and it would keep its preferred size no matter
-            // how many status banners are stacked above. Cap it against what
-            // this workspace actually has, and let the selection keep the rest.
-            maxHeight: constraints.maxHeight * 0.58,
-          ),
-        if (controller.isConfiguringBatchItem &&
-            (controller.compatibleVariants?.isEmpty ?? false))
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: OutlinedButton.icon(
-              key: const Key('skip-invalid-batch-item'),
-              onPressed: controller.busy
-                  ? null
-                  : controller.skipInvalidBatchItem,
-              icon: const Icon(Icons.remove_circle_outline),
-              label: const Text('Bu Parçayı Kaldır ve Devam Et'),
+    builder: (context, constraints) {
+      final selector = PartFirstSelector(controller: controller);
+      final skip =
+          controller.isConfiguringBatchItem &&
+              (controller.compatibleVariants?.isEmpty ?? false)
+          ? Padding(
+              padding: const EdgeInsets.all(14),
+              child: OutlinedButton.icon(
+                key: const Key('skip-invalid-batch-item'),
+                onPressed: controller.busy
+                    ? null
+                    : controller.skipInvalidBatchItem,
+                icon: const Icon(Icons.remove_circle_outline),
+                label: const Text('Bu Parçayı Kaldır ve Devam Et'),
+              ),
+            )
+          : null;
+
+      // On a line terminal the selection and the container actions fit side by
+      // side, so neither has to be scrolled to reach the other: part choice
+      // happens a few times a shift, container actions happen constantly, and
+      // stacking them meant the constant one lived in a strip at the bottom.
+      if (PdaScale.isWide(context) && controller.transportActionsReady) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(child: selector),
+                  ?skip,
+                ],
+              ),
             ),
-          ),
-      ],
-    ),
+            SizedBox(width: PdaScale.gutter(context)),
+            SizedBox(
+              width: (constraints.maxWidth * 0.46).clamp(560.0, 940.0),
+              child: ContainerPositionPanel(
+                controller: controller,
+                expand: true,
+              ),
+            ),
+          ],
+        );
+      }
+
+      return Column(
+        children: [
+          Expanded(child: selector),
+          if (controller.transportActionsReady)
+            ContainerPositionPanel(
+              controller: controller,
+              // The docked panel is a non-flex child, so the Column offers it
+              // unbounded height and it would keep its preferred size no matter
+              // how many status banners are stacked above. Cap it against what
+              // this workspace actually has, and let the selection keep the rest.
+              maxHeight: constraints.maxHeight * 0.58,
+            ),
+          ?skip,
+        ],
+      );
+    },
   );
 }
 

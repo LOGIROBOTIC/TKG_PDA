@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../app/design_tokens.dart';
 import '../../shared/widgets/feedback_banners.dart';
 import 'container_position_panel.dart';
 import 'part_first_screen.dart';
@@ -94,26 +95,7 @@ class OperationScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            if (controller.offline) const OfflineBanner(),
-            if (controller.problem case final problem?)
-              ProblemBanner(problem: problem),
-            if (controller.notice case final notice?)
-              NoticeBanner(message: notice),
-            RobotAlarmBanner(
-              summary: controller.robotAlarmSummary,
-              error: controller.robotAlarmError,
-              onRetry: controller.retryRobotAlarmSummary,
-            ),
-            if ((controller.context?.activeTransportRequests.length ?? 0) > 0)
-              _ActiveTransportIndicator(
-                count: controller.context!.activeTransportRequests.length,
-              ),
-            if (controller.hasAmbiguousSubmission)
-              _AmbiguousSubmissionBanner(controller: controller),
-            if (controller.hasAmbiguousBatchSubmission)
-              _AmbiguousBatchBanner(controller: controller),
-            if (controller.isConfiguringBatchItem)
-              _BatchConfiguringBanner(controller: controller),
+            _StatusRegion(controller: controller),
             Expanded(child: _PartFirstWithBatchSkip(controller: controller)),
             if (controller.batchMode || controller.batchCart.isNotEmpty)
               BatchCartTray(controller: controller),
@@ -122,6 +104,64 @@ class OperationScreen extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+/// Every status banner the workspace can raise, with a ceiling on the ones
+/// that only report.
+///
+/// These are eight independent conditions and they used to stack without any
+/// limit: offline plus an error plus a robot alarm plus an active transport
+/// plus an ambiguous submission took roughly half the screen away from the
+/// work, exactly when the operator most needed to see it.
+///
+/// The split matters. Reporting banners share one capped, scrollable region —
+/// nothing is dropped, it just cannot starve the surface below. Banners that
+/// ASK FOR A DECISION stay outside that cap and always render in full: an
+/// ambiguous submission is resolved by choosing retry or refresh, and a choice
+/// the operator has to scroll to find is a choice that does not get made.
+class _StatusRegion extends StatelessWidget {
+  const _StatusRegion({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: PdaScale.statusRegionMaxHeight(context),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (controller.offline) const OfflineBanner(),
+              if (controller.problem case final problem?)
+                ProblemBanner(problem: problem),
+              if (controller.notice case final notice?)
+                NoticeBanner(message: notice),
+              RobotAlarmBanner(
+                summary: controller.robotAlarmSummary,
+                error: controller.robotAlarmError,
+                onRetry: controller.retryRobotAlarmSummary,
+              ),
+              if ((controller.context?.activeTransportRequests.length ?? 0) > 0)
+                _ActiveTransportIndicator(
+                  count: controller.context!.activeTransportRequests.length,
+                ),
+            ],
+          ),
+        ),
+      ),
+      if (controller.hasAmbiguousSubmission)
+        _AmbiguousSubmissionBanner(controller: controller),
+      if (controller.hasAmbiguousBatchSubmission)
+        _AmbiguousBatchBanner(controller: controller),
+      if (controller.isConfiguringBatchItem)
+        _BatchConfiguringBanner(controller: controller),
+    ],
   );
 }
 

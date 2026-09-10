@@ -35,7 +35,6 @@ class PdaScale {
   // line terminal, which is what produced the 9px "disabled reason" nobody
   // could read.
 
-  static double display(BuildContext context) => isCompact(context) ? 20 : 30;
   static double title(BuildContext context) => isCompact(context) ? 17 : 25;
   static double primaryAction(BuildContext context) =>
       isCompact(context) ? 18 : 25;
@@ -47,9 +46,9 @@ class PdaScale {
   // --- Touch targets ----------------------------------------------------
   // Material's 48px minimum assumes a bare fingertip on a phone. These are
   // pressed with work gloves, often without looking directly at the screen.
+  // The primary action takes whatever height its card has left, so only the
+  // secondary floor needs stating.
 
-  static double primaryActionHeight(BuildContext context) =>
-      isCompact(context) ? 76 : 118;
   static double secondaryActionHeight(BuildContext context) =>
       isCompact(context) ? 52 : 72;
 

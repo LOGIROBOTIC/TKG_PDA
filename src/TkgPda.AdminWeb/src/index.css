@@ -295,6 +295,36 @@ textarea.input { resize: vertical; }
 .quality-card small { color: #7b8696; }
 .quality-card--high > svg { color: #c94545; }.quality-card--medium > svg { color: #ca7b1b; }.quality-card--low > svg { color: #3172bd; }
 .message-cell { min-width: 350px; line-height: 1.45; }
+
+/* RDS fleet telemetry. These blocks were written inline against a dark
+   theme's variables — --text-muted, --border-color, --color-success and
+   friends — none of which exist in this system. The tiles were painting
+   rgba(255,255,255,.03) on a white panel, the divider was a white line on
+   white, and the status colours were a different green/amber/red from the
+   palette. */
+.fleet-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); padding: 16px; border-bottom: 1px solid #edf0f4; gap: 13px; }
+.fleet-tile { display: flex; flex-direction: column; padding: 13px 15px; border: 1px solid var(--line); border-radius: 10px; background: #fafbfc; gap: 3px; }
+.fleet-tile > span { color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
+.fleet-tile strong { font: 800 var(--fs-2xl) 'Manrope Variable', Manrope, 'Segoe UI', Arial, sans-serif; letter-spacing: -.02em; }
+.fleet-tile small { color: #8a94a3; font-size: var(--fs-xs); line-height: 1.45; }
+.fleet-tile--good strong { color: var(--green); }
+.fleet-tile--warn strong { color: var(--orange); }
+.fleet-tile--bad strong { color: var(--red); }
+
+.battery { display: inline-flex; align-items: center; gap: 7px; }
+.battery__track { width: 46px; height: 10px; border-radius: 3px; background: #e3e7ee; overflow: hidden; }
+.battery__fill { height: 100%; border-radius: 3px; transition: width .3s ease; }
+.battery__fill--good { background: var(--green); }
+.battery__fill--warn { background: var(--orange); }
+.battery__fill--bad { background: var(--red); }
+.battery > span { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.cell-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.cell-row { display: flex; align-items: center; gap: 6px; }
+.cell-label { color: var(--muted); font-size: var(--fs-2xs); font-weight: 600; }
+.identity-inline { display: flex; align-items: center; gap: 7px; }
+.refresh-control { display: flex; align-items: center; gap: 8px; }
+.refresh-control .input { width: auto; min-height: 34px; padding: 5px 9px; font-size: var(--fs-sm); }
 .clickable-row { cursor: pointer; }
 .audit-detail > td { padding: 0 15px 15px; background: #f8fafc; }
 .audit-detail > td > div { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

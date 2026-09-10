@@ -9,13 +9,13 @@ import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Panel, PanelH
 function BatteryIndicator({ level, isCharging }: { level: number | null; isCharging?: boolean | null }) {
   if (level === null || level === undefined) return <span className="muted">—</span>
   const pct = Math.max(0, Math.min(100, Math.round(level <= 1.0 ? level * 100 : level)))
-  const color = pct > 50 ? 'var(--color-success, #22c55e)' : pct > 20 ? 'var(--color-warning, #f59e0b)' : 'var(--color-danger, #ef4444)'
+  const tone = pct > 50 ? 'good' : pct > 20 ? 'warn' : 'bad'
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-      <div style={{ width: '44px', height: '9px', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
-        <div style={{ width: `${pct}%`, backgroundColor: color, borderRadius: '2px', transition: 'width 0.3s' }} />
+    <div className="battery">
+      <div className="battery__track">
+        <div className={`battery__fill battery__fill--${tone}`} style={{ width: `${pct}%` }} />
       </div>
-      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{pct}%{isCharging ? ' ⚡' : ''}</span>
+      <span>{pct}%{isCharging ? ' ⚡' : ''}</span>
     </div>
   )
 }
@@ -121,12 +121,11 @@ export function RdsIntegrationPage() {
         title="Robot Filosu ve Canlı Telemetri"
         description="SEER RDSCore üzerinden okunan anlık filo konumu, batarya, harita ve operasyon durumu."
         action={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="refresh-control">
             <SelectInput
               aria-label="Otomatik yenileme"
               value={autoRefreshMs}
               onChange={(e) => setAutoRefreshMs(Number(e.target.value))}
-              style={{ width: 'auto', fontSize: '0.82rem', padding: '0.3rem 0.5rem' }}
             >
               <option value="0">Yenileme: Kapalı</option>
               <option value="5000">Yenileme: 5 sn</option>
@@ -144,35 +143,33 @@ export function RdsIntegrationPage() {
         <ErrorState error={robots.error} onRetry={() => void robots.refetch()} />
       ) : robots.data?.length ? (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', padding: '1rem', borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
-            <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
-              <small style={{ color: 'var(--text-muted)' }}>Toplam Robot</small>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{robots.data.length}</div>
+          <div className="fleet-summary">
+            <div className="fleet-tile">
+              <span>Toplam Robot</span>
+              <strong>{robots.data.length}</strong>
             </div>
-            <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
-              <small style={{ color: 'var(--text-muted)' }}>Bağlantı & Sevk</small>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-success, #22c55e)' }}>
+            <div className="fleet-tile fleet-tile--good">
+              <span>Bağlantı &amp; Sevk</span>
+              <strong>
                 {robots.data.filter(r => r.connectivity === 'ONLINE').length} / {robots.data.length} Çevrimiçi
-              </div>
-              <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              </strong>
+              <small>
                 {robots.data.filter(r => r.dispatch === 'DISPATCHABLE').length} Sevk Edilebilir
               </small>
             </div>
-            <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
-              <small style={{ color: 'var(--text-muted)' }}>Kilit Durumu (Control / Lock)</small>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: robots.data.some(r => r.isLocked === true) ? 'var(--color-warning, #f59e0b)' : 'inherit' }}>
+            <div className={`fleet-tile${robots.data.some(r => r.isLocked === true) ? ' fleet-tile--warn' : ''}`}>
+              <span>Kilit Durumu (Control / Lock)</span>
+              <strong>
                 {robots.data.filter(r => r.isLocked === true).length} Kilitli
-              </div>
-              <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              </strong>
+              <small>
                 {robots.data.filter(r => r.control === 'TKG_CORRELATED').length} TKG İlişkili · {robots.data.filter(r => r.control === 'EXTERNAL_OR_OTHER').length} Harici/Diğer · {robots.data.filter(r => r.control === 'UNKNOWN').length} Bilinmiyor
               </small>
             </div>
-            <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
-              <small style={{ color: 'var(--text-muted)' }}>Aktif Arıza (Fatal + Error)</small>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: fleetAlarms.critical > 0 ? 'var(--color-danger, #ef4444)' : 'var(--color-success, #22c55e)' }}>
-                {fleetAlarms.critical}
-              </div>
-              <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            <div className={`fleet-tile ${fleetAlarms.critical > 0 ? 'fleet-tile--bad' : 'fleet-tile--good'}`}>
+              <span>Aktif Arıza (Fatal + Error)</span>
+              <strong>{fleetAlarms.critical}</strong>
+              <small>
                 {fleetAlarms.warning} uyarı · {fleetAlarms.notice} bilgi notu (arıza sayılmaz)
               </small>
             </div>
@@ -205,13 +202,13 @@ export function RdsIntegrationPage() {
                 return (
                   <tr key={robot.robotId}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <div className="identity-inline">
                         <Bot size={18} />
                         <div>
                           <strong>{robot.robotId}</strong>
                           {robot.model && <small className="table-subtitle">{robot.model}</small>}
                           {robot.rdsReportedPayloadLoaded !== undefined && robot.rdsReportedPayloadLoaded !== null && (
-                            <small className="table-subtitle" style={{ color: 'var(--text-muted)' }} title="SEER robot teknik telemetrisi (TKG LoadState ile ilişkisizdir)">
+                            <small className="table-subtitle" title="SEER robot teknik telemetrisi (TKG LoadState ile ilişkisizdir)">
                               Yük Telemetrisi: {robot.rdsReportedPayloadLoaded ? 'YÜKLÜ (RDS)' : 'BOŞ (RDS)'}
                             </small>
                           )}
@@ -219,7 +216,7 @@ export function RdsIntegrationPage() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <div className="cell-stack">
                         <StatusPill
                           value={robot.connectivity}
                           tone={robot.connectivity === 'ONLINE' ? 'success' : robot.connectivity === 'OFFLINE' ? 'danger' : 'neutral'}
@@ -234,16 +231,16 @@ export function RdsIntegrationPage() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Hareket:</small>
+                      <div className="cell-stack">
+                        <div className="cell-row">
+                          <small className="cell-label">Hareket:</small>
                           <StatusPill
                             value={robot.motion ?? 'UNKNOWN'}
                             tone={robot.motion === 'MOVING' ? 'info' : robot.motion === 'BLOCKED' ? 'danger' : robot.motion === 'PAUSED' ? 'warning' : 'neutral'}
                           />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Yürütme:</small>
+                        <div className="cell-row">
+                          <small className="cell-label">Yürütme:</small>
                           <StatusPill
                             value={robot.execution ?? 'IDLE'}
                             tone={robot.execution === 'RUNNING' ? 'info' : robot.execution === 'ERROR' ? 'danger' : robot.execution === 'SUSPENDED' ? 'warning' : robot.execution === 'FINISHED' ? 'success' : 'neutral'}
@@ -255,7 +252,7 @@ export function RdsIntegrationPage() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <div className="cell-stack">
                         <StatusPill
                           value={robot.control}
                           tone={robot.control === 'TKG_CORRELATED' ? 'info' : robot.control === 'EXTERNAL_OR_OTHER' ? 'warning' : 'neutral'}
@@ -277,14 +274,14 @@ export function RdsIntegrationPage() {
                       )}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                      <div className="cell-stack">
                         <div>
-                          <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Çalışma Zamanı: </small>
+                          <small className="cell-label">Çalışma Zamanı: </small>
                           <code>{runtimeMap ?? '—'}</code>
                         </div>
                         {referenceMap && (
                           <div>
-                            <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }} title="Aşağıda elle seçilen profil; bu robotun yetkili profili değildir.">
+                            <small className="cell-label" title="Aşağıda elle seçilen profil; bu robotun yetkili profili değildir.">
                               Referans Profil Haritası:{' '}
                             </small>
                             <code>{referenceMap}</code>

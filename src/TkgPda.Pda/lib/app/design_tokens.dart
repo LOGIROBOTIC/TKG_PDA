@@ -59,6 +59,17 @@ class PdaScale {
   static double statusRegionMaxHeight(BuildContext context) =>
       MediaQuery.sizeOf(context).height * 0.32;
 
+  /// Height of the docked container panel. The cards flex into whatever this
+  /// gives them, so the panel can grow when it moves into a two-column layout
+  /// without the card having to be rewritten.
+  static double containerPanelHeight(BuildContext context) =>
+      isCompact(context) ? 208 : 292;
+
+  /// Above this the card can afford to stack its two actions vertically and
+  /// give the available one the larger share; below it they sit side by side.
+  static double stackedActionsMinHeight(BuildContext context) =>
+      isCompact(context) ? 190 : 250;
+
   // --- Spacing ----------------------------------------------------------
   static double gutter(BuildContext context) => isCompact(context) ? 10 : 16;
   static double cardPadding(BuildContext context) =>
@@ -89,6 +100,5 @@ class PdaStatusColors {
   };
 
   /// Tinted background for a chip carrying [of]'s colour as its foreground.
-  static Color surfaceOf(String state) =>
-      of(state).withValues(alpha: 0.12);
+  static Color surfaceOf(String state) => of(state).withValues(alpha: 0.12);
 }

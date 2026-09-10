@@ -1,14 +1,39 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../app/design_tokens.dart';
 import '../../data/models/pda_models.dart';
 
 /// WP-33 business-action surface. It consumes only the backend's logical
 /// position projection and never receives a physical slot identifier.
+///
+/// This is the one surface an operator touches all shift, so it gets the space
+/// and the type scale to match. It previously lived in a fixed 124px strip with
+/// 12px labels and a 9px disabled reason, which is unreadable at arm's length
+/// on a line terminal; sizes now come from [PdaScale].
 class ContainerPositionPanel extends StatelessWidget {
-  const ContainerPositionPanel({required this.controller, super.key});
+  const ContainerPositionPanel({
+    required this.controller,
+    this.maxHeight = double.infinity,
+    super.key,
+  });
 
   final AppController controller;
+
+  /// Ceiling handed down by the host layout. A docked panel sits in a Column
+  /// that gives non-flex children unbounded height, so without this the panel
+  /// keeps its preferred size and overflows the moment status banners appear
+  /// above it — which is precisely when the operator needs both to be visible.
+  final double maxHeight;
+
+  /// A card narrower than this cannot hold a two-line action label at the
+  /// terminal type scale without ellipsing it.
+  static const double _minCardWidth = 268;
+
+  /// Beyond this a single position just stretches into empty space.
+  static const double _maxCardWidth = 520;
 
   @override
   Widget build(BuildContext context) {
@@ -45,122 +70,166 @@ class ContainerPositionPanel extends StatelessWidget {
         ),
       );
     }
-    return Material(
-      key: const Key('container-position-panel'),
-      elevation: 10,
-      color: Theme.of(context).colorScheme.surface,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: 124,
-                child: ListView.separated(
-                  key: const Key('container-position-list'),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: positions.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) => SizedBox(
-                    width: 238,
-                    child: _PositionCard(
-                      controller: controller,
-                      position: positions[index],
+
+    final gutter = PdaScale.gutter(context);
+    // The ceiling wraps the whole panel, padding and safe area included:
+    // constraining only the inner Column let the panel exceed it by its own
+    // padding, which is how a 29px overflow survived the first attempt.
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Material(
+        key: const Key('container-position-panel'),
+        elevation: 10,
+        color: Theme.of(context).colorScheme.surface,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              gutter * 0.5,
+              gutter,
+              gutter * 0.5,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: PdaScale.containerPanelHeight(context),
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Fill the terminal rather than leaving a 238px strip in
+                        // the middle of a 1920px screen: widen the cards until
+                        // they use the row, and only scroll once they cannot.
+                        final available =
+                            constraints.maxWidth -
+                            gutter * (positions.length - 1);
+                        final fitted = available / positions.length;
+                        final cardWidth = fitted.isFinite
+                            ? math.min(
+                                _maxCardWidth,
+                                math.max(_minCardWidth, fitted),
+                              )
+                            : _minCardWidth;
+                        return ListView.separated(
+                          key: const Key('container-position-list'),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: positions.length,
+                          separatorBuilder: (_, _) => SizedBox(width: gutter),
+                          itemBuilder: (context, index) => SizedBox(
+                            width: cardWidth,
+                            child: _PositionCard(
+                              controller: controller,
+                              position: positions[index],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
-              ),
-              if (!controller.isConfiguringBatchItem) ...[
-                const SizedBox(height: 4),
-                Card(
-                  elevation: 0,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withValues(alpha: 0.45),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              size: 14,
-                              color: Colors.orange,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                'Varyant Kasa Yönetimi (${controller.context?.activeVariantCode ?? 'Aktif Varyant'})'
-                                '${positions.isNotEmpty ? ' · ${positions.length} Kasa' : ''}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (!controller.mutationGate.canMutate)
-                              Text(
-                                controller.mutationGate.message ??
-                                    'İşlem kilitli',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: Theme.of(context).colorScheme.error,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        OutlinedButton.icon(
-                          key: const Key('remove-all-containers'),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                          ),
-                          onPressed:
-                              controller.mutationGate.canMutate &&
-                                  !controller.removeAllSubmitting
-                              ? controller.removeAllContainers
-                              : null,
-                          icon: controller.removeAllSubmitting
-                              ? const SizedBox.square(
-                                  dimension: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.clear_all, size: 15),
-                          label: const Text(
-                            'Tüm Kasaları Kaldır',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                if (!controller.isConfiguringBatchItem) ...[
+                  SizedBox(height: gutter * 0.5),
+                  _RemoveAllBar(controller: controller),
+                ],
               ],
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Variant-scoped bulk removal. Destructive and variant-wide, so it is stated
+/// at readable size instead of the 10px caption it used to carry.
+class _RemoveAllBar extends StatelessWidget {
+  const _RemoveAllBar({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final gate = controller.mutationGate;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: PdaScale.gutter(context),
+        vertical: PdaScale.gutter(context) * 0.5,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.45,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: _Responsive(
+        // The label and a full-width button stack on a handheld; only a line
+        // terminal has the width to put them on one row.
+        stacked: PdaScale.isCompact(context),
+        children: [
+          _Flexible(
+            stacked: PdaScale.isCompact(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Varyant Kasa Yönetimi '
+                  '(${controller.context?.activeVariantCode ?? 'Aktif Varyant'})',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: PdaScale.body(context),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (!gate.canMutate)
+                  Text(
+                    gate.message ?? 'İşlem kilitli',
+                    style: TextStyle(
+                      fontSize: PdaScale.caption(context),
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: PdaScale.gutter(context),
+            height: PdaScale.gutter(context) * 0.5,
+          ),
+          OutlinedButton.icon(
+            key: const Key('remove-all-containers'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: Size(0, PdaScale.secondaryActionHeight(context)),
+              padding: EdgeInsets.symmetric(
+                horizontal: PdaScale.gutter(context) * 1.5,
+              ),
+              textStyle: TextStyle(
+                fontSize: PdaScale.secondaryAction(context),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            onPressed: gate.canMutate && !controller.removeAllSubmitting
+                ? controller.removeAllContainers
+                : null,
+            icon: controller.removeAllSubmitting
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  )
+                : const Icon(Icons.clear_all),
+            label: const Text('Tüm Kasaları Kaldır'),
+          ),
+        ],
       ),
     );
   }
@@ -174,62 +243,115 @@ class _PositionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalPositions = controller.containerPositions.length;
-    final positionLabel = totalPositions > 1
-        ? '${position.label} (${position.positionNumber} / $totalPositions)'
-        : position.label;
+    final theme = Theme.of(context);
+    final total = controller.containerPositions.length;
+    final pad = PdaScale.cardPadding(context);
 
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(6),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Expanded(
+                // The logical container number leads: it is what the operator
+                // was told on the line, and what the action keys are built on.
+                Container(
+                  width: PdaScale.isCompact(context) ? 34 : 46,
+                  height: PdaScale.isCompact(context) ? 34 : 46,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
                   child: Text(
-                    positionLabel,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    '${position.positionNumber}',
+                    style: TextStyle(
+                      color: theme.colorScheme.onPrimary,
+                      fontSize: PdaScale.title(context) * 0.86,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                _StateBadge(position: position),
+                SizedBox(width: pad * 0.6),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    total > 1
+                        ? '${position.label} (${position.positionNumber} / $total)'
+                        : position.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: PdaScale.title(context) * 0.8,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(width: pad * 0.4),
+                // The state rides in the header rather than on its own row:
+                // every fixed block above the actions is height the buttons
+                // lose when the panel is squeezed by status banners.
+                Flexible(flex: 2, child: _StateBadge(position: position)),
               ],
             ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _BusinessActionButton(
-                      controller: controller,
-                      position: position,
-                      action: 'FULL',
-                      label: '${position.positionNumber}. Kasa Doldu',
-                      availability: position.fullAction,
-                      icon: Icons.inventory,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _BusinessActionButton(
-                      controller: controller,
-                      position: position,
-                      action: 'EMPTY',
-                      label: '${position.positionNumber}. Kasa Boş',
-                      availability: position.emptyAction,
-                      icon: Icons.move_to_inbox_outlined,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            SizedBox(height: pad * 0.5),
+            Expanded(child: _actions(context)),
           ],
         ),
       ),
     );
   }
+
+  /// The two business actions flex into whatever height the card has left, so
+  /// the same card works in the docked panel and in a taller side column.
+  Widget _actions(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final gap = PdaScale.gutter(context) * 0.45;
+      final full = _BusinessActionButton(
+        controller: controller,
+        position: position,
+        action: 'FULL',
+        label: '${position.positionNumber}. Kasa Doldu',
+        availability: position.fullAction,
+        icon: Icons.inventory,
+      );
+      final empty = _BusinessActionButton(
+        controller: controller,
+        position: position,
+        action: 'EMPTY',
+        label: '${position.positionNumber}. Kasa Boş',
+        availability: position.emptyAction,
+        icon: Icons.move_to_inbox_outlined,
+      );
+
+      if (constraints.maxHeight < PdaScale.stackedActionsMinHeight(context)) {
+        return Row(
+          children: [
+            Expanded(child: full),
+            SizedBox(width: gap),
+            Expanded(child: empty),
+          ],
+        );
+      }
+
+      // With room to stack, the action this container can actually accept gets
+      // the larger share — the two used to carry identical weight, so which one
+      // was the right press did not read at a glance.
+      final gate = controller.mutationGate.canMutate;
+      final fullReady = gate && position.fullAction.enabled;
+      final emptyReady = gate && position.emptyAction.enabled;
+      return Column(
+        children: [
+          Expanded(flex: fullReady && !emptyReady ? 3 : 2, child: full),
+          SizedBox(height: gap),
+          Expanded(flex: emptyReady && !fullReady ? 3 : 2, child: empty),
+        ],
+      );
+    },
+  );
 }
 
 class _BusinessActionButton extends StatelessWidget {
@@ -251,6 +373,7 @@ class _BusinessActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final submitting = controller.isSubmittingContainerAction(
       position.positionNumber,
       action,
@@ -263,76 +386,153 @@ class _BusinessActionButton extends StatelessWidget {
     final disabledReason = !controller.mutationGate.canMutate
         ? (controller.mutationGate.message ?? 'İşlem kilitli')
         : (!availability.enabled
-            ? (availability.disabledMessage ?? 'Bu kasa için işlem uygun değil')
-            : null);
+              ? (availability.disabledMessage ??
+                    'Bu kasa için işlem uygun değil')
+              : null);
 
-    return Tooltip(
-      key: Key('container-${position.positionNumber}-$action'),
-      message: enabled ? label : (disabledReason ?? label),
-      child: ElevatedButton(
-        // The key names the LOGICAL business action, which under WP-33 is
-        // (machine, variant/layout, part, logical container number, action) — so the
-        // container number has to be part of it.
-        key: Key(
-          action == 'FULL'
-              ? 'direct-action-REMOVE_FULL-${position.positionNumber}'
-              : 'direct-action-BRING_EMPTY-${position.positionNumber}',
-        ),
-        onPressed: enabled
-            ? () => controller.submitContainerAction(position, action)
-            : null,
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        ),
-        child: submitting
-            ? const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox.square(
-                    dimension: 19,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
+    final reasonHeight =
+        PdaScale.caption(context) * 1.45 + PdaScale.gutter(context) * 0.25;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Below this the printed reason would push the button under a usable
+        // touch target, so it falls back to the tooltip rather than overflow.
+        final showReason =
+            !enabled &&
+            !submitting &&
+            disabledReason != null &&
+            constraints.maxHeight >= 48 + reasonHeight;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(
+              child: Tooltip(
+                key: Key('container-${position.positionNumber}-$action'),
+                message: enabled ? label : (disabledReason ?? label),
+                child: ElevatedButton(
+                  // The key names the LOGICAL business action, which under WP-33 is
+                  // (machine, variant/layout, part, logical container number, action) — so the
+                  // container number has to be part of it.
+                  key: Key(
+                    action == 'FULL'
+                        ? 'direct-action-REMOVE_FULL-${position.positionNumber}'
+                        : 'direct-action-BRING_EMPTY-${position.positionNumber}',
+                  ),
+                  onPressed: enabled
+                      ? () => controller.submitContainerAction(position, action)
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    // The surrounding Expanded sets the real size; the theme's
+                    // 120x56 floor would otherwise force an overflow in the narrow
+                    // side-by-side arrangement.
+                    minimumSize: Size.zero,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: PdaScale.gutter(context) * 0.75,
+                    ),
+                    textStyle: TextStyle(
+                      fontSize: enabled
+                          ? PdaScale.primaryAction(context)
+                          : PdaScale.secondaryAction(context),
+                      fontWeight: enabled ? FontWeight.w700 : FontWeight.w600,
                     ),
                   ),
-                  SizedBox(height: 4),
-                  Text('Gönderiliyor', textAlign: TextAlign.center),
-                ],
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: enabled ? 22 : 18),
-                  const SizedBox(height: 2),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: enabled ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                  ),
-                  if (!enabled && disabledReason != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      disabledReason,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Theme.of(context).colorScheme.error,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ],
+                  child: submitting
+                      // Which container is in flight stays readable from the card
+                      // header above, so the button reports only the state.
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox.square(
+                              dimension: PdaScale.isCompact(context) ? 18 : 24,
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2.6,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: PdaScale.gutter(context) * 0.6),
+                            const Flexible(
+                              child: Text(
+                                'Gönderiliyor',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              icon,
+                              size: enabled
+                                  ? (PdaScale.isCompact(context) ? 22 : 30)
+                                  : (PdaScale.isCompact(context) ? 18 : 22),
+                            ),
+                            SizedBox(width: PdaScale.gutter(context) * 0.6),
+                            Flexible(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
-      ),
+            ),
+            if (showReason)
+              Padding(
+                padding: EdgeInsets.only(top: PdaScale.gutter(context) * 0.25),
+                child: Text(
+                  disabledReason,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  // A line terminal has no hover, so a tooltip alone is not an
+                  // accessible explanation — the reason is printed as well.
+                  style: TextStyle(
+                    fontSize: PdaScale.caption(context),
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
+}
+
+/// Row on a wide surface, Column on a narrow one, with one child able to give
+/// up space in either direction.
+class _Responsive extends StatelessWidget {
+  const _Responsive({required this.stacked, required this.children});
+
+  final bool stacked;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => stacked
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        )
+      : Row(children: children);
+}
+
+class _Flexible extends StatelessWidget {
+  const _Flexible({required this.stacked, required this.child});
+
+  final bool stacked;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      stacked ? child : Expanded(child: child);
 }
 
 class _StateBadge extends StatefulWidget {
@@ -387,30 +587,60 @@ class _StateBadgeState extends State<_StateBadge>
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.position.transportState;
     final suffix = widget.position.queuePosition == null
         ? ''
         : ' · #${widget.position.queuePosition}';
     final disableAnimations = MediaQuery.of(context).disableAnimations;
-    final chip = Chip(
-      visualDensity: VisualDensity.compact,
-      label: Text(
-        '${_stateLabel(widget.position.transportState)}$suffix',
-        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+    // Severity has to read from across the line. Every state used to render in
+    // the same neutral chip, so "Hazır" and "Hata" looked identical.
+    final colour = PdaStatusColors.of(state);
+
+    final chip = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: PdaScale.gutter(context) * 0.75,
+        vertical: PdaScale.gutter(context) * 0.4,
+      ),
+      decoration: BoxDecoration(
+        color: PdaStatusColors.surfaceOf(state),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+          ),
+          SizedBox(width: PdaScale.gutter(context) * 0.45),
+          Flexible(
+            child: Text(
+              '${_stateLabel(state)}$suffix',
+              style: TextStyle(
+                fontSize: PdaScale.caption(context),
+                fontWeight: FontWeight.w800,
+                color: colour,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
+
+    final aligned = Align(alignment: Alignment.centerLeft, child: chip);
     if (_controller == null || disableAnimations) {
-      return Semantics(
-        label: 'Taşıma durumu ${widget.position.transportState}$suffix',
-        child: chip,
-      );
+      return Semantics(label: 'Taşıma durumu $state$suffix', child: aligned);
     }
     return Semantics(
-      label: 'Taşıma durumu ${widget.position.transportState}$suffix',
+      label: 'Taşıma durumu $state$suffix',
       child: FadeTransition(
         opacity: Tween<double>(begin: 0.45, end: 1.0).animate(
           CurvedAnimation(parent: _controller!, curve: Curves.easeInOut),
         ),
-        child: chip,
+        child: aligned,
       ),
     );
   }

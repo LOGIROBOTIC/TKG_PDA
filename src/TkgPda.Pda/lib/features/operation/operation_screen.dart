@@ -40,7 +40,10 @@ class OperationScreen extends StatelessWidget {
               Text(
                 '${user.fullName.trim().isNotEmpty ? user.fullName : user.username} (Sicil: ${user.employeeNo?.trim().isNotEmpty == true ? user.employeeNo! : "—"})',
                 key: const Key('operator-user-banner'),
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.normal,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
           ],
@@ -111,9 +114,7 @@ class OperationScreen extends StatelessWidget {
               _AmbiguousBatchBanner(controller: controller),
             if (controller.isConfiguringBatchItem)
               _BatchConfiguringBanner(controller: controller),
-            Expanded(
-              child: _PartFirstWithBatchSkip(controller: controller),
-            ),
+            Expanded(child: _PartFirstWithBatchSkip(controller: controller)),
             if (controller.batchMode || controller.batchCart.isNotEmpty)
               BatchCartTray(controller: controller),
             if (controller.busy) const LinearProgressIndicator(minHeight: 5),
@@ -154,23 +155,34 @@ class _PartFirstWithBatchSkip extends StatelessWidget {
   final AppController controller;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Expanded(child: PartFirstSelector(controller: controller)),
-      if (controller.transportActionsReady)
-        ContainerPositionPanel(controller: controller),
-      if (controller.isConfiguringBatchItem &&
-          (controller.compatibleVariants?.isEmpty ?? false))
-        Padding(
-          padding: const EdgeInsets.all(14),
-          child: OutlinedButton.icon(
-            key: const Key('skip-invalid-batch-item'),
-            onPressed: controller.busy ? null : controller.skipInvalidBatchItem,
-            icon: const Icon(Icons.remove_circle_outline),
-            label: const Text('Bu Parçayı Kaldır ve Devam Et'),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Column(
+      children: [
+        Expanded(child: PartFirstSelector(controller: controller)),
+        if (controller.transportActionsReady)
+          ContainerPositionPanel(
+            controller: controller,
+            // The docked panel is a non-flex child, so the Column offers it
+            // unbounded height and it would keep its preferred size no matter
+            // how many status banners are stacked above. Cap it against what
+            // this workspace actually has, and let the selection keep the rest.
+            maxHeight: constraints.maxHeight * 0.58,
           ),
-        ),
-    ],
+        if (controller.isConfiguringBatchItem &&
+            (controller.compatibleVariants?.isEmpty ?? false))
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: OutlinedButton.icon(
+              key: const Key('skip-invalid-batch-item'),
+              onPressed: controller.busy
+                  ? null
+                  : controller.skipInvalidBatchItem,
+              icon: const Icon(Icons.remove_circle_outline),
+              label: const Text('Bu Parçayı Kaldır ve Devam Et'),
+            ),
+          ),
+      ],
+    ),
   );
 }
 

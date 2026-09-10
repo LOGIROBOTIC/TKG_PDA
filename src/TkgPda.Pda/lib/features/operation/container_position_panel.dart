@@ -596,9 +596,14 @@ class _StateBadgeState extends State<_StateBadge>
   @override
   Widget build(BuildContext context) {
     final state = widget.position.transportState;
-    final suffix = widget.position.queuePosition == null
+    final queue = widget.position.queuePosition == null
         ? ''
         : ' · #${widget.position.queuePosition}';
+    // "Is it stuck or just slow?" is the question a waiting operator actually
+    // has. The projection already carries an ETA; it was only ever shown on
+    // the separate queue screen, so the card left them guessing.
+    final eta = _etaSuffix(widget.position);
+    final suffix = '$queue${eta == null ? '' : ' · $eta'}';
     final disableAnimations = MediaQuery.of(context).disableAnimations;
     // Severity has to read from across the line. Every state used to render in
     // the same neutral chip, so "Hazır" and "Hata" looked identical.
@@ -652,6 +657,18 @@ class _StateBadgeState extends State<_StateBadge>
       ),
     );
   }
+}
+
+/// Short ETA for the state chip. The queue screen spells it out in full;
+/// inside a chip it has to stay to a couple of characters.
+String? _etaSuffix(ContainerPosition position) {
+  const running = {'REQUESTED', 'QUEUED', 'ROBOT_ASSIGNED', 'IN_PROGRESS'};
+  if (!running.contains(position.transportState)) return null;
+  if (position.etaState != 'AVAILABLE' || position.etaSeconds == null) {
+    return null;
+  }
+  final minutes = (position.etaSeconds! / 60).ceil();
+  return minutes < 1 ? '<1 dk' : '$minutes dk';
 }
 
 String _stateLabel(String state) => switch (state) {

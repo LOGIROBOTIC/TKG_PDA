@@ -64,6 +64,17 @@ class PdaScale {
   static double containerPanelHeight(BuildContext context) =>
       isCompact(context) ? 208 : 292;
 
+  /// A card taller than this stops being a card and becomes a wall: the
+  /// default stadium-shaped button stretched to a full column renders as a
+  /// giant capsule. In a side column the cards keep this height and the
+  /// leftover space goes to the bulk action at the bottom.
+  static double containerCardMaxHeight(BuildContext context) =>
+      isCompact(context) ? 260 : 520;
+
+  /// Corner radius for the action buttons. Stated explicitly because the
+  /// Material 3 default is a stadium, which is only sane on a short button.
+  static const double actionRadius = 14;
+
   /// Above this the card can afford to stack its two actions vertically and
   /// give the available one the larger share; below it they sit side by side.
   static double stackedActionsMinHeight(BuildContext context) =>

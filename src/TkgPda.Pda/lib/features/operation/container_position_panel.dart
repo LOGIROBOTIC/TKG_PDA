@@ -104,7 +104,7 @@ class ContainerPositionPanel extends StatelessWidget {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: expand
-                          ? double.infinity
+                          ? PdaScale.containerCardMaxHeight(context)
                           : PdaScale.containerPanelHeight(context),
                     ),
                     child: LayoutBuilder(
@@ -139,6 +139,7 @@ class ContainerPositionPanel extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (expand) const Spacer(),
                 if (!controller.isConfiguringBatchItem) ...[
                   SizedBox(height: gutter * 0.5),
                   _RemoveAllBar(controller: controller),
@@ -218,6 +219,9 @@ class _RemoveAllBar extends StatelessWidget {
             key: const Key('remove-all-containers'),
             style: OutlinedButton.styleFrom(
               minimumSize: Size(0, PdaScale.secondaryActionHeight(context)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(PdaScale.actionRadius),
+              ),
               padding: EdgeInsets.symmetric(
                 horizontal: PdaScale.gutter(context) * 1.5,
               ),
@@ -435,6 +439,14 @@ class _BusinessActionButton extends StatelessWidget {
                     // 120x56 floor would otherwise force an overflow in the narrow
                     // side-by-side arrangement.
                     minimumSize: Size.zero,
+                    // Stated explicitly: the Material 3 default is a stadium,
+                    // which turns into a giant capsule once the button is as
+                    // tall as a terminal card.
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        PdaScale.actionRadius,
+                      ),
+                    ),
                     padding: EdgeInsets.symmetric(
                       horizontal: PdaScale.gutter(context) * 0.75,
                     ),

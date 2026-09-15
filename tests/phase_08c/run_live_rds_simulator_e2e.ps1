@@ -168,6 +168,7 @@ try {
     Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql')))
     Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\migrations\006_production_sessions.sql')))
     Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\migrations\007_bring_full_task_type.sql')))
+    Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\migrations\008_warehouse_preparation_areas.sql')))
     Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql')))
     Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql')))
     Invoke-Checked $script:psql ($script:common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql')))

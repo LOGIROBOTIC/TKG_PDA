@@ -84,12 +84,14 @@ public sealed partial class PostgresTransportWorkflowStore
                 ?? throw new WorkflowRuleException("CONTAINER_POSITION_NOT_FOUND", "Seçilen kasa konumu artık mevcut değildir.");
             var replayRequest = BuildTransportRequest(command, expectedOperation, replayPosition.SlotId, expectedOperation == TransportTaskType.BringEmpty);
             EnsureEquivalentPayload(existing, replayRequest);
+            await ValidateExpectedProductionAsync(connection, transaction, command.MachineId, command.ProductionSessionId, [existing.Id], cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return new ContainerActionResult(command.PositionNumber, command.Action.ToApi(), existing, WasIdempotentReplay: true);
         }
 
         var contextRequest = BuildTransportRequest(command, expectedOperation, machineSlotId: null, expectedOperation == TransportTaskType.BringEmpty);
         await LockAndValidateRuntimeContextAsync(connection, transaction, contextRequest, cancellationToken);
+        await ValidateExpectedProductionAsync(connection, transaction, command.MachineId, command.ProductionSessionId, null, cancellationToken);
         var positions = await ReadPartPositionsAsync(connection, transaction, query, cancellationToken);
         var position = positions.SingleOrDefault(item => item.PositionNumber == command.PositionNumber)
             ?? throw new WorkflowRuleException("CONTAINER_POSITION_NOT_FOUND", "Seçilen kasa konumu aktif varyant ve parça için mevcut değildir.");
@@ -170,6 +172,8 @@ public sealed partial class PostgresTransportWorkflowStore
                 command.Priority,
                 "remove-all:");
 
+            await ValidateExpectedProductionAsync(connection, transaction, command.MachineId, command.ProductionSessionId, existing.Items.Select(item => item.Id).ToArray(), cancellationToken);
+
             await transaction.CommitAsync(cancellationToken);
             return new RemoveAllContainersResult(existing with { WasIdempotentReplay = true }, []);
         }
@@ -192,6 +196,7 @@ public sealed partial class PostgresTransportWorkflowStore
         await LockAndValidateRuntimeContextAsync(connection, transaction, contextRequest, cancellationToken);
 
         var candidates = await ReadVariantPositionsAsync(connection, transaction, command.LayoutId, cancellationToken);
+        await ValidateExpectedProductionAsync(connection, transaction, command.MachineId, command.ProductionSessionId, null, cancellationToken);
         var allSlotIds = await ReadActionSlotIdsForLockAsync(
             connection,
             transaction,
@@ -330,6 +335,7 @@ public sealed partial class PostgresTransportWorkflowStore
         await LockAndValidateRuntimeContextAsync(connection, transaction, contextRequest, cancellationToken);
 
         var resolved = new List<(ContainerActionBatchItem Item, Guid SlotId)>();
+        await ValidateExpectedProductionAsync(connection, transaction, command.MachineId, command.ProductionSessionId, existing?.Items.Select(item => item.Id).ToArray(), cancellationToken);
         foreach (var item in command.Items)
         {
             var positions = await ReadPartPositionsAsync(

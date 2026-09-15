@@ -416,7 +416,8 @@ public static class ApiEndpoints
                 request.PartId,
                 request.PositionNumber,
                 action,
-                request.Priority),
+                request.Priority,
+                request.ProductionSessionId),
             cancellationToken);
         context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.WasIdempotentReplay ? "true" : "false";
         await WriteAuditAsync(
@@ -465,7 +466,8 @@ public static class ApiEndpoints
                 request.VariantId,
                 request.LayoutId,
                 request.NavigationProfileId,
-                request.Priority),
+                request.Priority,
+                request.ProductionSessionId),
             cancellationToken);
         context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.Batch.WasIdempotentReplay ? "true" : "false";
         await WriteAuditAsync(
@@ -520,7 +522,8 @@ public static class ApiEndpoints
                 request.LayoutId,
                 request.NavigationProfileId,
                 items,
-                request.Priority),
+                request.Priority,
+                request.ProductionSessionId),
             cancellationToken);
         context.Response.Headers[ApiHeaders.IdempotencyReplayed] = result.WasIdempotentReplay ? "true" : "false";
         await WriteAuditAsync(

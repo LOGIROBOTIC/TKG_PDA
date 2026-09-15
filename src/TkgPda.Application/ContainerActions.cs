@@ -93,7 +93,8 @@ public sealed record ContainerActionCommand(
     Guid PartId,
     int PositionNumber,
     OperatorContainerAction Action,
-    int Priority = 100);
+    int Priority = 100,
+    Guid? ProductionSessionId = null);
 
 public sealed record RemoveAllContainersCommand(
     string IdempotencyKey,
@@ -102,7 +103,8 @@ public sealed record RemoveAllContainersCommand(
     Guid VariantId,
     Guid LayoutId,
     Guid? NavigationProfileId,
-    int Priority = 100);
+    int Priority = 100,
+    Guid? ProductionSessionId = null);
 
 public sealed record ContainerActionBatchItem(
     Guid ProductGroupId,
@@ -118,7 +120,8 @@ public sealed record ContainerActionBatchCommand(
     Guid LayoutId,
     Guid? NavigationProfileId,
     IReadOnlyList<ContainerActionBatchItem> Items,
-    int Priority = 100);
+    int Priority = 100,
+    Guid? ProductionSessionId = null);
 
 public sealed record ContainerActionAvailabilityRecord(
     bool Enabled,

@@ -1,6 +1,7 @@
 param(
     [string]$PgBin = 'C:\Program Files\PostgreSQL\18\bin',
-    [int]$Port = 55439
+    [int]$Port = 55439,
+    [string]$TestFilter = 'FullyQualifiedName~AuthenticatedApiTests|FullyQualifiedName~CompatibleVariantsApiTests|FullyQualifiedName~MachinePartOptionsApiTests|FullyQualifiedName~TransportBatchApiTests|FullyQualifiedName~TransportReadinessApiTests|FullyQualifiedName~WarehousePreparationApiTests|FullyQualifiedName~ContainerActionsApiTests|FullyQualifiedName~ProductionSessionApiTests'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,20 +53,40 @@ try {
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\003_transport_batch.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\004_transport_request_readiness.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql')))
+    Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\006_production_sessions.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002a_customer_textual_master_data.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002b_customer_physical_layouts.sql')))
     Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql')))
+    # Prove the additive migration can safely be replayed after customer seeds.
+    Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\006_production_sessions.sql')))
 
     $connectionString = "Host=127.0.0.1;Port=$Port;Database=$database;Username=postgres;Pooling=true;Maximum Pool Size=50"
     $env:TKG_PDA_API_TEST_CONNECTION_STRING = $connectionString
     $env:ConnectionStrings__TkgPda = $connectionString
     $env:Authentication__Jwt__SigningKey = 'phase-04-integration-signing-key-with-more-than-thirty-two-bytes'
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+    # This isolated HTTP/DB suite never reaches the live simulator or RDS.
+    $env:Rds__Enabled = 'false'
+    $env:Rds__DispatchEnabled = 'false'
+    $env:RdsCoreExecution__Enabled = 'false'
     Invoke-Checked 'dotnet' @(
         'test', (Join-Path $projectRoot 'tests\TkgPda.Api.Tests\TkgPda.Api.Tests.csproj'),
-        '--configuration', 'Release', '--no-restore', '--filter', 'FullyQualifiedName~AuthenticatedApiTests|FullyQualifiedName~CompatibleVariantsApiTests|FullyQualifiedName~MachinePartOptionsApiTests|FullyQualifiedName~TransportBatchApiTests|FullyQualifiedName~TransportReadinessApiTests|FullyQualifiedName~WarehousePreparationApiTests|FullyQualifiedName~ContainerActionsApiTests',
+        '--configuration', 'Release', '--no-restore', '--filter', $TestFilter,
         '--logger', 'console;verbosity=normal'
     )
+
+    $productionDigestSql = @'
+SELECT md5(jsonb_build_array(
+  (SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM ops.production_sessions s),
+  (SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM ops.transport_requests r),
+  (SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM audit.audit_logs a)
+)::text);
+'@
+    $productionBefore = & $psql @common -Atc $productionDigestSql
+    if ($LASTEXITCODE -ne 0) { throw 'Production pre-replay digest failed' }
+    Invoke-Checked $psql ($common + @('-f', (Join-Path $projectRoot 'db\migrations\006_production_sessions.sql')))
+    $productionAfter = & $psql @common -Atc $productionDigestSql
+    if ($LASTEXITCODE -ne 0 -or $productionBefore -ne $productionAfter) { throw 'Migration replay changed production/transport/audit records' }
 
     $verification = (& $psql @common -Atc @"
 SELECT json_build_object(
@@ -74,16 +95,24 @@ SELECT json_build_object(
   'machine_master_records', (SELECT count(*) FROM master.machines),
   'rds_tasks', (SELECT count(*) FROM integration.rds_tasks),
   'rds_worksites', (SELECT count(*) FROM integration.rds_worksites),
+  'production_migration_replay', 'UNCHANGED',
+  'production_orphans', (SELECT count(*) FROM ops.transport_requests r
+      LEFT JOIN ops.production_sessions s ON s.id = r.production_session_id AND s.machine_id = r.machine_id
+      WHERE r.production_session_id IS NOT NULL AND s.id IS NULL),
   'result', 'PASS'
 );
 "@) | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'PostgreSQL verification query failed' }
+    if ($verification.production_orphans -ne 0) { throw 'Production/transport orphan detected' }
     $verification | ConvertTo-Json
 }
 finally {
     Remove-Item Env:TKG_PDA_API_TEST_CONNECTION_STRING -ErrorAction SilentlyContinue
     Remove-Item Env:ConnectionStrings__TkgPda -ErrorAction SilentlyContinue
     Remove-Item Env:Authentication__Jwt__SigningKey -ErrorAction SilentlyContinue
+    Remove-Item Env:Rds__Enabled -ErrorAction SilentlyContinue
+    Remove-Item Env:Rds__DispatchEnabled -ErrorAction SilentlyContinue
+    Remove-Item Env:RdsCoreExecution__Enabled -ErrorAction SilentlyContinue
     if ($started -and (Test-Path -LiteralPath $dataDir)) {
         & (Join-Path $PgBin 'pg_ctl.exe') -D $dataDir -m fast -w stop | Out-Host
     }

@@ -30,6 +30,7 @@ public static class PolicyNames
     public const string VariantManager = "variant-manager";
     public const string Administrator = "administrator";
     public const string WarehousePreparation = "warehouse-preparation";
+    public const string ProductionOperator = "production-operator";
 }
 
 public static class ApiClaimNames

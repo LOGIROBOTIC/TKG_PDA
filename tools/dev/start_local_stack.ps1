@@ -251,6 +251,9 @@ if ($LASTEXITCODE -ne 0) { throw "Applying 004_transport_request_readiness.sql f
 Write-Host 'Applying migration 005 (005_layout_slot_part_mapping.sql)...' -ForegroundColor Cyan
 & $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\005_layout_slot_part_mapping.sql') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Applying 005_layout_slot_part_mapping.sql failed with exit code $LASTEXITCODE" }
+Write-Host 'Applying migration 006 (006_production_sessions.sql)...' -ForegroundColor Cyan
+& $psql @commonPsql -d $Database -v ON_ERROR_STOP=1 -f (Join-Path $projectRoot 'db\migrations\006_production_sessions.sql') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Applying 006_production_sessions.sql failed with exit code $LASTEXITCODE" }
 
 Write-Host 'Applying customer master seeds (002a, 002b, 002c)...' -ForegroundColor Cyan
 $seedFiles = @(

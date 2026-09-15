@@ -133,6 +133,8 @@ builder.Services.AddSingleton(services =>
 builder.Services.AddSingleton<ITransportWorkflowStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
 builder.Services.AddSingleton<IContainerActionStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
 builder.Services.AddSingleton<TransportWorkflowService>();
+builder.Services.AddSingleton<IProductionSessionStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
+builder.Services.AddSingleton<ProductionSessionService>();
 builder.Services.AddSingleton<ContainerActionService>();
 builder.Services.AddSingleton<OperatorTransportQueueService>();
 builder.Services.AddSingleton<MachineAccessService>();
@@ -202,6 +204,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(PolicyNames.WarehousePreparation, policy => policy
         .RequireRole(RoleCodes.WarehousePreparationRoles)
         .RequireClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound));
+    options.AddPolicy(PolicyNames.ProductionOperator, policy => policy
+        .RequireRole(RoleCodes.Admin, RoleCodes.Supervisor, RoleCodes.LineOperator)
+        .RequireClaim(ApiClaimNames.ClientType, ClientTypes.DeviceBound));
     options.AddPolicy(PolicyNames.Administrator, policy => policy
         .RequireRole(RoleCodes.Admin)
         .RequireClaim(ApiClaimNames.ClientType, ClientTypes.AdminWeb));
@@ -270,6 +275,7 @@ app.MapGet("/health/ready", async (IApiDataStore store, CancellationToken cancel
         statusCode: ready ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 }).AllowAnonymous();
 app.MapTkgPdaApi();
+app.MapProductionSessions();
 app.MapTkgPdaAdminApi();
 app.MapTkgPdaRdsIntegrationApi();
 

@@ -122,6 +122,10 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
 
     private static int WorkflowHttpStatus(string code) => code switch
     {
+        "PRODUCTION_ACCESS_DENIED" => StatusCodes.Status403Forbidden,
+        "PRODUCTION_SESSION_NOT_FOUND" => StatusCodes.Status404NotFound,
+        "PRODUCTION_SESSION_ALREADY_ACTIVE" or "PRODUCTION_CONTEXT_MISMATCH" or "PRODUCTION_SESSION_ACTIVE" or "PRODUCTION_SESSION_CHANGED"
+            => StatusCodes.Status409Conflict,
         "REQUEST_NOT_FOUND" or "SLOT_NOT_FOUND" or "PART_NOT_FOUND" or "CONTAINER_NOT_FOUND" or "TASK_TYPE_NOT_FOUND"
             => StatusCodes.Status404NotFound,
         "IDEMPOTENCY_KEY_REQUIRED" or "IDEMPOTENCY_KEY_TOO_LONG" or "SOURCE_REQUIRED" or "DESTINATION_REQUIRED"

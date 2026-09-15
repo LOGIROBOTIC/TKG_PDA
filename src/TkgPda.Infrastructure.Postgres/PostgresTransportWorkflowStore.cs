@@ -85,6 +85,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
         }
 
         await LockAndValidateRuntimeContextAsync(connection, transaction, request, cancellationToken);
+        await ValidateProductionTransportContextAsync(connection, transaction, request, cancellationToken);
         var taskTypeId = await ResolveAndValidateMasterDataAsync(connection, transaction, request, cancellationToken);
 
         // Customer Workflow — Empty Container Buffer: when the operator did not
@@ -503,6 +504,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
         await LockMachineRuntimeAsync(connection, transaction, selection.MachineId, cancellationToken);
+        await GuardProductionVariantSwitchAsync(connection, transaction, selection, cancellationToken);
 
         await using (var active = new NpgsqlCommand(
                          $"SELECT id FROM ops.transport_requests WHERE machine_id = @machine_id AND status IN ({ActiveStatusesSql}) LIMIT 1",
@@ -1042,13 +1044,14 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
                 machine_id, variant_id, layout_id, navigation_id,
                 product_group_id, part_id, container_type_id, task_type_id,
                 source_slot_id, destination_slot_id, status, priority, batch_id,
-                readiness_state)
+                readiness_state, production_session_id)
             VALUES (
                 @id, @idempotency_key, @request_origin, @requested_by,
                 @machine_id, @variant_id, @layout_id, @navigation_id,
                 @product_group_id, @part_id, @container_type_id, @task_type_id,
                 @source_slot_id, @destination_slot_id, 'CREATED', @priority, @batch_id,
-                @readiness_state)
+                @readiness_state,
+                (SELECT id FROM ops.production_sessions WHERE machine_id = @machine_id AND ended_at IS NULL))
             RETURNING request_no
             """,
             connection,

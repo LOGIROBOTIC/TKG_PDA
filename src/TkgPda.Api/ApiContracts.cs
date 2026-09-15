@@ -78,13 +78,15 @@ public sealed record CreateContainerActionHttpRequest(
     Guid PartId,
     int PositionNumber,
     string Action,
-    int Priority = 100);
+    int Priority = 100,
+    Guid? ProductionSessionId = null);
 
 public sealed record RemoveAllContainersHttpRequest(
     Guid VariantId,
     Guid LayoutId,
     Guid? NavigationProfileId,
-    int Priority = 100);
+    int Priority = 100,
+    Guid? ProductionSessionId = null);
 
 public sealed record CreateContainerActionBatchItemHttpRequest(
     Guid ProductGroupId,
@@ -97,7 +99,8 @@ public sealed record CreateContainerActionBatchHttpRequest(
     Guid LayoutId,
     Guid? NavigationProfileId,
     IReadOnlyList<CreateContainerActionBatchItemHttpRequest> Items,
-    int Priority = 100);
+    int Priority = 100,
+    Guid? ProductionSessionId = null);
 
 public sealed record ContainerActionHttpResponse(
     int PositionNumber,

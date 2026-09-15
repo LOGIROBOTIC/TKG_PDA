@@ -4,6 +4,9 @@ Bu dizin, tamamlanmış Phase 01–09 baseline'ının mimari kararlarını, veri
 
 ## Başlangıç noktaları
 
+- [WAREHOUSE_TABLET_IMPLEMENTATION.md](WAREHOUSE_TABLET_IMPLEMENTATION.md) — yeni üretim/depo Android gereksinimleri, ekran düzeltmeleri ve kalan uygulama dilimleri
+- [WAREHOUSE_PREPARATION_BACKEND_REVIEW.md](WAREHOUSE_PREPARATION_BACKEND_REVIEW.md) — dört ortak alanın domain kuralları, testleri ve sonraki kalıcılık/taşıma dilimi için doğrulanan şema boşlukları
+- [PRODUCTION_SESSION_API.md](PRODUCTION_SESSION_API.md) — üretime başla/bitir backend'i ve operatör UI'sı, 006 forward migration, eski tablet koruması, idempotency/audit ve aşamalı geçiş sınırı
 - [PROJECT_BASELINE.md](PROJECT_BASELINE.md) — mevcut kapsam, sayılar, kararlar, riskler ve phase durumu
 - [database/ERD.md](database/ERD.md) — GitHub uyumlu Mermaid mimari ve ER diyagramları
 - [TKG_PDA_DATABASE_SPEC_v0.1.md](TKG_PDA_DATABASE_SPEC_v0.1.md) — özgün database specification

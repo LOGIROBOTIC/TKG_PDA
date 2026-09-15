@@ -50,7 +50,11 @@ foreach ($dir in @($logsDir, $runtimeDir)) {
 $runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
 # --- refuse to fight an existing stack -------------------------------------
-$busy = @($ApiPort, $OperatorPort) | Where-Object {
+# Only the ports this run will actually bind: with -NoOperator a client already
+# serving on the operator port is left alone rather than blocking the API.
+$wantedPorts = @($ApiPort)
+if (-not $NoOperator) { $wantedPorts += $OperatorPort }
+$busy = $wantedPorts | Where-Object {
     Get-NetTCPConnection -State Listen -LocalPort $_ -ErrorAction SilentlyContinue
 }
 if ($busy) {
@@ -78,7 +82,12 @@ $corsOrigins = @($corsOrigins | Select-Object -Unique)
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:ASPNETCORE_URLS = "http://0.0.0.0:$ApiPort"
 $env:ConnectionStrings__TkgPda = "Host=127.0.0.1;Port=$PostgresPort;Database=$Database;Username=postgres;Pooling=true;Maximum Pool Size=50"
-$env:Authentication__Jwt__SigningKey = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+# Instance form, not the static GetBytes(int): that overload exists only on
+# .NET Core, so the static call fails under Windows PowerShell 5.1.
+$keyBytes = New-Object byte[] 48
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($keyBytes)
+$env:Authentication__Jwt__SigningKey = [Convert]::ToBase64String($keyBytes)
+Remove-Variable keyBytes
 $env:Rds__Enabled = 'false'
 $env:Rds__DispatchEnabled = 'false'
 $env:RdsCoreExecution__Enabled = 'false'

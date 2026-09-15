@@ -55,10 +55,16 @@ public sealed record CreateTransportRequest(
     /// RequiresPreparation=false (the default) preserves every existing
     /// workflow exactly: NotRequired is already execution-eligible under
     /// the existing rules.
+    ///
+    /// BRING_FULL ignores the flag and always waits. Its container has to be
+    /// physically filled with the right material by a warehouse operator
+    /// before anything may collect it, so letting a caller pass false would
+    /// make a material feed execution-eligible with nothing prepared.
     /// </summary>
-    public TransportReadinessState InitialReadinessState => RequiresPreparation
-        ? TransportReadinessState.WaitingPreparation
-        : TransportReadinessState.NotRequired;
+    public TransportReadinessState InitialReadinessState =>
+        RequiresPreparation || TaskType == TransportTaskType.BringFull
+            ? TransportReadinessState.WaitingPreparation
+            : TransportReadinessState.NotRequired;
 
     /// <summary>
     /// The machine-side slot, once known. Customer UX — Automatic Machine

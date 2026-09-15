@@ -33,7 +33,12 @@ public static class TransportRules
 
         var expected = request.TaskType switch
         {
-            TransportTaskType.BringEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
+            // Both inbound operations need the machine position already clear:
+            // BRING_EMPTY to have somewhere to put the empty container,
+            // BRING_FULL because the customer rule is that the spent container
+            // must physically leave before filled material is requested.
+            TransportTaskType.BringEmpty or TransportTaskType.BringFull =>
+                new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
             TransportTaskType.RemoveFull => reservedSlot.State with { Occupancy = OccupancyState.Occupied, Load = LoadState.Full },
             TransportTaskType.RemoveEmpty => reservedSlot.State with { Occupancy = OccupancyState.Occupied, Load = LoadState.Empty },
             _ => throw new ArgumentOutOfRangeException(nameof(request), request.TaskType, null)
@@ -51,7 +56,9 @@ public static class TransportRules
 
     public static SlotState CancellationState(TransportTaskType taskType, SlotState current) => taskType switch
     {
-        TransportTaskType.BringEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
+        // Nothing was delivered, so the position returns to clear.
+        TransportTaskType.BringEmpty or TransportTaskType.BringFull =>
+            new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
         TransportTaskType.RemoveFull => current with { Occupancy = OccupancyState.Occupied, Load = LoadState.Full },
         TransportTaskType.RemoveEmpty => current with { Occupancy = OccupancyState.Occupied, Load = LoadState.Empty },
         _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, null)
@@ -60,6 +67,10 @@ public static class TransportRules
     public static SlotState CompletionState(TransportTaskType taskType, Guid? partId, Guid? containerTypeId) => taskType switch
     {
         TransportTaskType.BringEmpty => new SlotState(OccupancyState.Occupied, LoadState.Empty, partId, containerTypeId),
+        // The whole reason BRING_FULL exists: the delivered container holds
+        // material. Recording it Empty here is the silent corruption that made
+        // reusing BRING_EMPTY for inbound feed unsafe.
+        TransportTaskType.BringFull => new SlotState(OccupancyState.Occupied, LoadState.Full, partId, containerTypeId),
         TransportTaskType.RemoveFull or TransportTaskType.RemoveEmpty => new SlotState(OccupancyState.Vacant, LoadState.Unknown, null, null),
         _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, null)
     };
@@ -70,6 +81,11 @@ public static class TransportRules
     /// REMOVE_EMPTY returns one to a configured EMPTY_STORAGE slot (its
     /// destination). REMOVE_FULL never touches the buffer. Returns null for
     /// task types that have no buffer side.
+    ///
+    /// BRING_FULL has none either: its container comes from a shared warehouse
+    /// preparation area holding material, not from a layout's EMPTY_STORAGE
+    /// buffer. Claiming a buffer side here would let the existing allocator
+    /// hand it an empty container from the wrong place.
     /// </summary>
     public static bool RequiresBufferSlot(TransportTaskType taskType) =>
         taskType is TransportTaskType.BringEmpty or TransportTaskType.RemoveEmpty;
@@ -117,11 +133,19 @@ public static class TransportRules
     /// </summary>
     public static (OccupancyState Occupancy, LoadState Load) ExpectedMachineSlotState(TransportTaskType taskType) => taskType switch
     {
-        TransportTaskType.BringEmpty => (OccupancyState.Vacant, LoadState.Unknown),
+        TransportTaskType.BringEmpty or TransportTaskType.BringFull => (OccupancyState.Vacant, LoadState.Unknown),
         TransportTaskType.RemoveFull => (OccupancyState.Occupied, LoadState.Full),
         TransportTaskType.RemoveEmpty => (OccupancyState.Occupied, LoadState.Empty),
         _ => throw new ArgumentOutOfRangeException(nameof(taskType), taskType, null)
     };
+
+    /// <summary>
+    /// Whether this operation delivers to the machine position rather than
+    /// taking from it. The machine slot is the transport's destination and the
+    /// reservation is held on that side.
+    /// </summary>
+    public static bool DeliversToMachine(TransportTaskType taskType) =>
+        taskType is TransportTaskType.BringEmpty or TransportTaskType.BringFull;
 
     /// <summary>
     /// A buffer slot must be configured master data (slot_role =

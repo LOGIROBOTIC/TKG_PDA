@@ -16,7 +16,20 @@ public enum TransportTaskType
 {
     BringEmpty,
     RemoveFull,
-    RemoveEmpty
+    RemoveEmpty,
+
+    /// <summary>
+    /// Warehouse feeds the machine: a container already FILLED with sub-part
+    /// material is brought to an empty machine position. The other three model
+    /// the output side only (an empty container arrives, is filled by the
+    /// machine, leaves full), so none of them can carry inbound material.
+    /// BRING_EMPTY especially cannot: its completion writes LoadState.Empty,
+    /// which would record a full pallet as an empty container.
+    /// Its source is a shared warehouse preparation area, which no layout owns.
+    /// Until that model exists, a request can be created and prepared but has
+    /// no resolvable source, so dispatch stays closed rather than guessing one.
+    /// </summary>
+    BringFull
 }
 
 /// <summary>
@@ -117,6 +130,7 @@ public static class WorkflowCode
         TransportTaskType.BringEmpty => "BRING_EMPTY",
         TransportTaskType.RemoveFull => "REMOVE_FULL",
         TransportTaskType.RemoveEmpty => "REMOVE_EMPTY",
+        TransportTaskType.BringFull => "BRING_FULL",
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
     };
 
@@ -125,6 +139,7 @@ public static class WorkflowCode
         "BRING_EMPTY" => TransportTaskType.BringEmpty,
         "REMOVE_FULL" => TransportTaskType.RemoveFull,
         "REMOVE_EMPTY" => TransportTaskType.RemoveEmpty,
+        "BRING_FULL" => TransportTaskType.BringFull,
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown SQL task type.")
     };
 

@@ -34,6 +34,12 @@ public static class PdaOperationalContextPolicy
     /// REMOVE_EMPTY request created that way still appears in the active-request list
     /// and renders normally; it simply cannot be selected as a new action here.
     /// </summary>
+    /// BRING_FULL is deliberately absent too, for a different reason: it is a
+    /// real operator intent, but its source is a shared warehouse preparation
+    /// area that no layout owns yet, so a request raised here could be created
+    /// and prepared and still never dispatch. Offering the button before that
+    /// model exists would put a dead action on the machine screen. It is added
+    /// once shared preparation areas can resolve a source.
     private static readonly TransportTaskType[] SupportedActions =
     [
         TransportTaskType.BringEmpty,
@@ -245,8 +251,8 @@ public static class PdaOperationalContextPolicy
             || actor.Roles.Contains(KnownRoleCodes.Supervisor)
             || actor.Roles.Contains(KnownRoleCodes.LineOperator);
         var canBring = canRemove || actor.Roles.Contains(KnownRoleCodes.WarehouseOperator);
-        if ((action == TransportTaskType.BringEmpty && !canBring)
-            || (action != TransportTaskType.BringEmpty && !canRemove))
+        if ((TransportRules.DeliversToMachine(action) && !canBring)
+            || (!TransportRules.DeliversToMachine(action) && !canRemove))
         {
             return Disabled(operation, "OPERATION_NOT_ALLOWED_FOR_ROLE", "Rolünüz bu lojistik işlemini başlatmaya yetkili değildir.");
         }
@@ -273,7 +279,8 @@ public static class PdaOperationalContextPolicy
 
         var stateMatches = action switch
         {
-            TransportTaskType.BringEmpty => slot.OccupancyState == "VACANT" && slot.LoadState == "UNKNOWN",
+            TransportTaskType.BringEmpty or TransportTaskType.BringFull =>
+                slot.OccupancyState == "VACANT" && slot.LoadState == "UNKNOWN",
             TransportTaskType.RemoveFull => slot.OccupancyState == "OCCUPIED" && slot.LoadState == "FULL",
             TransportTaskType.RemoveEmpty => slot.OccupancyState == "OCCUPIED" && slot.LoadState == "EMPTY",
             _ => false
@@ -329,7 +336,7 @@ public static class PdaOperationalContextPolicy
             || actor.Roles.Contains(KnownRoleCodes.Supervisor)
             || actor.Roles.Contains(KnownRoleCodes.LineOperator);
         var warehouseOwnBring = actor.Roles.Contains(KnownRoleCodes.WarehouseOperator)
-            && request.Operation == TransportTaskType.BringEmpty
+            && TransportRules.DeliversToMachine(request.Operation)
             && request.IsMine;
         if (!elevated && !warehouseOwnBring)
         {

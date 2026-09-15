@@ -30,8 +30,13 @@ RESERVED is never occupancy.
 
 Transport operations:
 BRING_EMPTY
+BRING_FULL
 REMOVE_FULL
 REMOVE_EMPTY
+
+BRING_FULL was added on 15 September 2026 with explicit customer approval,
+for warehouse-to-machine sub-part feed. The other three keep their exact
+meaning. Do not add a fifth without the same approval.
 
 Unknown customer mappings remain NULL.
 

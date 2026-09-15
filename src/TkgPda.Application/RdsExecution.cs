@@ -436,6 +436,18 @@ public sealed class RdsExecutionCoordinator(
             return new(requestId, requestId.ToString(), false, false, "READINESS_WAITING_PREPARATION", "The request is waiting for warehouse preparation.");
         }
 
+        // BRING_FULL takes material from a shared warehouse preparation area.
+        // No layout owns those areas yet, so nothing can legitimately resolve
+        // its source. Refusing here rather than relying on the absence of a
+        // task template means a template configured with a source slot group
+        // cannot quietly substitute some other layout's slot and send the robot
+        // to collect the wrong material.
+        if (context.Request.TaskType == TransportTaskType.BringFull && context.Request.SourceSlotId is null)
+        {
+            await store.WriteExecutionAuditAsync(requestId, "RDS_DISPATCH_BLOCKED", "BRING_FULL_SOURCE_UNRESOLVED", "BRING_FULL has no explicitly resolved preparation source; dispatch stays closed rather than guessing one.", correlationId, cancellationToken);
+            return new(requestId, requestId.ToString(), false, false, "BRING_FULL_SOURCE_UNRESOLVED", "BRING_FULL has no explicitly resolved preparation source.");
+        }
+
         var executionModeStr = GetLocation(context.TemplateConfig, "executionMode");
         if (string.IsNullOrWhiteSpace(executionModeStr))
         {

@@ -797,7 +797,8 @@ public static class ApiEndpoints
         "BRING_EMPTY" => TransportTaskType.BringEmpty,
         "REMOVE_FULL" => TransportTaskType.RemoveFull,
         "REMOVE_EMPTY" => TransportTaskType.RemoveEmpty,
-        _ => throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_OPERATION", "Operation must be BRING_EMPTY, REMOVE_FULL or REMOVE_EMPTY.")
+        "BRING_FULL" => TransportTaskType.BringFull,
+        _ => throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_OPERATION", "Operation must be BRING_EMPTY, BRING_FULL, REMOVE_FULL or REMOVE_EMPTY.")
     };
 
     private static void EnsureTransportOperationAllowed(ClaimsPrincipal principal, TransportTaskType operation)
@@ -823,7 +824,10 @@ public static class ApiEndpoints
             && !principal.IsInRole(RoleCodes.Admin)
             && !principal.IsInRole(RoleCodes.Supervisor)
             && !principal.IsInRole(RoleCodes.LineOperator);
-        if (warehouseOnly && operation != TransportTaskType.BringEmpty)
+        // Both deliveries are warehouse-side work: BRING_EMPTY stages an empty
+        // container, BRING_FULL feeds prepared material. Removals stay with the
+        // line roles.
+        if (warehouseOnly && !TransportRules.DeliversToMachine(operation))
         {
             throw new ApiException(
                 StatusCodes.Status403Forbidden,
@@ -861,12 +865,12 @@ public static class ApiEndpoints
             && !principal.IsInRole(RoleCodes.Admin)
             && !principal.IsInRole(RoleCodes.Supervisor)
             && !principal.IsInRole(RoleCodes.LineOperator);
-        if (warehouseOnly && (request.TaskType != TransportTaskType.BringEmpty || request.RequestedBy != principal.UserId()))
+        if (warehouseOnly && (!TransportRules.DeliversToMachine(request.TaskType) || request.RequestedBy != principal.UserId()))
         {
             throw new ApiException(
                 StatusCodes.Status403Forbidden,
                 "CANCELLATION_NOT_ALLOWED_FOR_ROLE",
-                "WAREHOUSE_OPERATOR may cancel only BRING_EMPTY requests created by the same user.");
+                "WAREHOUSE_OPERATOR may cancel only delivery requests created by the same user.");
         }
     }
 

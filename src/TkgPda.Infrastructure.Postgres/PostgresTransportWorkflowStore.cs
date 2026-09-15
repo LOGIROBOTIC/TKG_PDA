@@ -106,7 +106,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
         // resolve one now from slots explicitly mapped (master.
         // layout_slot_parts) to the request's part on the active layout —
         // the Operator is never asked to understand SLOT-001/SLOT-002.
-        var suppliedReservedSlotId = request.TaskType == TransportTaskType.BringEmpty
+        var suppliedReservedSlotId = TransportRules.DeliversToMachine(request.TaskType)
             ? request.DestinationSlotId
             : request.SourceSlotId;
         if (!suppliedReservedSlotId.HasValue)
@@ -119,7 +119,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
             }
 
             var resolvedMachineSlotId = await ResolveMachineSlotAsync(connection, transaction, request, cancellationToken);
-            request = request.TaskType == TransportTaskType.BringEmpty
+            request = TransportRules.DeliversToMachine(request.TaskType)
                 ? request with { DestinationSlotId = resolvedMachineSlotId }
                 : request with { SourceSlotId = resolvedMachineSlotId };
         }
@@ -181,7 +181,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
             new
             {
                 reserved_slot_id = request.ReservedSlotId,
-                reservation_kind = request.TaskType == TransportTaskType.BringEmpty ? "DESTINATION" : "SOURCE",
+                reservation_kind = TransportRules.DeliversToMachine(request.TaskType) ? "DESTINATION" : "SOURCE",
                 machine_slot_id = request.ReservedSlotId,
                 empty_storage_slot_id = bufferSlotId
             });
@@ -970,6 +970,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
             TransportTaskType.BringEmpty => ("BRING_EMPTY_SLOT_NOT_FOUND", "Bu parça için boş konum bulunamadı."),
             TransportTaskType.RemoveFull => ("REMOVE_FULL_SLOT_NOT_FOUND", "Bu parça için dolu kasa bulunamadı."),
             TransportTaskType.RemoveEmpty => ("REMOVE_EMPTY_SLOT_NOT_FOUND", "Bu parça için boş kasa bulunamadı."),
+            TransportTaskType.BringFull => ("BRING_FULL_SLOT_NOT_FOUND", "Bu parça için boşalmış konum bulunamadı."),
             _ => throw new ArgumentOutOfRangeException(nameof(request), request.TaskType, null)
         };
         var expected = TransportRules.ExpectedMachineSlotState(request.TaskType);
@@ -1265,7 +1266,7 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
         var defersBufferDestination = request.TaskType == TransportTaskType.RemoveEmpty && request.DestinationSlotId is null;
         var defersMachineSource = request.TaskType is (TransportTaskType.RemoveFull or TransportTaskType.RemoveEmpty)
             && request.SourceSlotId is null;
-        var defersMachineDestination = request.TaskType == TransportTaskType.BringEmpty
+        var defersMachineDestination = TransportRules.DeliversToMachine(request.TaskType)
             && request.DestinationSlotId is null;
 
         var equivalent = existing.Origin == request.Origin
@@ -1431,8 +1432,8 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static Guid ReservedSlotId(TransportRequestSnapshot request) => request.TaskType == TransportTaskType.BringEmpty
-        ? request.DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", "BRING_EMPTY request has no destination slot.")
+    private static Guid ReservedSlotId(TransportRequestSnapshot request) => TransportRules.DeliversToMachine(request.TaskType)
+        ? request.DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", $"{request.TaskType.ToDatabase()} request has no destination slot.")
         : request.SourceSlotId ?? throw new WorkflowRuleException("SOURCE_REQUIRED", "Removal request has no source slot.");
 
     private static Guid[] EndpointSlotIds(TransportRequestSnapshot request) =>

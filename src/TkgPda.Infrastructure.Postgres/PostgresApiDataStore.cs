@@ -911,6 +911,8 @@ public sealed class PostgresApiDataStore(NpgsqlDataSource dataSource) : IApiData
     {
         ("BRING_EMPTY", TransportReadinessState.WaitingPreparation) => "Boş kasa (Depo hazırlığı bekleniyor)",
         ("BRING_EMPTY", _) => "Boş kasa getiriliyor",
+        ("BRING_FULL", TransportReadinessState.WaitingPreparation) => "Malzeme (Depo hazırlığı bekleniyor)",
+        ("BRING_FULL", _) => "Dolu kasa getiriliyor",
         ("REMOVE_FULL", _) => "Dolu kasa kaldırılıyor",
         ("REMOVE_EMPTY", _) => "Boş kasa kaldırılıyor",
         _ => "Taşıma işlemi"

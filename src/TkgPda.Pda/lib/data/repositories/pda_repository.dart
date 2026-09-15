@@ -2,6 +2,12 @@ import '../../core/network/api_client.dart';
 import '../models/pda_models.dart';
 
 abstract interface class PdaDataSource {
+  Future<ProductionSession?> activeProduction(String machineId);
+  Future<ProductionSession> startProduction(
+    ProductionStartCommand command,
+    String key,
+  );
+  Future<ProductionSession> endProduction(String machineId, String sessionId);
   Future<LoginSession> login(String employeeNumber);
   Future<AuthenticatedUser> me();
   Future<List<MachineSummary>> machines();
@@ -44,6 +50,7 @@ abstract interface class PdaDataSource {
     required int positionNumber,
     required String action,
     required String idempotencyKey,
+    String? productionSessionId,
   });
   Future<TransportBatchResult> createContainerActionBatch({
     required String machineId,
@@ -52,6 +59,7 @@ abstract interface class PdaDataSource {
     required String? navigationProfileId,
     required List<ContainerActionBatchItemCommand> items,
     required String idempotencyKey,
+    String? productionSessionId,
   });
   Future<RemoveAllResult> removeAllContainers({
     required String machineId,
@@ -59,6 +67,7 @@ abstract interface class PdaDataSource {
     required String layoutId,
     required String? navigationProfileId,
     required String idempotencyKey,
+    String? productionSessionId,
   });
   Future<OperatorQueuePage> operatorQueue({
     bool terminal = false,
@@ -87,6 +96,40 @@ class PdaRepository implements PdaDataSource {
   const PdaRepository(this._api);
 
   final ApiClient _api;
+
+  @override
+  Future<ProductionSession?> activeProduction(String machineId) async {
+    final response = await _api.get(
+      '/api/v1/machines/$machineId/production-sessions/active',
+    );
+    return response.statusCode == 204
+        ? null
+        : ProductionSession.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<ProductionSession> startProduction(
+    ProductionStartCommand command,
+    String key,
+  ) async {
+    final response = await _api.post(
+      '/api/v1/machines/${command.machineId}/production-sessions',
+      body: command.toJson(),
+      idempotencyKey: key,
+    );
+    return ProductionSession.fromJson(_json(_json(response.body)['session']));
+  }
+
+  @override
+  Future<ProductionSession> endProduction(
+    String machineId,
+    String sessionId,
+  ) async {
+    final response = await _api.post(
+      '/api/v1/machines/$machineId/production-sessions/$sessionId/end',
+    );
+    return ProductionSession.fromJson(_json(_json(response.body)['session']));
+  }
 
   @override
   Future<LoginSession> login(String employeeNumber) async {
@@ -219,6 +262,7 @@ class PdaRepository implements PdaDataSource {
     required int positionNumber,
     required String action,
     required String idempotencyKey,
+    String? productionSessionId,
   }) async {
     final response = await _api.post(
       '/api/v1/machines/$machineId/container-actions',
@@ -231,6 +275,7 @@ class PdaRepository implements PdaDataSource {
         'partId': partId,
         'positionNumber': positionNumber,
         'action': action,
+        'productionSessionId': ?productionSessionId,
       },
     );
     return ContainerActionResult.fromJson(_json(response.body));
@@ -244,6 +289,7 @@ class PdaRepository implements PdaDataSource {
     required String? navigationProfileId,
     required List<ContainerActionBatchItemCommand> items,
     required String idempotencyKey,
+    String? productionSessionId,
   }) async {
     final response = await _api.post(
       '/api/v1/machines/$machineId/container-actions/batch',
@@ -253,6 +299,7 @@ class PdaRepository implements PdaDataSource {
         'layoutId': layoutId,
         'navigationProfileId': navigationProfileId,
         'items': items.map((item) => item.toJson()).toList(growable: false),
+        'productionSessionId': ?productionSessionId,
       },
     );
     return TransportBatchResult.fromJson(_json(response.body));
@@ -265,11 +312,13 @@ class PdaRepository implements PdaDataSource {
     required String layoutId,
     required String? navigationProfileId,
     required String idempotencyKey,
+    String? productionSessionId,
   }) async {
     final response = await _api.post(
       '/api/v1/machines/$machineId/container-actions/remove-all',
       idempotencyKey: idempotencyKey,
       body: {
+        'productionSessionId': ?productionSessionId,
         'variantId': variantId,
         'layoutId': layoutId,
         'navigationProfileId': navigationProfileId,

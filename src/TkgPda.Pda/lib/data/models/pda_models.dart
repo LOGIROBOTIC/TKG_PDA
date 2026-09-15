@@ -1,4 +1,5 @@
 import 'dart:convert';
+export 'production_session.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
@@ -892,7 +893,7 @@ class WarehousePreparationRequest {
   final String? sourceSlotDisplayName;
   final String? destinationSlotCode;
   final String? destinationSlotDisplayName;
-  final DateTime createdAt;
+  final DateTime? createdAt;
   final DateTime? queuedAt;
 
   factory WarehousePreparationRequest.fromJson(JsonMap json) =>
@@ -910,7 +911,7 @@ class WarehousePreparationRequest {
         destinationSlotCode: json['destinationSlotCode'] as String?,
         destinationSlotDisplayName:
             json['destinationSlotDisplayName'] as String?,
-        createdAt: _date(json['createdAt']) ?? DateTime.now(),
+        createdAt: _date(json['createdAt']),
         queuedAt: _date(json['queuedAt']),
       );
 }
@@ -1052,6 +1053,7 @@ class PendingOperation {
     required this.idempotencyKey,
     required this.startedAt,
     this.navigationProfileId,
+    this.productionSessionId,
   });
 
   final String machineId;
@@ -1067,6 +1069,7 @@ class PendingOperation {
   final String idempotencyKey;
   final DateTime startedAt;
   final String? navigationProfileId;
+  final String? productionSessionId;
 
   @override
   String toString() =>
@@ -1087,6 +1090,7 @@ class PendingOperation {
     'idempotencyKey': idempotencyKey,
     'startedAt': startedAt.toIso8601String(),
     'navigationProfileId': navigationProfileId,
+    'productionSessionId': productionSessionId,
   };
 }
 

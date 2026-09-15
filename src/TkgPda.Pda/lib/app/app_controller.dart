@@ -9,6 +9,7 @@ import '../core/storage/device_code_store.dart';
 import '../data/models/pda_models.dart';
 import '../data/repositories/pda_repository.dart';
 import '../features/transport/submission_coordinator.dart';
+import '../features/operation/production_coordinator.dart';
 
 enum AppStage {
   starting,
@@ -78,17 +79,70 @@ class AppController extends ChangeNotifier {
     required SessionMemory session,
     SubmissionCoordinator? submissionCoordinator,
     bool enablePolling = true,
+    bool enableProductionWorkflow = true,
   }) : _repository = repository,
        _deviceCodeStore = deviceCodeStore,
        _session = session,
        _submission = submissionCoordinator ?? SubmissionCoordinator(),
-       _enablePolling = enablePolling;
+       _enablePolling = enablePolling,
+       _enableProductionWorkflow = enableProductionWorkflow,
+       production = ProductionCoordinator(repository) {
+    production.addListener(notifyListeners);
+  }
 
   final PdaDataSource _repository;
   final DeviceCodeStore _deviceCodeStore;
   final SessionMemory _session;
   final SubmissionCoordinator _submission;
   final bool _enablePolling;
+  final bool _enableProductionWorkflow;
+  final ProductionCoordinator production;
+  int _machineGeneration = 0;
+  String? _restoredProductionId;
+  int? _restoringProductionGeneration;
+  String? _productionContextError;
+
+  bool get usesProductionWorkflow =>
+      _enableProductionWorkflow &&
+      (user?.roles.any(
+            (role) =>
+                const {'ADMIN', 'SUPERVISOR', 'LINE_OPERATOR'}.contains(role),
+          ) ??
+          false);
+  bool get productionTransportReady =>
+      !usesProductionWorkflow ||
+      (production.verified &&
+          !production.hasPending &&
+          production.active != null &&
+          _productionContextError == null &&
+          _selectedMainPart?.partId == production.active!.mainPartId &&
+          _context?.activeVariantId == production.active!.variantId &&
+          _resolvedCompatibleVariant?.productGroupId ==
+              production.active!.productGroupId);
+  String? get productionContextError => _productionContextError;
+  bool get canStartProduction =>
+      usesProductionWorkflow &&
+      mutationEnabled &&
+      production.verified &&
+      production.active == null &&
+      !production.hasPending &&
+      partSelectionReady &&
+      (_context?.machine.permissions.canOperate ?? false) &&
+      (_context?.activeTransportRequests.isEmpty ?? false) &&
+      _batchCart.isEmpty &&
+      !hasAmbiguousSubmission &&
+      !hasAmbiguousBatchSubmission;
+  bool get canEndProduction =>
+      usesProductionWorkflow &&
+      mutationEnabled &&
+      production.verified &&
+      production.active != null &&
+      !production.hasPending &&
+      (_context?.machine.permissions.canOperate ?? false) &&
+      (_context?.activeTransportRequests.isEmpty ?? false) &&
+      _batchCart.isEmpty &&
+      !hasAmbiguousSubmission &&
+      !hasAmbiguousBatchSubmission;
 
   AppStage _stage = AppStage.starting;
   String? _deviceCode;
@@ -165,6 +219,8 @@ class AppController extends ChangeNotifier {
   bool _operatorQueueTerminal = false;
 
   String? _containerBatchKey;
+  String? _containerBatchProductionId;
+  String? _removeAllProductionId;
   bool _containerBatchAmbiguous = false;
 
   AppStage get stage => _stage;
@@ -191,6 +247,7 @@ class AppController extends ChangeNotifier {
   /// Authoritative check for any safety or business mutation currently in flight.
   /// Used to lock context changes and prevent state contamination.
   bool get isMutationInFlight =>
+      production.inFlight ||
       _busy ||
       _submittingOperation != null ||
       _submittingContainerActions.isNotEmpty ||
@@ -259,6 +316,15 @@ class AppController extends ChangeNotifier {
   bool get partOptionsLoading => _partOptionsLoading;
   String? get partOptionsError => _partOptionsError;
   MachineMainPartOption? get selectedMainPart => _selectedMainPart;
+  bool get canChangeEffectivePart =>
+      !isMutationInFlight &&
+      !hasAmbiguousSubmission &&
+      !hasAmbiguousBatchSubmission &&
+      (!usesProductionWorkflow ||
+          (production.verified && !production.hasPending));
+  bool get canChangePartSelection =>
+      canChangeEffectivePart &&
+      (!usesProductionWorkflow || production.active == null);
   EffectivePartSelection? get selectedEffectivePart => _selectedEffectivePart;
   List<CompatibleVariant>? get compatibleVariants => _compatibleVariants;
   bool get compatibleVariantsLoading => _compatibleVariantsLoading;
@@ -304,10 +370,12 @@ class AppController extends ChangeNotifier {
 
   /// The final Operator action surface becomes available only after the
   /// effective part and its compatible active variant are both proven.
-  bool get transportActionsReady =>
+  bool get partSelectionReady =>
       _selectedEffectivePart != null &&
       _resolvedCompatibleVariant != null &&
       _context?.activeVariantId == _resolvedCompatibleVariant!.variantId;
+  bool get transportActionsReady =>
+      partSelectionReady && productionTransportReady;
 
   bool operationInProgress(String operation) =>
       _operationInProgress(operation, _selectedEffectivePart?.partId);
@@ -377,7 +445,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    if (isMutationInFlight) {
+    if (isMutationInFlight || production.hasPending) {
       _notice = 'İşlem devam ederken oturum kapatılamaz.';
       notifyListeners();
       return;
@@ -426,12 +494,16 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> selectMachine(MachineSummary machine) async {
-    if (isMutationInFlight) {
+    if (isMutationInFlight || production.hasPending) {
       _notice = 'İşlem devam ederken makine değiştirilemez.';
       notifyListeners();
       return;
     }
     _selectedMachine = machine;
+    _machineGeneration++;
+    _contextLoading = false;
+    production.reset(machine.id);
+    _restoredProductionId = _productionContextError = null;
     _context = null;
     _resetPartFirstState();
     _stage = AppStage.operation;
@@ -440,12 +512,14 @@ class AppController extends ChangeNotifier {
   }
 
   void leaveMachine() {
-    if (isMutationInFlight) {
+    if (isMutationInFlight || production.hasPending) {
       _notice = 'İşlem devam ederken sayfadan ayrılınamaz.';
       notifyListeners();
       return;
     }
     _stopPolling();
+    _machineGeneration++;
+    production.reset(null);
     _selectedMachine = null;
     _context = null;
     _resetPartFirstState();
@@ -458,6 +532,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> refreshContext({bool showBusy = false}) async {
     final machine = _selectedMachine;
+    final generation = _machineGeneration;
     if (machine == null || !_session.isAuthenticated || _contextLoading) {
       return;
     }
@@ -468,9 +543,15 @@ class AppController extends ChangeNotifier {
     unawaited(retryRobotAlarmSummary());
     try {
       final next = await _repository.operationalContext(machine.id);
+      if (generation != _machineGeneration || !_session.isAuthenticated) return;
       _context = next;
       _offline = false;
       _problem = null;
+      if (usesProductionWorkflow) {
+        await production.refresh();
+        if (generation != _machineGeneration) return;
+        await _restoreProductionSelection();
+      }
       if (_submission.hasAmbiguousRequest) {
         _submission.resolveByRefresh();
         _ambiguousCommand = null;
@@ -485,17 +566,21 @@ class AppController extends ChangeNotifier {
       }
       _schedulePolling();
     } on ConnectivityException {
-      _offline = true;
-      _notice = 'Bağlantı yok — bilgiler güncel olmayabilir.';
-      _stopPolling();
+      if (generation == _machineGeneration) {
+        _offline = true;
+        _notice = 'Bağlantı yok — bilgiler güncel olmayabilir.';
+        _stopPolling();
+      }
     } on ApiProblem catch (problem) {
-      _problem = problem;
+      if (generation == _machineGeneration) _problem = problem;
     } finally {
-      _contextLoading = false;
-      if (showBusy) {
-        _setBusy(false);
-      } else {
-        notifyListeners();
+      if (generation == _machineGeneration) {
+        _contextLoading = false;
+        if (showBusy) {
+          _setBusy(false);
+        } else {
+          notifyListeners();
+        }
       }
     }
   }
@@ -521,6 +606,14 @@ class AppController extends ChangeNotifier {
     bool preservePartSelection = false,
   }) async {
     final machine = _selectedMachine;
+    if (usesProductionWorkflow &&
+        (!production.verified ||
+            production.active != null ||
+            production.hasPending)) {
+      _notice = 'Üretim açıkken varyant değiştirilemez.';
+      notifyListeners();
+      return;
+    }
     if (machine == null || !mutationEnabled) {
       return;
     }
@@ -561,11 +654,11 @@ class AppController extends ChangeNotifier {
 
   /// One click: the chosen main part becomes the effective part immediately
   /// and its compatible variants start resolving. Its RELATED/ALT parts stay
-  /// visible below as alternatives the operator may switch to afterwards —
+  /// visible as distinct request targets under this main-part context —
   /// no second "use the main part" confirmation step.
   Future<void> selectMainPartOption(MachineMainPartOption option) async {
-    if (isMutationInFlight) {
-      _notice = 'İşlem devam ederken parça değiştirilemez.';
+    if (!canChangePartSelection) {
+      _notice = 'Talebin sonucu doğrulanmadan parça değiştirilemez.';
       notifyListeners();
       return;
     }
@@ -584,8 +677,15 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> selectEffectivePart(EffectivePartSelection selection) async {
-    if (isMutationInFlight) {
-      _notice = 'İşlem devam ederken parça değiştirilemez.';
+    if (!canChangeEffectivePart ||
+        (usesProductionWorkflow &&
+            production.active != null &&
+            selection.partId != _selectedMainPart?.partId &&
+            !(_selectedMainPart?.relatedParts.any(
+                  (part) => part.partId == selection.partId,
+                ) ??
+                false))) {
+      _notice = 'Talebin sonucu doğrulanmadan parça değiştirilemez.';
       notifyListeners();
       return;
     }
@@ -610,6 +710,11 @@ class AppController extends ChangeNotifier {
   /// Returns to the part-first gate without leaving the machine or losing
   /// the already-loaded operational context/slots.
   void resetPartSelection() {
+    if (!canChangePartSelection) {
+      _notice = 'Talebin sonucu doğrulanmadan parça değiştirilemez.';
+      notifyListeners();
+      return;
+    }
     _selectedMainPart = null;
     _selectedEffectivePart = null;
     _compatibleVariants = null;
@@ -617,6 +722,7 @@ class AppController extends ChangeNotifier {
     _resolvedCompatibleVariant = null;
     _resetContainerPositions();
     _partResolutionGeneration++;
+    _compatibleVariantsLoading = false;
     notifyListeners();
   }
 
@@ -641,6 +747,7 @@ class AppController extends ChangeNotifier {
   /// recoverable failure (ambiguous/API error), so a failed submit keeps the
   /// cart intact for retry.
   void exitBatchSelection() {
+    _containerBatchProductionId = null;
     _batchMode = false;
     _batchCart.clear();
     _batchConfiguringIndex = -1;
@@ -657,6 +764,11 @@ class AppController extends ChangeNotifier {
     MachineMainPartOption mainPart,
     EffectivePartSelection part,
   ) {
+    if (usesProductionWorkflow &&
+        (!productionTransportReady ||
+            mainPart.partId != production.active?.mainPartId)) {
+      return false;
+    }
     if (_batchCart.any((item) => item.effectivePart.partId == part.partId)) {
       return false;
     }
@@ -761,6 +873,7 @@ class AppController extends ChangeNotifier {
   /// single TransportRequest workflow; two or more use the batch endpoint
   /// with one batch idempotency key and one independent key per item.
   Future<void> submitBatch() async {
+    if (!productionTransportReady && !_containerBatchAmbiguous) return;
     if (!canReviewBatch || _busy) return;
     final machine = _selectedMachine;
     final current = _context;
@@ -781,6 +894,9 @@ class AppController extends ChangeNotifier {
     try {
       final key = _containerBatchKey ??=
           'container-batch:${_cartIdFactory.v4()}';
+      _containerBatchProductionId ??= usesProductionWorkflow
+          ? production.active?.id
+          : null;
       final result = await _repository.createContainerActionBatch(
         machineId: machine.id,
         variantId: variantId,
@@ -788,6 +904,7 @@ class AppController extends ChangeNotifier {
         navigationProfileId: current.activeNavigationProfileId,
         items: _batchCart.map((item) => item.command!).toList(growable: false),
         idempotencyKey: key,
+        productionSessionId: _containerBatchProductionId,
       );
       _notice = result.idempotentReplay
           ? 'Grup talebi doğrulandı.'
@@ -873,7 +990,8 @@ class AppController extends ChangeNotifier {
       _warehouseRequests = _warehouseRequests
           .where((request) => request.requestId != requestId)
           .toList(growable: false);
-      _notice = 'Parça hazır olarak işaretlendi.';
+      _notice =
+          'Hazırlık onaylandı. Taşıma, koşullar uygun olduğunda otomatik başlayacak.';
     } on ConnectivityException {
       _offline = true;
       _notice = 'Bağlantı yok — hazır durumu doğrulanamadı. Yeniden deneyin.';
@@ -891,19 +1009,29 @@ class AppController extends ChangeNotifier {
 
   Future<void> _loadPartOptions() async {
     final machine = _selectedMachine;
+    final generation = _machineGeneration;
     if (machine == null) return;
     _partOptionsLoading = true;
     _partOptionsError = null;
     notifyListeners();
     try {
-      _partOptions = await _repository.machinePartOptions(machine.id);
+      final options = await _repository.machinePartOptions(machine.id);
+      if (generation != _machineGeneration) return;
+      _partOptions = options;
     } on ConnectivityException {
-      _partOptionsError = 'Bağlantı yok — parça listesi yüklenemedi.';
+      if (generation == _machineGeneration) {
+        _partOptionsError = 'Bağlantı yok — parça listesi yüklenemedi.';
+      }
     } on ApiProblem catch (problem) {
-      _partOptionsError = problem.operatorMessage;
+      if (generation == _machineGeneration) {
+        _partOptionsError = problem.operatorMessage;
+      }
     } finally {
-      _partOptionsLoading = false;
-      notifyListeners();
+      if (generation == _machineGeneration) {
+        _partOptionsLoading = false;
+        await _restoreProductionSelection();
+        notifyListeners();
+      }
     }
   }
 
@@ -934,6 +1062,17 @@ class AppController extends ChangeNotifier {
             .toList(growable: false);
       }
       _compatibleVariants = variants;
+      if (usesProductionWorkflow && production.active != null) {
+        final active = production.active!;
+        variants = variants
+            .where(
+              (variant) =>
+                  variant.variantId == active.variantId &&
+                  variant.productGroupId == active.productGroupId,
+            )
+            .toList(growable: false);
+        _compatibleVariants = variants;
+      }
       if (variants.length == 1) {
         await _resolveVariant(variants.single, generation);
       }
@@ -965,6 +1104,13 @@ class AppController extends ChangeNotifier {
     int generation,
   ) async {
     if (generation != _partResolutionGeneration) return;
+    if (usesProductionWorkflow && production.active != null) {
+      final active = production.active!;
+      if (variant.variantId != active.variantId ||
+          variant.productGroupId != active.productGroupId) {
+        return;
+      }
+    }
     final current = _context;
     if (current != null && current.activeVariantId == variant.variantId) {
       _markVariantResolved(variant);
@@ -1055,6 +1201,7 @@ class AppController extends ChangeNotifier {
     ContainerPosition position,
     String action,
   ) async {
+    if (!productionTransportReady) return;
     final current = _context;
     final part = _selectedEffectivePart;
     final variant = _resolvedCompatibleVariant;
@@ -1136,7 +1283,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     final material =
-        '$variantId|$layoutId|${variant.productGroupId}|${part.partId}|$submissionId';
+        '${production.active?.id}|$variantId|$layoutId|${variant.productGroupId}|${part.partId}|$submissionId';
     final key = _containerActionKeys.putIfAbsent(
       material,
       () => 'container-action:${_cartIdFactory.v4()}',
@@ -1155,6 +1302,9 @@ class AppController extends ChangeNotifier {
       idempotencyKey: key,
       startedAt: DateTime.now(),
       navigationProfileId: current.activeNavigationProfileId,
+      productionSessionId: usesProductionWorkflow
+          ? production.active?.id
+          : null,
     );
     _activePendingOperation = pending;
     _submittingContainerActions.add(submissionId);
@@ -1172,6 +1322,7 @@ class AppController extends ChangeNotifier {
         positionNumber: position.positionNumber,
         action: action,
         idempotencyKey: key,
+        productionSessionId: pending.productionSessionId,
       );
       _containerActionKeys.remove(material);
       _activePendingOperation = null;
@@ -1204,6 +1355,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> removeAllContainers() async {
+    if (!productionTransportReady && !_removeAllAmbiguous) return;
     final current = _context;
     final variantId = current?.activeVariantId;
     final layoutId = current?.activeLayoutId;
@@ -1215,6 +1367,9 @@ class AppController extends ChangeNotifier {
       return;
     }
     final key = _removeAllKey ??= 'remove-all:${_cartIdFactory.v4()}';
+    _removeAllProductionId ??= usesProductionWorkflow
+        ? production.active?.id
+        : null;
     final pending = PendingOperation(
       machineId: current.machine.id,
       machineCode: current.machine.code,
@@ -1240,10 +1395,12 @@ class AppController extends ChangeNotifier {
         layoutId: layoutId,
         navigationProfileId: current.activeNavigationProfileId,
         idempotencyKey: key,
+        productionSessionId: _removeAllProductionId,
       );
       _activePendingOperation = null;
       _ambiguousPendingOperation = null;
       _removeAllKey = null;
+      _removeAllProductionId = null;
       _removeAllAmbiguous = false;
       _notice = result.idempotentReplay
           ? 'Kaldırma grubu doğrulandı.'
@@ -1259,6 +1416,7 @@ class AppController extends ChangeNotifier {
     } on ApiProblem catch (problem) {
       _activePendingOperation = null;
       _removeAllKey = null;
+      _removeAllProductionId = null;
       _removeAllAmbiguous = false;
       if (problem.shouldRefetch) await refreshContext();
       _problem = problem;
@@ -1447,6 +1605,8 @@ class AppController extends ChangeNotifier {
   }
 
   void _resetPartFirstState() {
+    _containerBatchProductionId = null;
+    _removeAllProductionId = null;
     _partOptions = const [];
     _partOptionsLoading = false;
     _partOptionsError = null;
@@ -1464,6 +1624,153 @@ class AppController extends ChangeNotifier {
     _containerBatchKey = null;
     _containerBatchAmbiguous = false;
     _resetContainerPositions();
+  }
+
+  Future<void> startProduction() async {
+    if (!canStartProduction) return;
+    final group = _firstOrNull(
+      _context!.productGroups.where(
+        (group) =>
+            group.id == _resolvedCompatibleVariant!.productGroupId &&
+            group.mainPartId == _selectedMainPart!.partId,
+      ),
+    );
+    if (group == null) {
+      _notice = 'Seçilen ana ürünün üretim bilgileri doğrulanamadı.';
+      notifyListeners();
+      return;
+    }
+    await production.start(
+      ProductionStartCommand(
+        machineId: _selectedMachine!.id,
+        variantId: _resolvedCompatibleVariant!.variantId,
+        productGroupId: group.id,
+        mainPartId: group.mainPartId,
+      ),
+    );
+    final error = production.error;
+    await refreshContext();
+    _notice =
+        error ??
+        (production.active != null
+            ? 'Üretim başladı.'
+            : 'Üretim durumu güncellendi.');
+    notifyListeners();
+  }
+
+  Future<void> endProduction() async {
+    if (!canEndProduction) return;
+    await production.end();
+    final error = production.error;
+    await refreshContext();
+    _notice = error ?? 'Üretim durumu güncellendi.';
+    notifyListeners();
+  }
+
+  Future<void> retryProduction() async {
+    if (!_session.isAuthenticated ||
+        isMutationInFlight ||
+        _resumeValidationPending ||
+        !_foreground) {
+      return;
+    }
+    await production.retry();
+    final error = production.error;
+    await refreshContext();
+    if (error != null) _notice = error;
+    notifyListeners();
+  }
+
+  Future<void> _restoreProductionSelection() async {
+    final machineGeneration = _machineGeneration;
+    if (!usesProductionWorkflow ||
+        !production.verified ||
+        _restoringProductionGeneration == machineGeneration ||
+        _partOptionsLoading ||
+        _context == null ||
+        hasAmbiguousSubmission ||
+        hasAmbiguousBatchSubmission) {
+      return;
+    }
+    final active = production.active;
+    if (active == null) {
+      if (_restoredProductionId != null) {
+        _selectedMainPart = null;
+        _selectedEffectivePart = null;
+        _resolvedCompatibleVariant = null;
+        _compatibleVariants = null;
+        _partResolutionGeneration++;
+        _resetContainerPositions();
+        _batchCart.clear();
+        _batchConfiguringIndex = -1;
+      }
+      _restoredProductionId = _productionContextError = null;
+      return;
+    }
+    final main = _firstOrNull(
+      _partOptions.where((part) => part.partId == active.mainPartId),
+    );
+    final group = _firstOrNull(
+      _context!.productGroups.where(
+        (group) =>
+            group.id == active.productGroupId &&
+            group.mainPartId == active.mainPartId,
+      ),
+    );
+    if (main == null ||
+        group == null ||
+        _context!.activeVariantId != active.variantId) {
+      _productionContextError =
+          'Açık üretimin ürün bilgileri doğrulanamadı. Bilgileri yenileyin.';
+      return;
+    }
+    _productionContextError = null;
+    final scoped = MachineMainPartOption(
+      partId: main.partId,
+      partCode: main.partCode,
+      description: main.description,
+      relatedParts: group.parts
+          .map(
+            (part) => MachineRelatedPart(
+              partId: part.partId,
+              partCode: part.partCode,
+              description: null,
+              relationType: part.relationType,
+            ),
+          )
+          .toList(growable: false),
+    );
+    final changed = _restoredProductionId != active.id;
+    if (changed) {
+      _batchCart.clear();
+      _batchConfiguringIndex = -1;
+    }
+    _selectedMainPart = scoped;
+    final selected = _selectedEffectivePart;
+    final validPart =
+        selected != null &&
+        (selected.partId == main.partId ||
+            group.parts.any((part) => part.partId == selected.partId));
+    if (changed || !validPart || _resolvedCompatibleVariant == null) {
+      _restoringProductionGeneration = machineGeneration;
+      _restoredProductionId = active.id;
+      if (changed || !validPart) {
+        _selectedEffectivePart = EffectivePartSelection(
+          partId: main.partId,
+          partCode: main.partCode,
+          isMain: true,
+        );
+      }
+      _resolvedCompatibleVariant = null;
+      final generation = ++_partResolutionGeneration;
+      try {
+        await _loadCompatibleVariants(generation);
+      } finally {
+        if (_restoringProductionGeneration == machineGeneration) {
+          _restoringProductionGeneration = null;
+        }
+      }
+    }
   }
 
   /// Customer UX — Automatic Machine Slot Resolution: builds a command with
@@ -1518,6 +1825,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<TransportResult?> submitTransport(TransportCommand command) async {
+    if (!productionTransportReady) return null;
     if (!_session.isAuthenticated ||
         _busy ||
         (_offline && !_submission.hasAmbiguousRequest)) {
@@ -1615,6 +1923,7 @@ class AppController extends ChangeNotifier {
         positionNumber: pending.logicalContainerNumber ?? 1,
         action: pending.operation,
         idempotencyKey: pending.idempotencyKey,
+        productionSessionId: pending.productionSessionId,
       );
       _activePendingOperation = null;
       _ambiguousPendingOperation = null;
@@ -1736,6 +2045,9 @@ class AppController extends ChangeNotifier {
   }
 
   void _clearOperationalState() {
+    _machineGeneration++;
+    production.reset(null);
+    _restoredProductionId = _productionContextError = null;
     _stopPolling();
     _stopQueuePolling();
     _machines = const [];
@@ -1781,6 +2093,8 @@ class AppController extends ChangeNotifier {
   void dispose() {
     _stopPolling();
     _stopQueuePolling();
+    production.removeListener(notifyListeners);
+    production.dispose();
     super.dispose();
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_controller.dart';
 import '../../data/models/pda_models.dart';
 import 'transport_action_panel.dart';
+import 'production_session_panel.dart';
 
 /// Final Operator workspace after a machine is selected. Part and compatible
 /// variant resolution stay on this page; once proven, the business-operation
@@ -62,17 +63,30 @@ class _PartFirstSelectorState extends State<PartFirstSelector> {
     final activeRequests =
         controller.context?.activeTransportRequests ?? const [];
     return RefreshIndicator(
-      onRefresh: controller.reloadPartOptions,
+      onRefresh: () async {
+        await controller.reloadPartOptions();
+        await controller.refreshContext();
+      },
       child: ListView(
         key: const Key('part-first-selector'),
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'Parça Seçimi',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          if (controller.usesProductionWorkflow) ...[
+            ProductionSessionPanel(controller: controller),
+            const SizedBox(height: 12),
+          ],
+          Text(
+            controller.selectedMainPart == null
+                ? 'Üretilecek Ana Parça'
+                : 'Seçilen Ürün ve İlgili Parçalar',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 6),
-          const Text('İşlem yapılacak ana parçayı seçin.'),
+          Text(
+            controller.selectedMainPart == null
+                ? 'Üretilecek ana ürünü seçin.'
+                : 'Ana ürün sabit kalır. Taşıma talebi için ilgili parçayı seçebilirsiniz.',
+          ),
           if (controller.batchMode) ...[
             const SizedBox(height: 12),
             Container(
@@ -109,43 +123,62 @@ class _PartFirstSelectorState extends State<PartFirstSelector> {
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          const _SectionLabel('Ana Parçalar'),
-          const SizedBox(height: 10),
-          if (showSearch) ...[
-            TextField(
-              key: const Key('main-part-search'),
-              controller: _searchController,
-              autocorrect: false,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                labelText: 'Parça kodu ara',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        key: const Key('clear-main-part-search'),
-                        tooltip: 'Aramayı temizle',
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
-                        icon: const Icon(Icons.clear),
-                      ),
+          if (controller.selectedMainPart == null) ...[
+            const SizedBox(height: 16),
+            const _SectionLabel('Ana Parçalar'),
+            const SizedBox(height: 10),
+            if (showSearch) ...[
+              TextField(
+                key: const Key('main-part-search'),
+                controller: _searchController,
+                autocorrect: false,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  labelText: 'Parça kodu ara',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          key: const Key('clear-main-part-search'),
+                          tooltip: 'Aramayı temizle',
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                          icon: const Icon(Icons.clear),
+                        ),
+                ),
+                onChanged: (value) => setState(() => _query = value),
               ),
-              onChanged: (value) => setState(() => _query = value),
-            ),
+              const SizedBox(height: 12),
+            ],
+            if (controller.partOptions.isEmpty)
+              const Text('Bu makine için tanımlı parça bulunamadı.')
+            else if (visibleOptions.isEmpty)
+              const Text(
+                'Bu kodla eşleşen parça bulunamadı.',
+                key: Key('main-part-search-empty'),
+              )
+            else
+              _MainPartChips(controller: controller, options: visibleOptions),
+          ] else ...[
             const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('change-main-part'),
+                onPressed: !controller.canChangePartSelection
+                    ? null
+                    : () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                        controller.resetPartSelection();
+                      },
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Ana Parçayı Değiştir'),
+              ),
+            ),
           ],
-          if (controller.partOptions.isEmpty)
-            const Text('Bu makine için tanımlı parça bulunamadı.')
-          else if (visibleOptions.isEmpty)
-            const Text(
-              'Bu kodla eşleşen parça bulunamadı.',
-              key: Key('main-part-search-empty'),
-            )
-          else
-            _MainPartChips(controller: controller, options: visibleOptions),
           if (controller.selectedMainPart case final main?) ...[
             const SizedBox(height: 22),
             _EffectivePartCard(main: main, controller: controller),
@@ -259,7 +292,7 @@ class _MainPartChip extends StatelessWidget {
             ),
         ],
       ),
-      onSelected: controller.busy
+      onSelected: !controller.canChangePartSelection
           ? null
           : (_) {
               FocusScope.of(context).unfocus();
@@ -292,8 +325,21 @@ class _EffectivePartCard extends StatelessWidget {
         .toList(growable: false);
 
     final usingMain = effective?.isMain ?? false;
-    final hasAlternatives =
+    final hasContextualParts =
         related.isNotEmpty || alt.isNotEmpty || other.isNotEmpty;
+    final selectedRelation = main.relatedParts
+        .where((part) => part.partId == effective?.partId)
+        .map((part) => part.relationType)
+        .toSet();
+    // Unknown/conflicting relationships are not silently reclassified as
+    // alternatives or inferred to be a production bill of materials.
+    final requestedPartLabel = usingMain
+        ? 'Ana ürün için talep: ${main.partCode}'
+        : selectedRelation.length == 1 && selectedRelation.single == 'ALT_PART'
+        ? 'Alternatif parça için talep: ${effective?.partCode ?? ''}'
+        : selectedRelation.length == 1 && selectedRelation.single == 'RELATED'
+        ? 'İlgili parça için talep: ${effective?.partCode ?? ''}'
+        : 'Seçilen parça için talep: ${effective?.partCode ?? ''}';
 
     return Card(
       key: Key('main-part-detail-${main.partId}'),
@@ -302,8 +348,7 @@ class _EffectivePartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // The parent main part stays visible for context even after an
-            // alternative below is chosen.
+            // Production main-part context is distinct from the requested part.
             Row(
               children: [
                 const Icon(Icons.inventory_2_outlined, size: 20),
@@ -321,9 +366,7 @@ class _EffectivePartCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              usingMain
-                  ? 'Bu ana parça ile devam ediliyor.'
-                  : 'Alternatif kullanılıyor: ${effective?.partCode ?? ''}',
+              requestedPartLabel,
               key: const Key('effective-part-summary'),
               style: const TextStyle(
                 fontSize: 13,
@@ -331,12 +374,28 @@ class _EffectivePartCard extends StatelessWidget {
                 color: Color(0xFF475569),
               ),
             ),
-            if (hasAlternatives) ...[
+            if (!usingMain)
+              TextButton.icon(
+                key: const Key('request-main-part'),
+                onPressed: !controller.canChangeEffectivePart
+                    ? null
+                    : () => controller.selectEffectivePart(
+                        EffectivePartSelection(
+                          partId: main.partId,
+                          partCode: main.partCode,
+                          isMain: true,
+                        ),
+                      ),
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: const Text('Ana Ürün İçin Talep'),
+              ),
+            if (hasContextualParts) ...[
               const Divider(height: 26),
               const _SectionLabel('Alternatif / İlgili Parçalar'),
               const SizedBox(height: 4),
               const Text(
-                'Gerekirse bunlardan biriyle devam edebilirsiniz.',
+                'Taşıma talebi oluşturulacak parçayı seçin. '
+                'İlgili parça, ana ürünün alternatifi değildir.',
                 style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
               ),
             ],
@@ -458,7 +517,7 @@ class _RelatedPartChip extends StatelessWidget {
         fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
       ),
     ),
-    onSelected: controller.busy
+    onSelected: !controller.canChangeEffectivePart
         ? null
         : (_) {
             FocusScope.of(context).unfocus();

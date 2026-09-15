@@ -15,6 +15,13 @@ class ApiProblem implements Exception {
   bool get shouldRefetch => status == 409 || status == 422 || status == 428;
 
   String get operatorMessage => switch (code) {
+    'PRODUCTION_SESSION_CHANGED' || 'PRODUCTION_CONTEXT_MISMATCH' =>
+      'Üretim bilgileri değişti. Durumu yenileyin; talep gönderilmedi.',
+    'PRODUCTION_SESSION_ALREADY_ACTIVE' =>
+      'Bu makinede zaten açık bir üretim var.',
+    'PRODUCTION_SESSION_ACTIVE' => 'Önce açık üretimi bitirin.',
+    'PRODUCTION_ACCESS_DENIED' =>
+      'Bu makinede üretim işlemi yetkiniz bulunmuyor.',
     'BRING_EMPTY_SLOT_NOT_FOUND' => 'Bu parça için boş konum bulunamadı.',
     'REMOVE_FULL_SLOT_NOT_FOUND' => 'Bu parça için dolu kasa bulunamadı.',
     'REMOVE_EMPTY_SLOT_NOT_FOUND' => 'Bu parça için boş kasa bulunamadı.',

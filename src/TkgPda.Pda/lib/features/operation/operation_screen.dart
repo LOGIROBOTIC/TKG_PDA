@@ -56,7 +56,9 @@ class OperationScreen extends StatelessWidget {
             tooltip: controller.batchMode
                 ? 'Toplu Seçim Modunu Kapat'
                 : 'Birden Fazla Parça / Toplu Mod',
-            onPressed: controller.busy ? null : controller.toggleBatchMode,
+            onPressed: controller.busy || !controller.productionTransportReady
+                ? null
+                : controller.toggleBatchMode,
             icon: Badge(
               isLabelVisible: controller.batchCart.isNotEmpty,
               label: Text('${controller.batchCart.length}'),

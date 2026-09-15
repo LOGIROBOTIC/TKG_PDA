@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../app/app_controller.dart';
 import '../../data/models/pda_models.dart';
@@ -152,6 +153,11 @@ class _RequestCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final marking = controller.isMarkingReady(request.requestId);
+    final knownOperation = const {
+      'BRING_EMPTY',
+      'REMOVE_FULL',
+      'REMOVE_EMPTY',
+    }.contains(request.operation);
     return Card(
       key: Key('warehouse-item-${request.requestId}'),
       child: Padding(
@@ -164,30 +170,31 @@ class _RequestCard extends StatelessWidget {
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
+            Text(switch (request.operation) {
+              'BRING_EMPTY' => 'Boş taşıma kabı hazırlanacak',
+              'REMOVE_FULL' => 'Dolu taşıma kabı alınacak',
+              'REMOVE_EMPTY' => 'Boş taşıma kabı alınacak',
+              _ => 'Talep türü doğrulanamadı',
+            }, style: const TextStyle(fontWeight: FontWeight.w700)),
+            // Preserve identification evidence without guessing basket/pallet
+            // categories from customer codes or exposing routing details.
             Text(
-              actionLabel(request.operation),
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              request.containerTypeCode?.trim().isNotEmpty == true
+                  ? request.containerTypeCode!
+                  : 'Taşıma kabı bilgisi eksik',
+              key: Key('warehouse-container-${request.requestId}'),
             ),
             const SizedBox(height: 8),
             _InfoRow('Parça', knownOr(request.partCode)),
-            _InfoRow('Kasa Tipi', request.containerTypeCode ?? '—'),
-            if (request.sourceSlotDisplayName != null)
-              _InfoRow(
-                'Kaynak',
-                operatorLocationLabel(
-                  request.sourceSlotDisplayName,
-                  request.sourceSlotCode,
-                ),
-              ),
-            if (request.destinationSlotDisplayName != null)
-              _InfoRow(
-                'Hedef',
-                operatorLocationLabel(
-                  request.destinationSlotDisplayName,
-                  request.destinationSlotCode,
-                ),
-              ),
             _InfoRow('Talep No', '#${request.requestNo}'),
+            _InfoRow(
+              'İstenme',
+              request.createdAt == null
+                  ? 'Talep zamanı alınamadı'
+                  : DateFormat(
+                      'dd.MM.yyyy HH:mm:ss',
+                    ).format(request.createdAt!.toLocal()),
+            ),
             _InfoRow('Bekleme', _formatWaitDuration(request.createdAt)),
             const SizedBox(height: 12),
             Align(
@@ -197,7 +204,10 @@ class _RequestCard extends StatelessWidget {
                 children: [
                   ElevatedButton.icon(
                     key: Key('warehouse-ready-${request.requestId}'),
-                    onPressed: (marking || !controller.mutationGate.canMutate)
+                    onPressed:
+                        (marking ||
+                            !knownOperation ||
+                            !controller.mutationGate.canMutate)
                         ? null
                         : () => _confirmReady(context),
                     icon: marking
@@ -206,8 +216,12 @@ class _RequestCard extends StatelessWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.check_circle_outline),
-                    label: const Text('Hazır'),
+                    label: const Text('Hazırlandı'),
                   ),
+                  if (!knownOperation)
+                    const Text(
+                      'Talep türü doğrulanmadan hazırlık onaylanamaz.',
+                    ),
                   if (!controller.mutationGate.canMutate)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -240,8 +254,9 @@ class _RequestCard extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Hazır olarak işaretle'),
         content: Text(
-          '${request.machineCode} için ${knownOr(request.partCode)} malzemesi '
-          'hazırlandı mı?',
+          '${request.machineCode} için #${request.requestNo} numaralı talebin '
+          'hazırlığı tamamlandı mı?\n\n'
+          'Onayınızdan sonra güvenlik koşulları sağlandığında taşıma otomatik başlayacak.',
         ),
         actions: [
           TextButton(
@@ -294,7 +309,8 @@ class _InfoRow extends StatelessWidget {
   );
 }
 
-String _formatWaitDuration(DateTime createdAt) {
+String _formatWaitDuration(DateTime? createdAt) {
+  if (createdAt == null) return 'Bilinmiyor';
   final diff = DateTime.now().difference(createdAt.toLocal());
   if (diff.isNegative || diff.inMinutes < 1) {
     return 'Az önce';

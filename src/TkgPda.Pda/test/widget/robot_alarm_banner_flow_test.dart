@@ -105,6 +105,9 @@ Future<_Harness> _harness(
     deviceCodeStore: store,
     session: SessionMemory(),
     enablePolling: false,
+    // Legacy pre-production-session workflow regression. Default-on production
+    // lifecycle is exercised separately by production_flow_test.dart.
+    enableProductionWorkflow: false,
   );
   await controller.initialize();
   await tester.pumpWidget(

@@ -14,6 +14,113 @@ import '../support/fakes.dart';
 // kept separate from the line-operator part-selection flow.
 void main() {
   testWidgets(
+    'preparation shows machine, content and server time without routing fields',
+    (tester) async {
+      final createdAt = DateTime(2026, 9, 17, 9, 5, 7);
+      final request = WarehousePreparationRequest.fromJson({
+        'requestId': 'test-preparation',
+        'requestNo': 54,
+        'machineId': testMachine.id,
+        'machineCode': testMachine.code,
+        'machineDisplayName': testMachine.displayName,
+        'operation': 'BRING_EMPTY',
+        'partCode': 'MAIN-PART',
+        'containerTypeCode': 'CUSTOMER-CONTAINER',
+        'sourceSlotCode': 'INTERNAL-SOURCE',
+        'sourceSlotDisplayName': 'Hidden source',
+        'destinationSlotCode': 'INTERNAL-DEST',
+        'destinationSlotDisplayName': 'Hidden destination',
+        'createdAt': createdAt.toUtc().toIso8601String(),
+      });
+      final repository = FakePdaRepository()
+        ..loginUser = _warehouseUser
+        ..warehouseRequestsValue = [request];
+      final harness = await _harness(tester, repository: repository);
+      await harness.controller.enterWarehousePreparation();
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(testMachine.code), findsOneWidget);
+      expect(find.text('MAIN-PART'), findsOneWidget);
+      expect(find.text('Boş taşıma kabı hazırlanacak'), findsOneWidget);
+      expect(find.text('CUSTOMER-CONTAINER'), findsOneWidget);
+      expect(find.text('17.09.2026 09:05:07'), findsOneWidget);
+      for (final hidden in [
+        'Kaynak',
+        'Hedef',
+        'Kasa Tipi',
+        'Hidden source',
+        'Hidden destination',
+        'INTERNAL-SOURCE',
+        'INTERNAL-DEST',
+      ]) {
+        expect(find.text(hidden), findsNothing);
+      }
+      expect(repository.markReadyCount, 0);
+      harness.dispose();
+    },
+  );
+
+  for (final timestamp in [null, 'invalid-time']) {
+    testWidgets('missing/invalid timestamp stays unknown: $timestamp', (
+      tester,
+    ) async {
+      final request = WarehousePreparationRequest.fromJson({
+        'requestId': 'test-missing-time',
+        'requestNo': 55,
+        'machineId': testMachine.id,
+        'machineCode': testMachine.code,
+        'operation': 'BRING_EMPTY',
+        'createdAt': timestamp,
+      });
+      expect(request.createdAt, isNull);
+      final repository = FakePdaRepository()
+        ..loginUser = _warehouseUser
+        ..warehouseRequestsValue = [request];
+      final harness = await _harness(tester, repository: repository);
+      await harness.controller.enterWarehousePreparation();
+      await tester.pumpAndSettle();
+      expect(find.text('Talep zamanı alınamadı'), findsOneWidget);
+      expect(find.text('Bilinmiyor'), findsOneWidget);
+      expect(find.text('Az önce'), findsNothing);
+      expect(find.text('Taşıma kabı bilgisi eksik'), findsOneWidget);
+      harness.dispose();
+    });
+  }
+
+  testWidgets('unknown operation is not guessed from part or container code', (
+    tester,
+  ) async {
+    final request = WarehousePreparationRequest.fromJson({
+      'requestId': 'test-unknown-kind',
+      'requestNo': 56,
+      'machineId': testMachine.id,
+      'machineCode': testMachine.code,
+      'operation': 'FUTURE_OPERATION',
+      'partCode': 'A-PART',
+      'containerTypeCode': 'PALLET-EVIDENCE',
+    });
+    final repository = FakePdaRepository()
+      ..loginUser = _warehouseUser
+      ..warehouseRequestsValue = [request];
+    final harness = await _harness(tester, repository: repository);
+    await harness.controller.enterWarehousePreparation();
+    await tester.pumpAndSettle();
+    expect(find.text('Talep türü doğrulanamadı'), findsOneWidget);
+    expect(find.text('FUTURE_OPERATION'), findsNothing);
+    expect(find.text('Boş taşıma kabı hazırlanacak'), findsNothing);
+    expect(
+      tester
+          .widget<ElevatedButton>(
+            find.byKey(const Key('warehouse-ready-test-unknown-kind')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(repository.markReadyCount, 0);
+    harness.dispose();
+  });
+
+  testWidgets(
     'warehouse-authorized user can open the console and see waiting requests',
     (tester) async {
       final repository = FakePdaRepository()
@@ -127,6 +234,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('confirm-ready')), findsOneWidget);
+    expect(
+      find.textContaining(
+        'güvenlik koşulları sağlandığında taşıma otomatik başlayacak',
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Vazgeç'));
     await tester.pumpAndSettle();
@@ -241,6 +354,9 @@ Future<_Harness> _harness(
     deviceCodeStore: store,
     session: SessionMemory(),
     enablePolling: false,
+    // Legacy pre-production-session workflow regression. Default-on production
+    // lifecycle is exercised separately by production_flow_test.dart.
+    enableProductionWorkflow: false,
   );
   await controller.initialize();
   await tester.pumpWidget(

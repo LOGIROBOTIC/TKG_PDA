@@ -12,6 +12,74 @@ import '../support/fakes.dart';
 // WP-03B — Flutter part-first Operator flow: Authorized Machine -> Main Part
 // -> Related/Alt Part -> Compatible Variant -> existing operation flow.
 void main() {
+  for (final size in [
+    const Size(1024, 768),
+    const Size(800, 1280),
+    const Size(390, 844),
+  ]) {
+    testWidgets('focused product workspace remains usable at $size', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final harness = await _harness(tester);
+      await tester.tap(
+        find.byKey(Key('main-part-${testMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(harness.controller.transportActionsReady, isTrue);
+      expect(
+        find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
+        findsNothing,
+      );
+      await _scrollTo(tester, const Key('change-main-part'));
+      await tester.tap(find.byKey(const Key('change-main-part')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(Key('main-part-${testMainPartOption.partId}')),
+        findsOneWidget,
+      );
+      expect(harness.controller.transportActionsReady, isFalse);
+      expect(harness.repository.createCount, 0);
+      expect(tester.takeException(), isNull);
+      harness.dispose();
+    });
+  }
+
+  testWidgets('unknown relation is not labeled as an alternative', (
+    tester,
+  ) async {
+    const related = MachineRelatedPart(
+      partId: 'unclassified',
+      partCode: 'UNCLASSIFIED',
+      description: null,
+      relationType: 'UNCLASSIFIED',
+    );
+    final main = MachineMainPartOption(
+      partId: testMainPartId,
+      partCode: 'MAIN',
+      description: null,
+      relatedParts: const [related],
+    );
+    final repository = FakePdaRepository()..partOptionsValue = [main];
+    final harness = await _harness(tester, repository: repository);
+    await tester.tap(find.byKey(Key('main-part-${main.partId}')));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, const Key('other-part-unclassified'));
+    await tester.tap(find.byKey(const Key('other-part-unclassified')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const Key('effective-part-summary'))).data,
+      'Seçilen parça için talep: UNCLASSIFIED',
+    );
+    expect(harness.controller.selectedMainPart?.partId, testMainPartId);
+    expect(repository.createCount, 0);
+    harness.dispose();
+  });
+
   testWidgets('selecting a machine loads its part-options', (tester) async {
     final repository = FakePdaRepository();
     final harness = await _harness(tester, repository: repository);
@@ -70,6 +138,24 @@ void main() {
     expect(find.byKey(const Key('main-part-long-part-7')), findsOneWidget);
     expect(find.byKey(const Key('main-part-long-part-6')), findsNothing);
 
+    await tester.tap(find.byKey(const Key('main-part-long-part-7')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('main-part-search')), findsNothing);
+    await tester.tap(find.byKey(const Key('change-main-part')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('main-part-long-part-6')), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('main-part-search')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    await tester.enterText(
+      find.byKey(const Key('main-part-search')),
+      'customer-07',
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('clear-main-part-search')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('main-part-long-part-6')), findsOneWidget);
@@ -104,26 +190,30 @@ void main() {
     },
   );
 
-  testWidgets('the clicked main part is visibly marked as selected', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
+  testWidgets(
+    'selected product stays visible while other main parts are hidden',
+    (tester) async {
+      final harness = await _harness(tester);
 
-    await tester.tap(
-      find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
+      );
+      await tester.pumpAndSettle();
 
-    final selectedChip = tester.widget<ChoiceChip>(
-      find.byKey(Key('main-part-${testAmbiguousMainPartOption.partId}')),
-    );
-    final otherChip = tester.widget<ChoiceChip>(
-      find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
-    );
-    expect(selectedChip.selected, isTrue);
-    expect(otherChip.selected, isFalse);
-    harness.dispose();
-  });
+      expect(
+        find.byKey(
+          Key('main-part-detail-${testAmbiguousMainPartOption.partId}'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('change-main-part')), findsOneWidget);
+      expect(
+        find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
+        findsNothing,
+      );
+      harness.dispose();
+    },
+  );
 
   testWidgets(
     'selecting a main part shows only its own contextual RELATED/ALT options',
@@ -161,6 +251,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(Key('alt-part-$testAltPartId')), findsOneWidget);
 
+      await _scrollTo(tester, const Key('change-main-part'));
+      await tester.tap(find.byKey(const Key('change-main-part')));
+      await tester.pumpAndSettle();
+      expect(harness.controller.selectedEffectivePart, isNull);
+      expect(harness.controller.transportActionsReady, isFalse);
       await tester.tap(
         find.byKey(Key('main-part-${testSecondMainPartOption.partId}')),
       );
@@ -209,7 +304,8 @@ void main() {
         find.byKey(Key('related-part-$testRelatedPartId')),
       );
       expect(relatedChip.selected, isTrue);
-      // Parent context stays on screen while the alternative is in use.
+      // RELATED is a requested part under the same main-product context,
+      // not an alternative replacing the main product.
       expect(
         find.byKey(
           Key('main-part-detail-${testAmbiguousMainPartOption.partId}'),
@@ -222,6 +318,27 @@ void main() {
             .data,
         contains('715B3CN500-60'),
       );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('effective-part-summary')))
+            .data,
+        startsWith('İlgili parça için talep:'),
+      );
+      expect(find.textContaining('Alternatif kullanılıyor'), findsNothing);
+      expect(
+        harness.controller.selectedMainPart?.partId,
+        testAmbiguousMainPartId,
+      );
+
+      await _scrollTo(tester, const Key('request-main-part'));
+      await tester.tap(find.byKey(const Key('request-main-part')));
+      await tester.pumpAndSettle();
+      expect(harness.controller.selectedEffectivePart?.isMain, isTrue);
+      expect(
+        harness.controller.selectedMainPart?.partId,
+        testAmbiguousMainPartId,
+      );
+      expect(find.byKey(const Key('request-main-part')), findsNothing);
       harness.dispose();
     },
   );
@@ -301,6 +418,12 @@ void main() {
         contains(testAltPartId),
       );
       expect(harness.controller.selectedEffectivePart?.partId, testAltPartId);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('effective-part-summary')))
+            .data,
+        startsWith('Alternatif parça için talep:'),
+      );
       expect(repository.switchCount, 1);
       expect(repository.lastSwitchVariantId, testVariantV2Id);
       expect(harness.controller.transportActionsReady, isTrue);
@@ -369,7 +492,10 @@ void main() {
     expect(repository.lastSwitchVariantId, testVariantV2Id);
     expect(harness.controller.transportActionsReady, isTrue);
     await _scrollTo(tester, const Key('direct-action-BRING_EMPTY-1'));
-    expect(find.byKey(const Key('direct-action-BRING_EMPTY-1')), findsOneWidget);
+    expect(
+      find.byKey(const Key('direct-action-BRING_EMPTY-1')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('direct-action-REMOVE_EMPTY-1')), findsNothing);
     harness.dispose();
   });
@@ -460,7 +586,10 @@ void main() {
 
     expect(harness.controller.transportActionsReady, isTrue);
     await _scrollTo(tester, const Key('direct-action-BRING_EMPTY-1'));
-    expect(find.byKey(const Key('direct-action-BRING_EMPTY-1')), findsOneWidget);
+    expect(
+      find.byKey(const Key('direct-action-BRING_EMPTY-1')),
+      findsOneWidget,
+    );
     harness.dispose();
   });
 
@@ -492,7 +621,10 @@ void main() {
         find.byKey(const Key('direct-action-REMOVE_FULL-1')),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('direct-action-REMOVE_EMPTY-1')), findsNothing);
+      expect(
+        find.byKey(const Key('direct-action-REMOVE_EMPTY-1')),
+        findsNothing,
+      );
       expect(find.text('İşleme Devam Et'), findsNothing);
       expect(find.byKey(const Key('operation-content')), findsNothing);
       expect(find.text('Fiziksel Yerleşim'), findsNothing);
@@ -532,6 +664,9 @@ Future<_Harness> _harness(
     deviceCodeStore: store,
     session: SessionMemory(),
     enablePolling: false,
+    // Legacy pre-production-session workflow regression. Default-on production
+    // lifecycle is exercised separately by production_flow_test.dart.
+    enableProductionWorkflow: false,
   );
   await controller.initialize();
   await tester.pumpWidget(

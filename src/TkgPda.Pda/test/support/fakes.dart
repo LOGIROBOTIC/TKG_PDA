@@ -319,6 +319,65 @@ final testCompatibleVariantsByPart = <String, List<CompatibleVariant>>{
 };
 
 class FakePdaRepository implements PdaDataSource {
+  ProductionSession? productionValue;
+  Object? productionReadError, productionStartError, productionEndError;
+  Completer<ProductionSession>? productionStartCompleter;
+  Completer<ProductionSession>? productionEndCompleter;
+  final List<String> productionEndIds = [];
+  Completer<ProductionSession?>? productionReadCompleter;
+  int productionStartCount = 0, productionEndCount = 0;
+  final List<String> productionStartKeys = [];
+  String? lastProductionSessionId;
+  @override
+  Future<ProductionSession?> activeProduction(String machineId) async {
+    if (productionReadError case final error?) throw error;
+    if (productionReadCompleter case final completer?) return completer.future;
+    return productionValue;
+  }
+
+  @override
+  Future<ProductionSession> startProduction(
+    ProductionStartCommand command,
+    String key,
+  ) async {
+    productionStartCount++;
+    productionStartKeys.add(key);
+    if (productionStartError case final error?) throw error;
+    if (productionStartCompleter case final completer?) {
+      return productionValue = await completer.future;
+    }
+    return productionValue = ProductionSession(
+      id: 'production-$productionStartCount',
+      machineId: command.machineId,
+      variantId: command.variantId,
+      productGroupId: command.productGroupId,
+      mainPartId: command.mainPartId,
+      startedAt: DateTime.utc(2026, 9, 15, 8),
+    );
+  }
+
+  @override
+  Future<ProductionSession> endProduction(
+    String machineId,
+    String sessionId,
+  ) async {
+    productionEndCount++;
+    productionEndIds.add(sessionId);
+    if (productionEndError case final error?) throw error;
+    if (productionEndCompleter case final completer?) return completer.future;
+    final current = productionValue!;
+    productionValue = null;
+    return ProductionSession(
+      id: sessionId,
+      machineId: machineId,
+      variantId: current.variantId,
+      productGroupId: current.productGroupId,
+      mainPartId: current.mainPartId,
+      startedAt: current.startedAt,
+      endedAt: current.startedAt.add(const Duration(hours: 1)),
+    );
+  }
+
   AuthenticatedUser loginUser = testUser;
   List<MachineSummary> machineValues = [testMachine];
   OperationalContext contextValue = testContext();
@@ -538,8 +597,10 @@ class FakePdaRepository implements PdaDataSource {
     required int positionNumber,
     required String action,
     required String idempotencyKey,
+    String? productionSessionId,
   }) async {
     containerActionCount++;
+    lastProductionSessionId = productionSessionId;
     createCount++;
     lastIdempotencyKey = idempotencyKey;
     lastCommand = TransportCommand(
@@ -601,8 +662,10 @@ class FakePdaRepository implements PdaDataSource {
     required String? navigationProfileId,
     required List<ContainerActionBatchItemCommand> items,
     required String idempotencyKey,
+    String? productionSessionId,
   }) async {
     containerActionBatchCount++;
+    lastProductionSessionId = productionSessionId;
     batchCreateCount++;
     lastBatchMachineId = machineId;
     lastBatchIdempotencyKey = idempotencyKey;
@@ -652,8 +715,10 @@ class FakePdaRepository implements PdaDataSource {
     required String layoutId,
     required String? navigationProfileId,
     required String idempotencyKey,
+    String? productionSessionId,
   }) async {
     removeAllCount++;
+    lastProductionSessionId = productionSessionId;
     lastRemoveAllIdempotencyKey = idempotencyKey;
     lastRemoveAllMachineId = machineId;
     lastRemoveAllVariantId = variantId;

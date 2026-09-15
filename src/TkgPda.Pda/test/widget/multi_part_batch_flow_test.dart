@@ -102,32 +102,33 @@ void main() {
     harness.dispose();
   });
 
-  testWidgets('a selected item can be removed from the tray before submission', (
-    tester,
-  ) async {
-    final harness = await _harness(tester);
-    await _toggleBatchMode(tester);
+  testWidgets(
+    'a selected item can be removed from the tray before submission',
+    (tester) async {
+      final harness = await _harness(tester);
+      await _toggleBatchMode(tester);
 
-    await _selectMainPart(tester, testMainPartOption.partId);
-    await tester.tap(find.text('1. Kasa Doldu'));
-    await tester.pumpAndSettle();
+      await _selectMainPart(tester, testMainPartOption.partId);
+      await tester.tap(find.text('1. Kasa Doldu'));
+      await tester.pumpAndSettle();
 
-    expect(harness.controller.batchCart.length, 1);
-    final itemId = harness.controller.batchCart.first.cartItemId;
+      expect(harness.controller.batchCart.length, 1);
+      final itemId = harness.controller.batchCart.first.cartItemId;
 
-    // Expand the tray
-    await tester.tap(find.byKey(const Key('batch-cart-tray')));
-    await tester.pumpAndSettle();
+      // Expand the tray
+      await tester.tap(find.byKey(const Key('batch-cart-tray')));
+      await tester.pumpAndSettle();
 
-    final removeButton = find.byKey(Key('batch-remove-item-$itemId'));
-    expect(removeButton, findsOneWidget);
+      final removeButton = find.byKey(Key('batch-remove-item-$itemId'));
+      expect(removeButton, findsOneWidget);
 
-    await tester.tap(removeButton);
-    await tester.pumpAndSettle();
+      await tester.tap(removeButton);
+      await tester.pumpAndSettle();
 
-    expect(harness.controller.batchCart, isEmpty);
-    harness.dispose();
-  });
+      expect(harness.controller.batchCart, isEmpty);
+      harness.dispose();
+    },
+  );
 
   testWidgets('clearing the cart resets the batch items', (tester) async {
     final harness = await _harness(tester);
@@ -276,6 +277,12 @@ Future<void> _toggleBatchMode(WidgetTester tester) async {
 }
 
 Future<void> _selectMainPart(WidgetTester tester, String partId) async {
+  final change = find.byKey(const Key('change-main-part'));
+  if (change.evaluate().isNotEmpty) {
+    await tester.ensureVisible(change);
+    await tester.tap(change);
+    await tester.pumpAndSettle();
+  }
   await tester.tap(find.byKey(Key('main-part-$partId')));
   await tester.pumpAndSettle();
 }
@@ -295,6 +302,9 @@ Future<_Harness> _harness(
     deviceCodeStore: store,
     session: SessionMemory(),
     enablePolling: false,
+    // Legacy pre-production-session workflow regression. Default-on production
+    // lifecycle is exercised separately by production_flow_test.dart.
+    enableProductionWorkflow: false,
   );
   await controller.initialize();
   await tester.pumpWidget(

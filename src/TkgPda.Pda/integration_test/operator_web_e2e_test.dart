@@ -138,9 +138,9 @@ void main() {
         await tester.pumpAndSettle();
       }
       check(
-        first.transportActionsReady,
+        first.partSelectionReady,
         isTrue,
-        'part and compatible variant expose operations on the same page',
+        'part and compatible variant are ready for production start',
       );
       check(
         find.text('İşleme Devam Et'),
@@ -210,6 +210,12 @@ void main() {
         );
         await tester.pumpAndSettle();
       }
+
+      await _reveal(tester, find.byKey(const Key('production-start')));
+      await tester.tap(find.byKey(const Key('production-start')));
+      await tester.pumpAndSettle();
+      check(first.production.active, isNotNull, 'production starts through the API');
+      check(first.transportActionsReady, isTrue, 'production unlocks transport');
 
       first.onPaused();
       check(first.mutationEnabled, isFalse, 'background disables mutations');
@@ -407,6 +413,10 @@ void main() {
         'cancelled request disappears',
       );
 
+      await first.endProduction();
+      await tester.pumpAndSettle();
+      check(first.production.active, isNull, 'production ends after explicit cancellation');
+
       first.handleUnauthorized();
       await tester.pumpAndSettle();
       check(first.isAuthenticated, isFalse, '401 clears memory session');
@@ -435,7 +445,8 @@ void main() {
       // two (no dialog text, no confirm button) and four were added — backend-resolved
       // destination, the distinct second container key, that container's inert
       // bring-empty, and REMOVE_EMPTY absent on an OCCUPIED+EMPTY container.
-      check(checks, 58, 'all frozen browser checks ran');
+      // Three production lifecycle checks supplement the 58 transport checks.
+      check(checks, 61, 'all frozen browser checks ran');
 
       first.dispose();
       second.dispose();

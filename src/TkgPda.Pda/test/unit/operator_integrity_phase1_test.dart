@@ -22,6 +22,7 @@ void main() {
       deviceCodeStore: store,
       session: SessionMemory(),
       enablePolling: false,
+      enableProductionWorkflow: false, // Legacy transport regression.
     );
     await controller.initialize();
     await controller.login('operator');
@@ -260,6 +261,7 @@ void main() {
           deviceCodeStore: store,
           session: SessionMemory(),
           enablePolling: false,
+          enableProductionWorkflow: false, // Legacy transport regression.
         );
         await controller.initialize();
         await controller.login('operator');

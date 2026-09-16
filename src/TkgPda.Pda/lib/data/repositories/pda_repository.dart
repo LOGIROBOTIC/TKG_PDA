@@ -1,5 +1,6 @@
 import '../../core/network/api_client.dart';
 import '../models/pda_models.dart';
+import '../models/preparation_area.dart';
 
 abstract interface class PdaDataSource {
   Future<ProductionSession?> activeProduction(String machineId);
@@ -80,6 +81,27 @@ abstract interface class PdaDataSource {
   /// Customer UI — Warehouse Preparation Console.
   Future<List<WarehousePreparationRequest>> warehousePreparationRequests();
   Future<void> markTransportReady(String requestId);
+
+  /// Warehouse tablet — the four shared preparation areas.
+  Future<List<PreparationArea>> preparationAreas();
+  Future<List<WarehouseDemand>> warehouseDemands();
+  Future<PreparationPallet> placePallet({
+    required String areaId,
+    required String load,
+    required String containerTypeId,
+    String? partId,
+    String? transportRequestId,
+    required String idempotencyKey,
+  });
+  Future<PreparationPallet> markPalletReady({
+    required String palletId,
+    required int expectedRowVersion,
+  });
+  Future<PreparationPallet> releasePreparationArea({
+    required String palletId,
+    required int expectedRowVersion,
+    required String reason,
+  });
 
   /// Customer Monitoring — Robot Alarm Visibility.
   Future<RobotAlarmSummary> robotAlarmSummary();
@@ -389,6 +411,75 @@ class PdaRepository implements PdaDataSource {
   @override
   Future<void> markTransportReady(String requestId) async {
     await _api.post('/api/v1/transport-requests/$requestId/ready');
+  }
+
+  static const _preparation = '/api/v1/warehouse/preparation';
+
+  @override
+  Future<List<PreparationArea>> preparationAreas() async {
+    final response = await _api.get('$_preparation/areas');
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(PreparationArea.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<WarehouseDemand>> warehouseDemands() async {
+    final response = await _api.get('$_preparation/demands');
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(WarehouseDemand.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<PreparationPallet> placePallet({
+    required String areaId,
+    required String load,
+    required String containerTypeId,
+    String? partId,
+    String? transportRequestId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _api.post(
+      '$_preparation/areas/$areaId/pallet',
+      body: {
+        'load': load,
+        'containerTypeId': containerTypeId,
+        'partId': ?partId,
+        'transportRequestId': ?transportRequestId,
+      },
+      idempotencyKey: idempotencyKey,
+    );
+    return PreparationPallet.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<PreparationPallet> markPalletReady({
+    required String palletId,
+    required int expectedRowVersion,
+  }) async {
+    final response = await _api.post(
+      '$_preparation/pallets/$palletId/ready',
+      body: {'expectedRowVersion': expectedRowVersion},
+    );
+    return PreparationPallet.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<PreparationPallet> releasePreparationArea({
+    required String palletId,
+    required int expectedRowVersion,
+    required String reason,
+  }) async {
+    final response = await _api.post(
+      '$_preparation/pallets/$palletId/release',
+      body: {'expectedRowVersion': expectedRowVersion, 'reason': reason},
+    );
+    return PreparationPallet.fromJson(_json(response.body));
   }
 
   @override

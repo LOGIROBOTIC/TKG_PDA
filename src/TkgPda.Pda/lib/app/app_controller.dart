@@ -10,6 +10,7 @@ import '../data/models/pda_models.dart';
 import '../data/repositories/pda_repository.dart';
 import '../features/transport/submission_coordinator.dart';
 import '../features/operation/production_coordinator.dart';
+import '../features/warehouse/preparation_coordinator.dart';
 
 enum AppStage {
   starting,
@@ -19,6 +20,8 @@ enum AppStage {
   operation,
   tasks,
   warehousePreparation,
+  warehouseHome,
+  preparationAreas,
 }
 
 /// Roles allowed to see and use the warehouse preparation console — the same
@@ -86,7 +89,8 @@ class AppController extends ChangeNotifier {
        _submission = submissionCoordinator ?? SubmissionCoordinator(),
        _enablePolling = enablePolling,
        _enableProductionWorkflow = enableProductionWorkflow,
-       production = ProductionCoordinator(repository) {
+       production = ProductionCoordinator(repository),
+       preparation = PreparationCoordinator(repository) {
     production.addListener(notifyListeners);
   }
 
@@ -932,6 +936,45 @@ class AppController extends ChangeNotifier {
     if (!_containerBatchAmbiguous || _containerBatchKey == null) return;
     _offline = false;
     await submitBatch();
+  }
+
+  // ---- Warehouse tablet — the four shared preparation areas ----
+
+  /// Owns its own polling and its own error surface. Entering it never touches
+  /// machine selection or part-first state.
+  final PreparationCoordinator preparation;
+
+  /// The warehouse tablet home. Same roles as the preparation console: the
+  /// backend's WarehousePreparation policy is the authority, this only decides
+  /// what to draw.
+  void enterWarehouseHome() {
+    if (!canAccessWarehousePreparation || isMutationInFlight) return;
+    _stage = AppStage.warehouseHome;
+    _clearFeedback();
+    notifyListeners();
+  }
+
+  void enterPreparationAreas() {
+    if (!canAccessWarehousePreparation || isMutationInFlight) return;
+    _stage = AppStage.preparationAreas;
+    _clearFeedback();
+    notifyListeners();
+    preparation.start();
+  }
+
+  void leavePreparationAreas() {
+    if (preparation.inFlight) return;
+    preparation.stop();
+    _stage = AppStage.warehouseHome;
+    _clearFeedback();
+    notifyListeners();
+  }
+
+  void leaveWarehouseHome() {
+    if (isMutationInFlight) return;
+    _stage = AppStage.machines;
+    _clearFeedback();
+    notifyListeners();
   }
 
   // ---- Customer UI — Warehouse Preparation Console ----

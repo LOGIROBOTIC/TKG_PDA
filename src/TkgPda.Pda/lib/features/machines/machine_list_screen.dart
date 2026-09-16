@@ -38,7 +38,13 @@ class MachineListScreen extends StatelessWidget {
             onPressed: controller.busy ? null : controller.enterTasks,
             icon: const Icon(Icons.format_list_numbered),
           ),
-          if (controller.canAccessWarehousePreparation)
+          if (controller.canAccessWarehousePreparation) ...[
+            IconButton(
+              key: const Key('open-warehouse-home'),
+              tooltip: 'Depo',
+              onPressed: controller.busy ? null : controller.enterWarehouseHome,
+              icon: const Icon(Icons.warehouse_outlined),
+            ),
             IconButton(
               key: const Key('open-warehouse-preparation'),
               tooltip: 'Depo Hazırlık',
@@ -47,6 +53,7 @@ class MachineListScreen extends StatelessWidget {
                   : controller.enterWarehousePreparation,
               icon: const Icon(Icons.inventory_2_outlined),
             ),
+          ],
           IconButton(
             tooltip: 'Yenile',
             onPressed: controller.busy ? null : controller.reloadMachines,

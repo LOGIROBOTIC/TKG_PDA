@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:tkg_pda/core/errors/api_problem.dart';
 import 'package:tkg_pda/data/models/pda_models.dart';
+import 'package:tkg_pda/data/models/preparation_area.dart';
 import 'package:tkg_pda/data/repositories/pda_repository.dart';
 
 const testDeviceCode = 'PDA-TEST-01';
@@ -781,6 +782,86 @@ class FakePdaRepository implements PdaDataSource {
         .toList(growable: false);
   }
 
+  // ---- Warehouse tablet: the four shared preparation areas ----
+  List<PreparationArea> preparationAreasValue = const [];
+  List<WarehouseDemand> warehouseDemandsValue = const [];
+  Object? preparationAreasError;
+  Object? placePalletError;
+  Object? markPalletReadyError;
+  Object? releaseAreaError;
+  int preparationAreasCount = 0;
+  int warehouseDemandsCount = 0;
+  final List<Map<String, Object?>> placedPallets = [];
+  final List<Map<String, Object?>> readiedPallets = [];
+  final List<Map<String, Object?>> releasedPallets = [];
+
+  @override
+  Future<List<PreparationArea>> preparationAreas() async {
+    preparationAreasCount++;
+    if (preparationAreasError case final error?) throw error;
+    return preparationAreasValue;
+  }
+
+  @override
+  Future<List<WarehouseDemand>> warehouseDemands() async {
+    warehouseDemandsCount++;
+    if (preparationAreasError case final error?) throw error;
+    return warehouseDemandsValue;
+  }
+
+  @override
+  Future<PreparationPallet> placePallet({
+    required String areaId,
+    required String load,
+    required String containerTypeId,
+    String? partId,
+    String? transportRequestId,
+    required String idempotencyKey,
+  }) async {
+    placedPallets.add({
+      'areaId': areaId,
+      'load': load,
+      'containerTypeId': containerTypeId,
+      'partId': partId,
+      'transportRequestId': transportRequestId,
+      'idempotencyKey': idempotencyKey,
+    });
+    if (placePalletError case final error?) throw error;
+    return fakePallet(
+      load: load,
+      partId: partId,
+      transportRequestId: transportRequestId,
+    );
+  }
+
+  @override
+  Future<PreparationPallet> markPalletReady({
+    required String palletId,
+    required int expectedRowVersion,
+  }) async {
+    readiedPallets.add({
+      'palletId': palletId,
+      'expectedRowVersion': expectedRowVersion,
+    });
+    if (markPalletReadyError case final error?) throw error;
+    return fakePallet(id: palletId, readyAt: DateTime.utc(2026, 1, 1));
+  }
+
+  @override
+  Future<PreparationPallet> releasePreparationArea({
+    required String palletId,
+    required int expectedRowVersion,
+    required String reason,
+  }) async {
+    releasedPallets.add({
+      'palletId': palletId,
+      'expectedRowVersion': expectedRowVersion,
+      'reason': reason,
+    });
+    if (releaseAreaError case final error?) throw error;
+    return fakePallet(id: palletId);
+  }
+
   @override
   Future<RobotAlarmSummary> robotAlarmSummary() async {
     robotAlarmSummaryCount++;
@@ -1056,3 +1137,65 @@ const _fullSlot = {
     },
   ],
 };
+
+
+PreparationPallet fakePallet({
+  String id = 'pallet-1',
+  String load = 'EMPTY',
+  String? partId,
+  String? partCode,
+  String? transportRequestId,
+  int? requestNo,
+  String? targetMachineCode,
+  DateTime? readyAt,
+  int rowVersion = 0,
+}) => PreparationPallet(
+  id: id,
+  containerTypeId: 'container-1',
+  containerCode: '4311',
+  load: load,
+  partId: partId,
+  partCode: partCode,
+  transportRequestId: transportRequestId,
+  requestNo: requestNo,
+  targetMachineCode: targetMachineCode,
+  placedAt: DateTime.utc(2026, 1, 1),
+  readyAt: readyAt,
+  rowVersion: rowVersion,
+);
+
+PreparationArea fakeArea({
+  required int number,
+  PreparationPallet? pallet,
+  bool isEnabled = true,
+}) => PreparationArea(
+  id: 'area-$number',
+  areaNumber: number,
+  displayName: 'Hazırlık Alanı $number',
+  isEnabled: isEnabled,
+  pallet: pallet,
+);
+
+WarehouseDemand fakeDemand({
+  required int requestNo,
+  String requestId = '',
+  String machineCode = 'SH-01-A',
+  String? partCode = '67185BN050-40',
+  String requestedLoad = 'FULL',
+  DateTime? requestedAt,
+  int? claimedByAreaNumber,
+}) => WarehouseDemand(
+  requestId: requestId.isEmpty ? 'request-$requestNo' : requestId,
+  requestNo: requestNo,
+  machineId: 'machine-1',
+  machineCode: machineCode,
+  partId: 'part-1',
+  partCode: partCode,
+  containerTypeId: 'container-1',
+  containerCode: '4311',
+  operation: requestedLoad == 'FULL' ? 'BRING_FULL' : 'BRING_EMPTY',
+  requestedLoad: requestedLoad,
+  requestedAt: requestedAt,
+  claimedByAreaId: claimedByAreaNumber == null ? null : 'area-$claimedByAreaNumber',
+  claimedByAreaNumber: claimedByAreaNumber,
+);

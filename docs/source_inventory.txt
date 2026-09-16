@@ -1,0 +1,381 @@
+# TKG_PDA source inventory
+# format: <CATEGORY>\t<path>\t<reason>
+# categories: DOCUMENTED GENERATED DEPENDENCY BUILD_OUTPUT IRRELEVANT_ARTIFACT
+DOCUMENTED	.gitattributes	repository behaviour configuration
+DOCUMENTED	.gitignore	repository behaviour configuration
+DOCUMENTED	AGENTS.md	project source/config/script/documentation
+DOCUMENTED	CLAUDE.md	project source/config/script/documentation
+DOCUMENTED	Directory.Build.props	project source/config/script/documentation
+DOCUMENTED	README.md	project source/config/script/documentation
+DOCUMENTED	TKG.Pda.slnx	project source/config/script/documentation
+GENERATED	data/generated/phase_02a/container_types.csv	generated customer data extract
+GENERATED	data/generated/phase_02a/data_issues.csv	generated customer data extract
+GENERATED	data/generated/phase_02a/data_issues.json	generated customer data extract
+GENERATED	data/generated/phase_02a/normalized_customer_data.json	generated customer data extract
+GENERATED	data/generated/phase_02a/parts.csv	generated customer data extract
+GENERATED	data/generated/phase_02a/planning_metrics.csv	generated customer data extract
+GENERATED	data/generated/phase_02a/product_group_parts.csv	generated customer data extract
+GENERATED	data/generated/phase_02a/product_groups.csv	generated customer data extract
+GENERATED	data/generated/phase_02a/source_manifest.json	generated customer data extract
+GENERATED	data/generated/phase_02a/summary.json	generated customer data extract
+GENERATED	data/generated/phase_02b/data_issues.csv	generated customer data extract
+GENERATED	data/generated/phase_02b/data_issues.json	generated customer data extract
+GENERATED	data/generated/phase_02b/excluded_candidates.csv	generated customer data extract
+GENERATED	data/generated/phase_02b/layout_slot_part_assignments.csv	generated customer data extract
+GENERATED	data/generated/phase_02b/layout_slots.csv	generated customer data extract
+GENERATED	data/generated/phase_02b/layouts.csv	generated customer data extract
+GENERATED	data/generated/phase_02b/normalized_physical_layouts.json	generated customer data extract
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/412b-customer-physical-v1.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/412b-customer-physical-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/412b-customer-physical-v3.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/gar-customer-physical-v1.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/gar-customer-physical-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/gar-customer-physical-v3.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/pah-01-a-customer-physical-v1.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/pah-01-a-customer-physical-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/pah-02-a-customer-physical-v1.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/pah-02-a-customer-physical-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sealer-customer-physical-shared-v1-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-a-customer-physical-v1.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-a-customer-physical-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-a-customer-physical-v3.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-a-customer-physical-v4.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-a-customer-physical-v5.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-b-customer-physical-v1.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-b-customer-physical-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-b-customer-physical-v3.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-01-p1-sh-01-p2-customer-physical-shared-v1-v2.png	binary/media asset
+IRRELEVANT_ARTIFACT	data/generated/phase_02b/review/sh-02-p1-sh-02-p2-customer-physical-shared-v1-v2.png	binary/media asset
+GENERATED	data/generated/phase_02b/source_manifest.json	generated customer data extract
+GENERATED	data/generated/phase_02b/summary.json	generated customer data extract
+GENERATED	data/generated/phase_02b/variant_layout_assignments.csv	generated customer data extract
+DOCUMENTED	db/migrations/001_initial_schema.sql	project source/config/script/documentation
+DOCUMENTED	db/migrations/002_operator_employee_identity.sql	project source/config/script/documentation
+DOCUMENTED	db/migrations/003_transport_batch.sql	project source/config/script/documentation
+DOCUMENTED	db/migrations/004_transport_request_readiness.sql	project source/config/script/documentation
+DOCUMENTED	db/migrations/005_layout_slot_part_mapping.sql	project source/config/script/documentation
+DOCUMENTED	db/seeds/README.md	project source/config/script/documentation
+DOCUMENTED	db/seeds/generated/002a_customer_textual_master_data.sql	generated seed SQL, documented and marked as generated
+DOCUMENTED	db/seeds/generated/002b_customer_physical_layouts.sql	generated seed SQL, documented and marked as generated
+DOCUMENTED	db/seeds/generated/002c_customer_layout_slot_part_assignments.sql	generated seed SQL, documented and marked as generated
+DOCUMENTED	db/seeds/generated/002d_simulation_rds_trial_mappings.sql	generated seed SQL, documented and marked as generated
+DOCUMENTED	docs/CUSTOMER_WP01A_OPERATOR_EMPLOYEE_IDENTITY.md	project source/config/script/documentation
+DOCUMENTED	docs/OPERATOR_WEB_DEPLOYMENT.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_01_NOTES.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_02A_NOTES.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_02B_NOTES.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_03_NOTES.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_04_NOTES.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_05_ADMIN_CONFIGURATION_API.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_06_ADMIN_WEB.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_07A_PDA_RDS_CONTRACT_READINESS.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_07B_FLUTTER_PDA.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_08A_LIVE_RDS_READINESS.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_08B_RDS_EXECUTION_INTEGRATION.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_08C_RDS_SIMULATOR_COMMISSIONING.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_09_MULTIPLATFORM_OPERATOR.md	project source/config/script/documentation
+DOCUMENTED	docs/PHASE_10A_DYNAMIC_RDS_WINDTASK.md	project source/config/script/documentation
+DOCUMENTED	docs/PROJECT_BASELINE.md	project source/config/script/documentation
+DOCUMENTED	docs/RDS_PDA_INTEGRATION_SPEC.md	project source/config/script/documentation
+DOCUMENTED	docs/README.md	project source/config/script/documentation
+DOCUMENTED	docs/TKG_PDA_DATABASE_SPEC_v0.1.md	project source/config/script/documentation
+DOCUMENTED	docs/WP_33_OPERATOR_UX_V2_SHARED_QUEUE.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/CUSTOMER_ACCEPTANCE_AUDIT.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/CUSTOMER_DATA_REQUEST.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/CUSTOMER_SOURCE_RECONCILIATION.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/PRODUCTION_COMMISSIONING_CHECKLIST.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/RDS_COMMISSIONING_DISCOVERY.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/RDS_COMMISSIONING_SNAPSHOT_SCHEMA.md	project source/config/script/documentation
+DOCUMENTED	docs/commissioning/RDS_FIRST_SNAPSHOT_RUNBOOK.md	project source/config/script/documentation
+DOCUMENTED	docs/database/ERD.md	project source/config/script/documentation
+DOCUMENTED	docs/integration/RDSCORE_NATIVE_ORDER_CONTRACT.md	project source/config/script/documentation
+DOCUMENTED	docs/references/customer/README.md	project source/config/script/documentation
+DOCUMENTED	docs/references/rds/RdsApi_en.md	project source/config/script/documentation
+DOCUMENTED	global.json	project source/config/script/documentation
+DOCUMENTED	rds/scripts/README.md	project source/config/script/documentation
+DOCUMENTED	rds/scripts/test/tkg_integration.test.js	project source/config/script/documentation
+DOCUMENTED	rds/scripts/tkg_integration.js	project source/config/script/documentation
+DOCUMENTED	rds/tasks/commissioning/README.md	project source/config/script/documentation
+IRRELEVANT_ARTIFACT	rds/tasks/commissioning/TKG_SIM_DYNAMIC_MOVE.task	unclassified non-source artifact
+IRRELEVANT_ARTIFACT	rds/tasks/commissioning/TKG_SIM_MOVE.task	unclassified non-source artifact
+DOCUMENTED	scripts/run_commissioning.ps1	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/.gitignore	repository behaviour configuration
+DOCUMENTED	src/TkgPda.AdminWeb/.oxlintrc.json	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/README.md	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/admin-acceptance.spec.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/auth-security.spec.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/global-setup.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/global-teardown.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/harness.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/layout-acceptance.spec.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/e2e/support.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/index.html	project source/config/script/documentation
+DEPENDENCY	src/TkgPda.AdminWeb/package-lock.json	dependency lock file
+DOCUMENTED	src/TkgPda.AdminWeb/package.json	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/playwright.config.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/App.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/api/ApiContext.test.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/api/ApiContext.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/api/client.test.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/api/client.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/api/types.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/auth/AuthContext.test.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/auth/AuthContext.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/components/AppShell.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/components/Toast.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/components/ui.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/index.css	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/main.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/AuditPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/CatalogPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/ContainersPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/DashboardPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/DataQualityPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/DevicesPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/LayoutEditorPage.test.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/LayoutEditorPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/LayoutsPage.test.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/LayoutsPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/LoginPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/MachinesPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/NotFoundPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/RdsIntegrationPage.test.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/RdsIntegrationPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/UsersPage.test.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/pages/UsersPage.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/test/fixtures.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/test/render.tsx	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/src/test/setup.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/tsconfig.app.json	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/tsconfig.json	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/tsconfig.node.json	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.AdminWeb/vite.config.ts	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/AdminContracts.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/AdminEndpoints.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/ApiContracts.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/ApiEndpoints.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/ApiErrors.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/ApiSecurity.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/PostOutcomeAudit.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/Program.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/RdsCommissioningDiscoveryClient.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/RdsCoreNativeOrderClient.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/RdsExecutionClient.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/RdsHttpReadTransport.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/RdsIntegrationEndpoints.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/RdsReadClient.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/TkgPda.Api.csproj	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Api/appsettings.json	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/AdminConfigurationService.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/AdminModels.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/ApiModels.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/ContainerActions.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/EmployeeNumber.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/IAdminConfigurationStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/IApiDataStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/ITransportWorkflowStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/PdaOperationalContextService.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsCommissioningDiscovery.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsCoreNativeOrders.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsExecution.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsIntegration.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsMutationPolicy.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsRobotAlarmParsing.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsRobotIdentity.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/RdsRobotResolution.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/TkgPda.Application.csproj	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Application/TransportWorkflowService.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Domain/TkgPda.Domain.csproj	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Domain/TransportRules.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Domain/TransportStateMachine.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Domain/WorkflowEnums.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Domain/WorkflowModels.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresAdminConfigurationStore.Identity.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresAdminConfigurationStore.Layouts.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresAdminConfigurationStore.MasterData.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresAdminConfigurationStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresApiDataStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresRdsCommissioningConfigurationStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresRdsExecutionStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresRdsIntegrationStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresTransportWorkflowStore.ContainerActions.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/PostgresTransportWorkflowStore.cs	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Infrastructure.Postgres/TkgPda.Infrastructure.Postgres.csproj	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/.gitignore	repository behaviour configuration
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/.metadata	unclassified non-source artifact
+DOCUMENTED	src/TkgPda.Pda/README.md	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/analysis_options.yaml	project source/config/script/documentation
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/.gitignore	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/build.gradle.kts	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/debug/AndroidManifest.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/AndroidManifest.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/kotlin/com/logirobotic/tkg_pda/MainActivity.kt	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/drawable-v21/launch_background.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/drawable/launch_background.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/mipmap-hdpi/ic_launcher.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/mipmap-mdpi/ic_launcher.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/values-night/styles.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/main/res/values/styles.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/app/src/profile/AndroidManifest.xml	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/build.gradle.kts	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/gradle.properties	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/gradle/wrapper/gradle-wrapper.properties	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/android/settings.gradle.kts	Flutter platform scaffolding, no TKG logic
+DOCUMENTED	src/TkgPda.Pda/integration_test/operator_web_e2e_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/app/app.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/app/app_controller.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/app/router.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/app/theme.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/auth/session_memory.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/config/app_config.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/config/runtime_config_loader.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/config/runtime_config_loader_stub.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/config/runtime_config_loader_web.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/errors/api_problem.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/network/api_client.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/platform/platform_info.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/platform/platform_info_io.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/platform/platform_info_stub.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/platform/platform_info_web.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store_factory.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store_factory_secure.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store_factory_stub.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store_factory_web.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store_secure.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/core/storage/device_code_store_web.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/data/models/pda_models.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/data/repositories/pda_repository.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/device_setup/device_setup_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/login/login_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/machines/machine_list_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/operation/container_position_panel.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/operation/multi_part_batch_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/operation/operation_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/operation/part_first_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/operation/transport_action_panel.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/tasks/operator_queue_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/transport/submission_coordinator.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/features/warehouse/warehouse_preparation_screen.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/main.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/shared/presentation.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/lib/shared/widgets/feedback_banners.dart	project source/config/script/documentation
+DEPENDENCY	src/TkgPda.Pda/pubspec.lock	dependency lock file
+DOCUMENTED	src/TkgPda.Pda/pubspec.yaml	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/support/fakes.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/unit/api_problem_presentation_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/unit/operator_integrity_phase1_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/unit/security_network_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/unit/submission_presentation_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/multi_part_batch_flow_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/operator_usability_phase3_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/part_first_flow_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/pda_flow_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/robot_alarm_banner_flow_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/warehouse_preparation_flow_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test/widget/wp33_operator_ux_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/test_driver/integration_test.dart	project source/config/script/documentation
+DOCUMENTED	src/TkgPda.Pda/tool/phase_07b/real_backend_contract_test.dart	project source/config/script/documentation
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/favicon.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/flutter_bootstrap.js	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/font-fallbacks/README.md	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/font-fallbacks/notosanssymbols/v43/rP2up3q65FkAtHfwd-eIS2brbDN6gxP34F9jRRCe4W3gfQ8gb_VFRkzrbQ.woff2	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/font-fallbacks/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/icons/Icon-192.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/icons/Icon-512.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/icons/Icon-maskable-192.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/icons/Icon-maskable-512.png	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/index.html	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/manifest.json	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/operator-config.json	Flutter platform scaffolding, no TKG logic
+IRRELEVANT_ARTIFACT	src/TkgPda.Pda/web/operator_service_worker.js	Flutter platform scaffolding, no TKG logic
+DOCUMENTED	tests/TkgPda.Api.Tests/AdminConfigurationApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/ApiCancellationMiddlewareTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/ApiTestFixture.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/AssemblyInfo.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/AuthenticatedApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/CompatibleVariantsApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/ContainerActionsApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/ExpertActionSafetyApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/LiveRdsPostgresSyncTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/MachinePartOptionsApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/OperatorInformationBoundaryApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/OperatorOperationAuthorityApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/OperatorWebCorsTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/PdaRdsContractReadinessApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/Phase08bExecutionApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/PostOutcomeAuditTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsAdminApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsCommissioningDiscoveryClientTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsCoreNativeOrderClientTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsDispatchConfigurationTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsExecutionClientTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsReadClientTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/RdsRobotAlarmApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/TkgPda.Api.Tests.csproj	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/TransportBatchApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/TransportReadinessApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Api.Tests/WarehousePreparationApiTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/ContainerActionResolutionPolicyTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/PdaOperationalContextPolicyTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/RdsCommissioningDiscoveryTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/RdsCoreNativeOrderTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/RdsExecutionCoordinatorNativeOrderTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/RdsExecutionCoordinatorTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/RdsRobotAlarmParserTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/RdsTelemetryDomainBoundaryTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/TkgPda.Application.Tests.csproj	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/TransportEtaServiceTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Application.Tests/TransportWorkflowServiceTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Auth.Tests/AuthenticationTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Auth.Tests/TkgPda.Auth.Tests.csproj	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Domain.Tests/TkgPda.Domain.Tests.csproj	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Domain.Tests/TransportDomainTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Domain.Tests/TransportEmptyContainerBufferDomainTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Domain.Tests/TransportReadinessDomainTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/AssemblyInfo.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresEmployeeNumberIdentityTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresEmptyContainerBufferTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresFactAttribute.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresLayoutCloningTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresRdsCommissioningConfigurationStoreTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresRdsReadinessTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresTransportReadinessTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/PostgresTransportWorkflowTests.cs	project source/config/script/documentation
+DOCUMENTED	tests/TkgPda.Infrastructure.Postgres.Tests/TkgPda.Infrastructure.Postgres.Tests.csproj	project source/config/script/documentation
+DOCUMENTED	tests/db/001_schema_smoke_test.sql	project source/config/script/documentation
+DOCUMENTED	tests/phase_02a/expected_counts.json	project source/config/script/documentation
+DOCUMENTED	tests/phase_02a/run_postgres_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_02a/test_pipeline.py	project source/config/script/documentation
+DOCUMENTED	tests/phase_02b/expected_counts.json	project source/config/script/documentation
+DOCUMENTED	tests/phase_02b/run_postgres_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_02b/test_pipeline.py	project source/config/script/documentation
+DOCUMENTED	tests/phase_03/run_postgres_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_04/run_postgres_api_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_05/run_postgres_admin_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_07a/run_postgres_pda_rds_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_07b/run_real_api_contract.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_08a/run_live_rds_postgres_sync.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_08a/run_live_rds_readonly.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_08a/run_postgres_rds_readiness_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_08b/run_postgres_rds_execution_integration.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_08c/run_live_rds_simulator_e2e.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_09/run_web_operator_e2e.ps1	project source/config/script/documentation
+DOCUMENTED	tests/phase_09/web_contract.test.mjs	project source/config/script/documentation
+DOCUMENTED	tests/phase_09/webdriver_edge_proxy.mjs	project source/config/script/documentation
+DOCUMENTED	tests/phase_10a/rds_dynamic_task_contract.test.mjs	project source/config/script/documentation
+DOCUMENTED	tests/phase_10a/run_live_dynamic_rds_e2e.ps1	project source/config/script/documentation
+DOCUMENTED	tests/wp30/run_postgres_admin_discovery.ps1	project source/config/script/documentation
+DOCUMENTED	tools/dev/README.md	project source/config/script/documentation
+DOCUMENTED	tools/dev/reset_local_database.ps1	project source/config/script/documentation
+DOCUMENTED	tools/dev/start_local_stack.ps1	project source/config/script/documentation
+DOCUMENTED	tools/dev/stop_local_stack.ps1	project source/config/script/documentation
+DOCUMENTED	tools/phase_02a/__init__.py	project source/config/script/documentation
+DOCUMENTED	tools/phase_02a/pipeline.py	project source/config/script/documentation
+DOCUMENTED	tools/phase_02a/requirements.txt	project source/config/script/documentation
+DOCUMENTED	tools/phase_02b/__init__.py	project source/config/script/documentation
+DOCUMENTED	tools/phase_02b/pipeline.py	project source/config/script/documentation
+DOCUMENTED	tools/phase_02b/requirements.txt	project source/config/script/documentation

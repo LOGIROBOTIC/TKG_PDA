@@ -1,0 +1,43 @@
+{
+ "audit": [
+  "audit_logs",
+  "client_devices"
+ ],
+ "auth": [
+  "roles",
+  "user_machine_permissions",
+  "user_roles",
+  "users"
+ ],
+ "integration": [
+  "layout_slot_rds_mapping",
+  "rds_tasks",
+  "rds_worksites"
+ ],
+ "master": [
+  "container_types",
+  "layout_slot_parts",
+  "layout_slots",
+  "layouts",
+  "machines",
+  "navigation_profiles",
+  "part_planning_metrics",
+  "parts",
+  "product_group_parts",
+  "product_groups",
+  "slot_group_members",
+  "slot_groups",
+  "task_templates",
+  "task_types",
+  "variant_layout_assignments",
+  "variant_navigation_profile_assignments",
+  "variants"
+ ],
+ "ops": [
+  "machine_runtime_state",
+  "slot_runtime_state",
+  "transport_batches",
+  "transport_request_events",
+  "transport_requests"
+ ]
+}

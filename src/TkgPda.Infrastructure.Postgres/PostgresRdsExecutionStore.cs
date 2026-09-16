@@ -175,9 +175,13 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                    r.destination_slot_id, r.priority, r.readiness_state, r.ready_at,
                    m.code, v.code, main_part.part_code, p.part_code, ct.code,
                    template.id, template.rds_task_label, template.priority, template.config_json::text,
-                   src.slot_id, src.slot_code, src.slot_group_code, src.slot_role, src.site_id,
-                   src.rds_type, src.last_filled, src.last_locked, src.last_disabled,
-                   src.last_sync_failed, src.last_sync_at,
+                   COALESCE(src.slot_id, prep.slot_id), COALESCE(src.slot_code, prep.slot_code),
+                   COALESCE(src.slot_group_code, prep.slot_group_code), COALESCE(src.slot_role, prep.slot_role),
+                   COALESCE(src.site_id, prep.site_id), COALESCE(src.rds_type, prep.rds_type),
+                   COALESCE(src.last_filled, prep.last_filled), COALESCE(src.last_locked, prep.last_locked),
+                   COALESCE(src.last_disabled, prep.last_disabled),
+                   COALESCE(src.last_sync_failed, prep.last_sync_failed),
+                   COALESCE(src.last_sync_at, prep.last_sync_at),
                    dst.slot_id, dst.slot_code, dst.slot_group_code, dst.slot_role, dst.site_id,
                    dst.rds_type, dst.last_filled, dst.last_locked, dst.last_disabled,
                    dst.last_sync_failed, dst.last_sync_at
@@ -219,6 +223,22 @@ public sealed class PostgresRdsExecutionStore(NpgsqlDataSource dataSource) : IRd
                          sgm.priority, ls.display_order, ls.id
                 LIMIT 1
             ) src ON true
+            LEFT JOIN LATERAL (
+                SELECT NULL::uuid AS slot_id, pa.display_name AS slot_code,
+                       NULL::varchar AS slot_group_code, 'SHARED'::varchar AS slot_role,
+                       rw.rds_site_id AS site_id, rw.rds_type, rw.last_filled,
+                       rw.last_locked, rw.last_disabled, rw.last_sync_failed, rw.last_sync_at
+                FROM ops.preparation_pallets pp
+                JOIN ops.preparation_areas pa ON pa.id = pp.preparation_area_id AND pa.is_enabled
+                JOIN integration.preparation_area_rds_mapping pm ON pm.preparation_area_id = pa.id
+                JOIN integration.rds_worksites rw ON rw.id = pm.rds_worksite_id
+                                                 AND rw.navigation_profile_id = r.navigation_id
+                WHERE tt.code = 'BRING_FULL'
+                  AND pp.transport_request_id = r.id
+                  AND pp.released_at IS NULL
+                  AND pp.ready_at IS NOT NULL
+                LIMIT 1
+            ) prep ON true
             LEFT JOIN LATERAL (
                 SELECT ls.id AS slot_id, ls.code AS slot_code, sg.code AS slot_group_code,
                        ls.slot_role, rw.rds_site_id AS site_id, rw.rds_type, rw.last_filled,

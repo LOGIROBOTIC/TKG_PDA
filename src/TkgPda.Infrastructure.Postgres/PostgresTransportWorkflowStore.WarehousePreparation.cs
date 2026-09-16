@@ -100,8 +100,8 @@ public sealed partial class PostgresTransportWorkflowStore : IWarehousePreparati
                 PartCode: reader.IsDBNull(5) ? null : reader.GetString(5),
                 ContainerTypeId: reader.IsDBNull(6) ? null : reader.GetGuid(6),
                 ContainerCode: reader.IsDBNull(7) ? null : reader.GetString(7),
-                Operation: operation,
-                RequestedLoad: requestedLoad,
+                Operation: operation.ToDatabase(),
+                RequestedLoad: requestedLoad.ToDatabase(),
                 RequestedAt: reader.GetFieldValue<DateTimeOffset>(9),
                 ClaimedByAreaId: reader.IsDBNull(10) ? null : reader.GetGuid(10),
                 ClaimedByAreaNumber: reader.IsDBNull(11) ? null : reader.GetInt32(11)));
@@ -124,7 +124,7 @@ public sealed partial class PostgresTransportWorkflowStore : IWarehousePreparati
         {
             // Same key, different content is a different intent wearing the
             // same key, not a retry.
-            if (replay.ContainerTypeId != command.ContainerTypeId || replay.Load != command.Load
+            if (replay.ContainerTypeId != command.ContainerTypeId || replay.Load != command.Load.ToDatabase()
                 || replay.PartId != command.PartId || replay.TransportRequestId != command.TransportRequestId)
             {
                 throw new WorkflowRuleException(
@@ -318,7 +318,7 @@ public sealed partial class PostgresTransportWorkflowStore : IWarehousePreparati
         Id: r.GetGuid(offset),
         ContainerTypeId: r.GetGuid(offset + 1),
         ContainerCode: r.GetString(offset + 2),
-        Load: WorkflowCode.ParseLoad(r.GetString(offset + 3)),
+        Load: r.GetString(offset + 3),
         PartId: r.IsDBNull(offset + 4) ? null : r.GetGuid(offset + 4),
         PartCode: r.IsDBNull(offset + 5) ? null : r.GetString(offset + 5),
         TransportRequestId: r.IsDBNull(offset + 6) ? null : r.GetGuid(offset + 6),

@@ -53,7 +53,7 @@ public sealed class WarehousePreparationServiceTests
             Id: Guid.NewGuid(),
             ContainerTypeId: command?.ContainerTypeId ?? Container,
             ContainerCode: "4311",
-            Load: command?.Load ?? LoadState.Empty,
+            Load: (command?.Load ?? LoadState.Empty).ToDatabase(),
             PartId: command?.PartId,
             PartCode: null,
             TransportRequestId: command?.TransportRequestId,
@@ -253,7 +253,7 @@ public sealed class WarehousePreparationServiceTests
     public void A_placed_pallet_is_not_ready_until_it_is_confirmed()
     {
         var pallet = new PreparationPalletRecord(
-            Guid.NewGuid(), Container, "4311", LoadState.Full, Part, "67115BN050-10-HAOS",
+            Guid.NewGuid(), Container, "4311", "FULL", Part, "67115BN050-10-HAOS",
             Request, 42, "SH-01-A", DateTimeOffset.UnixEpoch, Actor, null, 0);
 
         Assert.Equal("PLACED", pallet.Status);

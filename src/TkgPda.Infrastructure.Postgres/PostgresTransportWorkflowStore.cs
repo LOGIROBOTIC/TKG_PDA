@@ -263,6 +263,25 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
 
         TransportReadinessRules.EnsureCanMarkReady(request.Status, request.ReadinessState);
 
+        // A material feed is only ready when a pallet was physically prepared
+        // for it and confirmed in a preparation area. Without this the legacy
+        // endpoint would open dispatch for a BRING_FULL with nothing standing
+        // anywhere, and the robot would be sent to collect air.
+        if (request.TaskType == TransportTaskType.BringFull)
+        {
+            await using var prepared = new NpgsqlCommand("""
+                SELECT 1 FROM ops.preparation_pallets
+                WHERE transport_request_id = @id AND released_at IS NULL AND ready_at IS NOT NULL
+                """, connection, transaction);
+            prepared.Parameters.AddWithValue("id", requestId);
+            if (await prepared.ExecuteScalarAsync(cancellationToken) is null)
+            {
+                throw new WorkflowRuleException(
+                    "PREPARATION_PALLET_REQUIRED",
+                    "Dolu malzeme talebi ancak hazırlık alanında onaylanmış bir paletle hazır sayılabilir.");
+            }
+        }
+
         var readyAt = DateTimeOffset.UtcNow;
         await using (var command = new NpgsqlCommand(
                          """

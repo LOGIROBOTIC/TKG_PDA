@@ -177,4 +177,35 @@ public sealed class BringFullDomainTests
             _ = TransportRules.DeliversToMachine(taskType);
         }
     }
+
+    [Fact]
+    public void Every_task_type_reserves_the_end_the_machine_actually_sits_on()
+    {
+        // The first version of this change missed CreateTransportRequest's own
+        // branch, which still asked only about BRING_EMPTY. A BRING_FULL then
+        // demanded a machine SOURCE slot it can never have, and creation failed
+        // with SOURCE_REQUIRED. Reading the property for every task type keeps
+        // that whole class of miss from coming back.
+        var slotId = Guid.NewGuid();
+        foreach (var taskType in Enum.GetValues<TransportTaskType>())
+        {
+            var delivering = TransportRules.DeliversToMachine(taskType);
+            var request = Request(taskType) with
+            {
+                DestinationSlotId = delivering ? slotId : null,
+                SourceSlotId = delivering ? null : slotId
+            };
+
+            Assert.Equal(slotId, request.ReservedSlotId);
+        }
+    }
+
+    [Fact]
+    public void A_delivery_without_its_destination_names_the_missing_side()
+    {
+        var error = Assert.Throws<WorkflowRuleException>(
+            () => Request(TransportTaskType.BringFull).ReservedSlotId);
+
+        Assert.Equal("DESTINATION_REQUIRED", error.Code);
+    }
 }

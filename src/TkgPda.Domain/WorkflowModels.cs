@@ -74,8 +74,8 @@ public sealed record CreateTransportRequest(
     /// ResolveMachineSlotAsync) — but by the time anything downstream reads
     /// this, one side or the other must have been filled in.
     /// </summary>
-    public Guid ReservedSlotId => TaskType == TransportTaskType.BringEmpty
-        ? DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", "BRING_EMPTY requires a machine destination slot.")
+    public Guid ReservedSlotId => TransportRules.DeliversToMachine(TaskType)
+        ? DestinationSlotId ?? throw new WorkflowRuleException("DESTINATION_REQUIRED", $"{TaskType.ToDatabase()} requires a machine destination slot.")
         : SourceSlotId ?? throw new WorkflowRuleException("SOURCE_REQUIRED", $"{TaskType.ToDatabase()} requires a machine source slot.");
 
     public void ValidateShape()

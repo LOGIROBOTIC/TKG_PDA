@@ -1,5 +1,12 @@
 # Seed Policy
 
+> **Üretim hattı bu depoda değil.** `tools/phase_02a`, `tools/phase_02b`,
+> `data/generated` ve `tests/phase_02a` klasörleri 16 Eylül 2026'da
+> `Masaüstü/TKG_PDA_Arsiv/musteri-veri-hatti` altına taşındı. Aşağıdaki komutları
+> çalıştırmak için o klasörü geçici olarak depo köküne geri koyun. Hattın ürettiği
+> SQL dosyaları `db/seeds/generated/` altında, yerlerinde duruyor.
+
+
 Phase 01 seeds only stable baseline configuration contained in the initial migration:
 
 - four system roles,

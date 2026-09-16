@@ -1,5 +1,11 @@
 # TKG PDA
 
+> **Dokümanlar taşındı.** 16 Eylül 2026'da `docs/` klasörü ve müşteri kaynakları
+> `Masaüstü/TKG_PDA_Arsiv` altına alındı. Bu depoda yalnız çalışan kod,
+> veritabanı şeması, testler ve başlatma betikleri kalır. Aşağıdaki `docs/...`
+> bağlantıları arşivdeki `dokumanlar/docs/` klasörüne karşılık gelir.
+
+
 TKG PDA, TKG Otomotiv'deki dokuz üretim makinesi/hücresi için AMR lojistik taleplerini yönetecek sistemdir. Bu repository; PostgreSQL veri mimarisini, müşteri Excel'lerinden üretilen izlenebilir master data'yı, normalize fiziksel yerleşimleri, iş akışı motorunu, güvenli ASP.NET Core API'yi, React Admin Web'i ve Android + Web/PWA Flutter Operator uygulamasını içerir.
 
 > Baseline durumu: Phase 01–09 tamamlandı. **Phase 08B execution integration, development-only `TKG_SIM_MOVE` ile canlı simulator E2E üzerinde doğrulandı; Phase 09 aynı Flutter operator istemcisini Android ve Windows Edge/Chrome Web/PWA hedeflerine taşır.** Üretim forklift task'ları, SEER map-route, PLC, SAP ve robot koordinatları başlamamıştır.

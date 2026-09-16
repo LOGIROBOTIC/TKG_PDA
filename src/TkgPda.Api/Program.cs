@@ -137,6 +137,8 @@ builder.Services.AddSingleton<IProductionSessionStore>(services => services.GetR
 builder.Services.AddSingleton<ProductionSessionService>();
 builder.Services.AddSingleton<IWarehousePreparationStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
 builder.Services.AddSingleton<WarehousePreparationService>();
+builder.Services.AddSingleton<IFinishedGoodsStore>(services => services.GetRequiredService<PostgresTransportWorkflowStore>());
+builder.Services.AddSingleton<FinishedGoodsStoreService>();
 builder.Services.AddSingleton<ContainerActionService>();
 builder.Services.AddSingleton<OperatorTransportQueueService>();
 builder.Services.AddSingleton<MachineAccessService>();
@@ -279,6 +281,7 @@ app.MapGet("/health/ready", async (IApiDataStore store, CancellationToken cancel
 app.MapTkgPdaApi();
 app.MapProductionSessions();
 app.MapWarehousePreparation();
+app.MapFinishedGoodsStore();
 app.MapTkgPdaAdminApi();
 app.MapTkgPdaRdsIntegrationApi();
 

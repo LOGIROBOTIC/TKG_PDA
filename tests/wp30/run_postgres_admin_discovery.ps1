@@ -57,6 +57,7 @@ try {
         'db\migrations\007_bring_full_task_type.sql',
         'db\migrations\008_warehouse_preparation_areas.sql',
         'db\migrations\009_preparation_placement_key.sql',
+        'db\migrations\010_finished_goods_store.sql',
         'db\seeds\generated\002a_customer_textual_master_data.sql',
         'db\seeds\generated\002b_customer_physical_layouts.sql',
         'db\seeds\generated\002c_customer_layout_slot_part_assignments.sql'

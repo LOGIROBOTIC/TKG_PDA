@@ -349,6 +349,12 @@ public sealed partial class PostgresTransportWorkflowStore : ITransportWorkflowS
                 var bufferState = TransportRules.BufferCompletionState(request.TaskType, request.PartId, request.ContainerTypeId);
                 await UpdateSlotStateAsync(connection, transaction, bufferSlotId.Value, bufferState, updatedBy: null, cancellationToken);
             }
+
+            // A full container leaving a machine physically ends up in the
+            // finished-goods store. Recorded in the same transaction as the
+            // completion so the store can never disagree with the transport
+            // that filled it.
+            await RecordStoreDeliveryAsync(connection, transaction, request, cancellationToken);
         }
 
         request = await UpdateRequestStatusAsync(connection, transaction, request, nextStatus, cancellationToken);

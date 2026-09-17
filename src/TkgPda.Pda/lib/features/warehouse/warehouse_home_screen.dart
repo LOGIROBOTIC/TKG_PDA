@@ -7,8 +7,8 @@ import '../../app/design_tokens.dart';
 /// preparation feeds machines; the finished-goods store receives what they
 /// produce.
 ///
-/// Only the first half has a backend. The second is shown as not yet available
-/// rather than opening a screen that cannot report anything real.
+/// Both halves are live. Which physical locations the finished-goods store has
+/// is still a customer decision, so that screen may legitimately show none.
 class WarehouseHomeScreen extends StatelessWidget {
   const WarehouseHomeScreen({required this.controller, super.key});
 
@@ -70,12 +70,9 @@ class WarehouseHomeScreen extends StatelessWidget {
                   icon: Icons.warehouse_outlined,
                   title: 'Bitmiş Ürün Deposu',
                   description:
-                      'Robotun getirdiği bitmiş ürünler. Bu bölüm henüz hazır değil.',
-                  color: PdaStatusColors.unknown,
-                  // Deliberately inert: no backend models the finished-goods
-                  // side yet, so an enabled button would promise something that
-                  // cannot be reported.
-                  onPressed: null,
+                      'Robotun getirdiği bitmiş ürünleri görün ve aldığınız alanları bildirin.',
+                  color: PdaStatusColors.done,
+                  onPressed: controller.enterFinishedGoodsStore,
                 ),
               ),
             ],

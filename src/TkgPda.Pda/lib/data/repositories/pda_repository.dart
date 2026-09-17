@@ -1,6 +1,7 @@
 import '../../core/network/api_client.dart';
 import '../models/pda_models.dart';
 import '../models/preparation_area.dart';
+import '../models/store_location.dart';
 
 abstract interface class PdaDataSource {
   Future<ProductionSession?> activeProduction(String machineId);
@@ -102,6 +103,14 @@ abstract interface class PdaDataSource {
     required int expectedRowVersion,
     required String reason,
   });
+
+  /// Warehouse tablet — the finished-goods store.
+  Future<List<StoreLocation>> storeLocations();
+  Future<StoreLocation> removeStoreUnit({
+    required String unitId,
+    required int expectedRowVersion,
+  });
+  Future<StoreLocation> clearStoreLocation(String locationId);
 
   /// Customer Monitoring — Robot Alarm Visibility.
   Future<RobotAlarmSummary> robotAlarmSummary();
@@ -480,6 +489,36 @@ class PdaRepository implements PdaDataSource {
       body: {'expectedRowVersion': expectedRowVersion, 'reason': reason},
     );
     return PreparationPallet.fromJson(_json(response.body));
+  }
+
+  static const _store = '/api/v1/warehouse/store';
+
+  @override
+  Future<List<StoreLocation>> storeLocations() async {
+    final response = await _api.get('$_store/locations');
+    final values = response.body is List ? response.body as List : const [];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(StoreLocation.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<StoreLocation> removeStoreUnit({
+    required String unitId,
+    required int expectedRowVersion,
+  }) async {
+    final response = await _api.post(
+      '$_store/units/$unitId/remove',
+      body: {'expectedRowVersion': expectedRowVersion},
+    );
+    return StoreLocation.fromJson(_json(response.body));
+  }
+
+  @override
+  Future<StoreLocation> clearStoreLocation(String locationId) async {
+    final response = await _api.post('$_store/locations/$locationId/clear');
+    return StoreLocation.fromJson(_json(response.body));
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:tkg_pda/core/errors/api_problem.dart';
 import 'package:tkg_pda/data/models/pda_models.dart';
 import 'package:tkg_pda/data/models/preparation_area.dart';
+import 'package:tkg_pda/data/models/store_location.dart';
 import 'package:tkg_pda/data/repositories/pda_repository.dart';
 
 const testDeviceCode = 'PDA-TEST-01';
@@ -862,6 +863,42 @@ class FakePdaRepository implements PdaDataSource {
     return fakePallet(id: palletId);
   }
 
+  // ---- Warehouse tablet: the finished-goods store ----
+  List<StoreLocation> storeLocationsValue = const [];
+  Object? storeLocationsError;
+  Object? removeStoreUnitError;
+  Object? clearStoreLocationError;
+  int storeLocationsCount = 0;
+  final List<Map<String, Object?>> removedUnits = [];
+  final List<String> clearedLocations = [];
+
+  @override
+  Future<List<StoreLocation>> storeLocations() async {
+    storeLocationsCount++;
+    if (storeLocationsError case final error?) throw error;
+    return storeLocationsValue;
+  }
+
+  @override
+  Future<StoreLocation> removeStoreUnit({
+    required String unitId,
+    required int expectedRowVersion,
+  }) async {
+    removedUnits.add({
+      'unitId': unitId,
+      'expectedRowVersion': expectedRowVersion,
+    });
+    if (removeStoreUnitError case final error?) throw error;
+    return fakeStoreLocation(code: 'STORE-1');
+  }
+
+  @override
+  Future<StoreLocation> clearStoreLocation(String locationId) async {
+    clearedLocations.add(locationId);
+    if (clearStoreLocationError case final error?) throw error;
+    return fakeStoreLocation(code: 'STORE-1');
+  }
+
   @override
   Future<RobotAlarmSummary> robotAlarmSummary() async {
     robotAlarmSummaryCount++;
@@ -1138,7 +1175,6 @@ const _fullSlot = {
   ],
 };
 
-
 PreparationPallet fakePallet({
   String id = 'pallet-1',
   String load = 'EMPTY',
@@ -1196,6 +1232,45 @@ WarehouseDemand fakeDemand({
   operation: requestedLoad == 'FULL' ? 'BRING_FULL' : 'BRING_EMPTY',
   requestedLoad: requestedLoad,
   requestedAt: requestedAt,
-  claimedByAreaId: claimedByAreaNumber == null ? null : 'area-$claimedByAreaNumber',
+  claimedByAreaId: claimedByAreaNumber == null
+      ? null
+      : 'area-$claimedByAreaNumber',
   claimedByAreaNumber: claimedByAreaNumber,
+);
+
+StoreUnit fakeStoreUnit({
+  String id = 'unit-1',
+  String? partCode = '67116BN050-40',
+  String? machineCode = 'SH-01-A',
+  String? containerCode = '4322',
+  int? requestNo = 42,
+  DateTime? deliveredAt,
+  int rowVersion = 0,
+}) => StoreUnit(
+  id: id,
+  transportRequestId: 'request-1',
+  requestNo: requestNo,
+  partId: 'part-1',
+  partCode: partCode,
+  containerTypeId: 'container-1',
+  containerCode: containerCode,
+  machineId: 'machine-1',
+  machineCode: machineCode,
+  deliveredAt: deliveredAt,
+  rowVersion: rowVersion,
+);
+
+StoreLocation fakeStoreLocation({
+  String code = 'STORE-1',
+  String? displayName,
+  int? capacity,
+  bool isEnabled = true,
+  List<StoreUnit> units = const [],
+}) => StoreLocation(
+  id: 'location-$code',
+  code: code,
+  displayName: displayName ?? 'Bitmiş Ürün Alanı $code',
+  capacity: capacity,
+  isEnabled: isEnabled,
+  units: units,
 );

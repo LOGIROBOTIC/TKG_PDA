@@ -11,6 +11,7 @@ import '../data/repositories/pda_repository.dart';
 import '../features/transport/submission_coordinator.dart';
 import '../features/operation/production_coordinator.dart';
 import '../features/warehouse/preparation_coordinator.dart';
+import '../features/warehouse/store_coordinator.dart';
 
 enum AppStage {
   starting,
@@ -22,6 +23,7 @@ enum AppStage {
   warehousePreparation,
   warehouseHome,
   preparationAreas,
+  finishedGoodsStore,
 }
 
 /// Roles allowed to see and use the warehouse preparation console — the same
@@ -90,7 +92,8 @@ class AppController extends ChangeNotifier {
        _enablePolling = enablePolling,
        _enableProductionWorkflow = enableProductionWorkflow,
        production = ProductionCoordinator(repository),
-       preparation = PreparationCoordinator(repository) {
+       preparation = PreparationCoordinator(repository),
+       store = StoreCoordinator(repository) {
     production.addListener(notifyListeners);
   }
 
@@ -965,6 +968,26 @@ class AppController extends ChangeNotifier {
   void leavePreparationAreas() {
     if (preparation.inFlight) return;
     preparation.stop();
+    _stage = AppStage.warehouseHome;
+    _clearFeedback();
+    notifyListeners();
+  }
+
+  /// The finished-goods half. Polls on its own and shares no state with the
+  /// preparation side.
+  final StoreCoordinator store;
+
+  void enterFinishedGoodsStore() {
+    if (!canAccessWarehousePreparation || isMutationInFlight) return;
+    _stage = AppStage.finishedGoodsStore;
+    _clearFeedback();
+    notifyListeners();
+    store.start();
+  }
+
+  void leaveFinishedGoodsStore() {
+    if (store.inFlight) return;
+    store.stop();
     _stage = AppStage.warehouseHome;
     _clearFeedback();
     notifyListeners();

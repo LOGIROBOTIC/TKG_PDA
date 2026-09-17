@@ -7,6 +7,7 @@ import '../features/machines/machine_list_screen.dart';
 import '../features/operation/operation_screen.dart';
 import '../features/tasks/operator_queue_screen.dart';
 import '../features/warehouse/preparation_areas_screen.dart';
+import '../features/warehouse/store_screen.dart';
 import '../features/warehouse/warehouse_home_screen.dart';
 import '../features/warehouse/warehouse_preparation_screen.dart';
 import 'app_controller.dart';
@@ -28,6 +29,7 @@ GoRouter buildRouter(AppController controller) => GoRouter(
       AppStage.warehousePreparation => '/warehouse-preparation',
       AppStage.warehouseHome => '/warehouse',
       AppStage.preparationAreas => '/warehouse/preparation-areas',
+      AppStage.finishedGoodsStore => '/warehouse/store',
     };
     return state.matchedLocation == target ? null : target;
   },
@@ -65,6 +67,13 @@ GoRouter buildRouter(AppController controller) => GoRouter(
     GoRoute(
       path: '/warehouse',
       builder: (context, state) => WarehouseHomeScreen(controller: controller),
+    ),
+    GoRoute(
+      path: '/warehouse/store',
+      builder: (context, state) => StoreScreen(
+        coordinator: controller.store,
+        onBack: controller.leaveFinishedGoodsStore,
+      ),
     ),
     GoRoute(
       path: '/warehouse/preparation-areas',

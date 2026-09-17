@@ -146,7 +146,13 @@ BEGIN
     JOIN master.layouts l ON l.id = ls.layout_id
     CROSS JOIN integration.rds_worksites rw
     WHERE l.machine_id = v_machine_id
-      AND ((ls.code = 'BUFFER-001' AND rw.rds_site_id = 'AP21')
+      -- The two maps no longer share point names for the buffer. AP21 exists
+      -- only in Map B, so Variant 1 draws its empty containers from AP1, which
+      -- is a WAREHOUSE/STORAGE point of Map A and is claimed by nothing else.
+      -- Mapping both variants to AP21 sent Variant 1 to a point its own map
+      -- does not contain.
+      AND ((ls.code = 'BUFFER-001' AND l.id = v_layout_1_id AND rw.rds_site_id = 'AP1')
+        OR (ls.code = 'BUFFER-001' AND l.id = v_layout_2_id AND rw.rds_site_id = 'AP21')
         OR (ls.code = 'SLOT-001' AND rw.rds_site_id = 'AP7')
         OR (ls.code = 'SLOT-002' AND rw.rds_site_id = 'AP81')
         OR (ls.code = 'SLOT-003' AND rw.rds_site_id = 'AP82')
